@@ -5,7 +5,7 @@ import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, typ
 import { loadConfig, loadSeed } from './load-data.js';
 import { TermLoop, type LoopBrain } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
-import { BackendRegistry, LlmBrain, LlmWorldBrain } from './llm/index.js';
+import { BackendRegistry, LlmBrain, LlmWorldBrain, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND } from './llm/index.js';
 import { SessionLog } from './session-log.js';
 
 function numEnv(name: string, fallback: number): number {
@@ -30,7 +30,11 @@ function selectBrains(): { brain: LoopBrain; worldBrain: WorldBrain } {
     };
   }
   if (mode === 'llm') {
-    const registry = new BackendRegistry();
+    // codex(gpt-5.5) は一過性 exit 1 が安定するまで既定オフ。PAGUS_ENABLE_CODEX=1 で合流。
+    const enableCodex = (process.env.PAGUS_ENABLE_CODEX ?? '') === '1';
+    const cast = enableCodex ? [...DEFAULT_CAST, GPT_BACKEND] : DEFAULT_CAST;
+    const strong = enableCodex ? [...DEFAULT_STRONG, GPT_BACKEND] : DEFAULT_STRONG;
+    const registry = new BackendRegistry({ cast, strong });
     return { brain: new LlmBrain(registry), worldBrain: new LlmWorldBrain(registry) };
   }
   throw new Error(`環境変数 PAGUS_BRAIN は 'stub' | 'llm' のいずれか: ${mode}`);

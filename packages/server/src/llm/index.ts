@@ -5,6 +5,7 @@ export {
   BackendRegistry,
   DEFAULT_CAST,
   DEFAULT_STRONG,
+  GPT_BACKEND,
   type Backend,
   type BackendRegistryOptions,
 } from './backend-registry.js';

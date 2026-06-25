@@ -37,7 +37,9 @@ async function main(): Promise<void> {
   const trial = new TrialPanel(el('trial'), (pick) => conn.send({ t: 'vote', pick }));
 
   const verdict = el('verdict');
-  const inTrialPhase = (phase: string): boolean => phase === 'ten' || phase === 'ketsu';
+  // 有罪/無罪ボタンは「殺す/活かす」を決める fate 段階でのみ出す (foolish=被告選びは右パネル)。
+  const showVerdict = (world: { phase: string; trial: { stage: string } | null }): boolean =>
+    world.phase === 'ten' && world.trial?.stage === 'fate';
 
   conn = connect(WS_URL, {
     onSnapshot: (world) => {
@@ -47,7 +49,7 @@ async function main(): Promise<void> {
       trial.update(world);
       incident.update(world);
       vstatus.update(world);
-      verdict.classList.toggle('show', inTrialPhase(world.phase));
+      verdict.classList.toggle('show', showVerdict(world));
     },
     onLog: (phase, text) => log.add(phase, text),
     onStatus: (status) => hud.setStatus(status),
@@ -57,12 +59,16 @@ async function main(): Promise<void> {
   el('incite').addEventListener('click', () => conn.send({ t: 'incite' }));
   el('calm').addEventListener('click', () => conn.send({ t: 'calm' }));
 
-  // 裁判の有罪/無罪: 扇動/沈静化と同じ効果 + プレイヤーの罵倒/擁護を吹き出しで表示。
+  // 裁判の票は中央の有罪/無罪に一本化。
+  //   有罪 = 殺す(kill) 投票 + 扇動、無罪 = 活かす(spare) 投票 + 沈静化。
+  //   同時にプレイヤーの罵倒/擁護を吹き出しで表示。投票し直しは server 側で前票を差し替え。
   el('v-guilty').addEventListener('click', () => {
+    conn.send({ t: 'vote', pick: 'kill' });
     conn.send({ t: 'incite' });
     stage.playerVerdict('guilty');
   });
   el('v-innocent').addEventListener('click', () => {
+    conn.send({ t: 'vote', pick: 'spare' });
     conn.send({ t: 'calm' });
     stage.playerVerdict('innocent');
   });
