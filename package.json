@@ -1,0 +1,17 @@
+{
+  "name": "pagus",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Pagus — AI村: LLM 駆動の創発的村シミュレーション",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20"
+  }
+}
