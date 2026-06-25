@@ -36,6 +36,9 @@ async function main(): Promise<void> {
   let conn: Conn;
   const trial = new TrialPanel(el('trial'), (pick) => conn.send({ t: 'vote', pick }));
 
+  const verdict = el('verdict');
+  const inTrialPhase = (phase: string): boolean => phase === 'ten' || phase === 'ketsu';
+
   conn = connect(WS_URL, {
     onSnapshot: (world) => {
       stage.update(world);
@@ -44,6 +47,7 @@ async function main(): Promise<void> {
       trial.update(world);
       incident.update(world);
       vstatus.update(world);
+      verdict.classList.toggle('show', inTrialPhase(world.phase));
     },
     onLog: (phase, text) => log.add(phase, text),
     onStatus: (status) => hud.setStatus(status),
@@ -52,6 +56,16 @@ async function main(): Promise<void> {
 
   el('incite').addEventListener('click', () => conn.send({ t: 'incite' }));
   el('calm').addEventListener('click', () => conn.send({ t: 'calm' }));
+
+  // 裁判の有罪/無罪: 扇動/沈静化と同じ効果 + プレイヤーの罵倒/擁護を吹き出しで表示。
+  el('v-guilty').addEventListener('click', () => {
+    conn.send({ t: 'incite' });
+    stage.playerVerdict('guilty');
+  });
+  el('v-innocent').addEventListener('click', () => {
+    conn.send({ t: 'calm' });
+    stage.playerVerdict('innocent');
+  });
 
   setupDrawers();
 }
