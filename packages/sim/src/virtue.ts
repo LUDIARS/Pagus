@@ -42,9 +42,26 @@ export function makeVirtueVector(partial: Partial<Record<Virtue, number>> = {}):
   return out;
 }
 
+/** 徳目 → 気質 の逆対応。 */
+export const AXIS_OF_VIRTUE: Record<Virtue, PersonalityAxis> = {
+  benevolence: 'kindness',
+  malice: 'aggression',
+  vitality: 'sociability',
+  intellect: 'curiosity',
+  order: 'discipline',
+  faith: 'ambition',
+};
+
 /** 性格ベクトルを 1:1 対応で徳目ベクトルへ写す (出生バイアス等に使う)。 */
 export function virtueFromPersonality(p: Personality): VirtueVector {
   const out = makeVirtueVector();
   for (const axis of PERSONALITY_AXES) out[VIRTUE_OF_AXIS[axis]] = p[axis];
+  return out;
+}
+
+/** 徳目評判を 1:1 対応で性格へ写す (村ベクトルに偏った新規個体の生成に使う)。 */
+export function personalityFromVirtue(v: VirtueVector): Personality {
+  const out = {} as Personality;
+  for (const virtue of VIRTUES) out[AXIS_OF_VIRTUE[virtue]] = v[virtue];
   return out;
 }

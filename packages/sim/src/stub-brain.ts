@@ -2,6 +2,7 @@
 // LLM を一切呼ばず、固定ロジックで起承転結を一巡させられる。
 
 import type { Brain, ActionContext, ActionDecision, EmotionContext, IncidentContext, IncidentStep, FoolishVoteContext, FateVoteContext, EducationContext } from './brain.js';
+import type { WorldBrain, WorldEvalContext, DayEvaluation } from './world-brain.js';
 import type { EmotionState, Reform, VillagerId } from './types/index.js';
 
 export interface StubBrainOptions {
@@ -100,6 +101,26 @@ export class StubBrain implements Brain {
       rationale: '攻撃性を矯正し穏やかな体に作り替える',
       persona: { traits: { aggression: -0.5 } },
       appearance: { body: 'machine', descriptors: ['穏やかな目'] },
+    };
+  }
+}
+
+/** 決定的な世界側 LLM。裁判結果から村の徳目評判と新規出生を決める。 */
+export class StubWorldBrain implements WorldBrain {
+  async evaluateDay(ctx: WorldEvalContext): Promise<DayEvaluation> {
+    if (ctx.verdict === 'death') {
+      return {
+        reputationDelta: { malice: 0.12, order: 0.08 },
+        villagerDeltas: [],
+        spawn: 1,
+        narrative: `${ctx.defendant.name} は処刑され、村は厳しさを増した`,
+      };
+    }
+    return {
+      reputationDelta: { benevolence: 0.12, vitality: 0.05 },
+      villagerDeltas: [{ villager: ctx.defendant.id, personalityDelta: { aggression: -0.2, kindness: 0.2 } }],
+      spawn: 1,
+      narrative: `${ctx.defendant.name} は教育され、村に優しさが芽生えた`,
     };
   }
 }
