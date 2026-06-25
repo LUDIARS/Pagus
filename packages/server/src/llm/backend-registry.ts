@@ -18,21 +18,23 @@ export interface Backend {
 }
 
 /**
- * デフォルトキャスト。claude 3 モデル + codex(gpt-5.5) を混ぜる。
- * Discutere DEFAULT_WORKERS の `{ provider:'codex', model:'gpt-5.5' }` を含む構成をミラー。
+ * デフォルトキャスト = claude 3 モデルのみ。
+ * codex(gpt-5.5) は一過性の `exit 1` が安定するまで既定から外し、
+ * `PAGUS_ENABLE_CODEX=1` のとき index.ts が GPT_BACKEND を足す。
  */
 export const DEFAULT_CAST: readonly Backend[] = [
   { id: 'opus', provider: 'claude', model: 'claude-opus-4-8' },
   { id: 'sonnet', provider: 'claude', model: 'claude-sonnet-4-6' },
   { id: 'haiku', provider: 'claude', model: 'claude-haiku-4-5' },
-  { id: 'gpt', provider: 'codex', model: 'gpt-5.5' },
 ] as const;
 
-/** 重い局面で寄せる strong tier。opus と gpt-5.5 を交互に振る。 */
+/** 重い局面で寄せる strong tier (既定 = opus)。 */
 export const DEFAULT_STRONG: readonly Backend[] = [
   { id: 'opus', provider: 'claude', model: 'claude-opus-4-8' },
-  { id: 'gpt', provider: 'codex', model: 'gpt-5.5' },
 ] as const;
+
+/** codex 経由の GPT-5.5。`PAGUS_ENABLE_CODEX=1` で cast/strong へ合流させる。 */
+export const GPT_BACKEND: Backend = { id: 'gpt', provider: 'codex', model: 'gpt-5.5' };
 
 export interface BackendRegistryOptions {
   /** キャスト全体 (per-villager 割当の母集合)。既定 DEFAULT_CAST。 */

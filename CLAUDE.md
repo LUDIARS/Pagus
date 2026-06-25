@@ -19,9 +19,16 @@ LLM 駆動で村人が自律行動し、事件 → 裁判 → 教育(改変) を
 
 - **環境 = プログラム / 感情 = AI / 情報 = 蓄積** の三分。型レベルで分離 (`spec/SPEC.md`)。
 - **sim は LLM/描画を知らない**。`Brain` interface 越しにのみ AI を呼ぶ → stub で決定的にテスト。
-- LLM は **API 不使用 = `claude -p` CLI** (LUDIARS 規約)。tier は `@ludiars/llm-gateway` の `pickTier`:
-  tick/感情 = cheap(Haiku)、承GANs/裁判/教育 = strong(Sonnet/Opus)。
+- LLM は **API 不使用 = CLI** (LUDIARS 規約)。claude=`claude -p`、GPT-5.5=`codex exec`。tier は `@ludiars/llm-gateway` の `pickTier`: tick/感情 = cheap(Haiku)、承GANs/裁判/教育 = strong(Sonnet/Opus)。
+  - **codex(gpt-5.5) は一過性 `exit 1` が安定するまで既定オフ**。`PAGUS_ENABLE_CODEX=1` で合流。
 - 設定不備の**無言フォールバック禁止** = 即エラー (RULE_CODE §7.1)。
+
+## 起動 / 観戦 (実装済)
+
+- game server: `PAGUS_BRAIN=llm node packages/server/dist/index.js` → WS **4310**。`stub` で決定的観戦。
+- client: `pnpm --filter @pagus/client dev` → **4320** (Memoria 5180 と分離)。WS は同一オリジン `/ws` を 4310 へ proxy (Tunnel 対応)。
+- 主な env: `PAGUS_RECONCILE`(和解0.15) / `PAGUS_SECONDARY`(二次被害0.18) / `PAGUS_ENABLE_CODEX` / `PAGUS_ACCEL`(dev加速) / `PAGUS_LOG_STDOUT`。
+- 創発メカニクスと観戦UIの仕様は `spec/SPEC.md` §6 / §8B。
 
 ## branch 運用
 
