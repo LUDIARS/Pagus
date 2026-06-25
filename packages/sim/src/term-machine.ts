@@ -2,11 +2,14 @@
 // 1 日 = 1 ターム = 12 セグメント。時間制御 (segmentRealMs のペース) は server が所有し、
 // 本クラスは純粋な遷移ロジックを提供する。
 
-import type { World, Villager, VillagerId, Incident, TrialState, Reform } from './types/index.js';
+import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern } from './types/index.js';
 import type { Brain, ActionDecision } from './brain.js';
 import { aliveVillagers, awakeVillagers, environmentView, clampPos } from './world.js';
 import { season, daysInMonth, holidayName } from './calendar.js';
-import { groupByDominant, dominantAxis, type PersonalityAxis } from './personality.js';
+import { groupByDominant, dominantAxis, PERSONALITY_AXES, type PersonalityAxis } from './personality.js';
+import { personalityFromVirtue, VIRTUES } from './virtue.js';
+import { createVillager } from './villager-factory.js';
+import type { WorldBrain, DayEvaluation, WorldEvalContext } from './world-brain.js';
 import type { EventDirector } from './event-director.js';
 
 export type IdGen = () => string;
@@ -16,10 +19,26 @@ function counterIdGen(prefix: string): IdGen {
   return () => `${prefix}_${(n += 1)}`;
 }
 
+/** 0..1 に丸める。徳目評判・性格軸の適用後クランプに使う。 */
+function clamp01(n: number): number {
+  return Math.min(1, Math.max(0, n));
+}
+
+/** 出生どうぶつの種の候補。 */
+const SPAWN_SPECIES = ['猫', '兎', '梟', '熊', '栗鼠'] as const;
+/** 出生どうぶつの活動特性の候補。 */
+const SPAWN_ACTIVITIES: readonly ActivityPattern[] = ['diurnal', 'nocturnal', 'crepuscular', 'always'];
+
 export interface TermMachineOptions {
   /** 起のイベント差配 (省略時は全 awake どうぶつの自由行動)。 */
   director?: EventDirector;
   newIncidentId?: IdGen;
+  /** 世界側 LLM。日末評価 (徳目評判・性格・出生) を司る。省略時は日末評価を行わない。 */
+  worldBrain?: WorldBrain;
+  /** 乱数源 (出生のばらつき用)。既定 Math.random。 */
+  rng?: () => number;
+  /** alive どうぶつの上限。出生はこの数未満の範囲でのみ起こる。既定 16。 */
+  maxPopulation?: number;
 }
 
 export interface KishoTickResult {
@@ -40,6 +59,13 @@ export class TermMachine {
   private pendingReform: Reform | null = null;
   private readonly director: EventDirector | null;
   private readonly newIncidentId: IdGen;
+  private readonly worldBrain: WorldBrain | null;
+  private readonly rng: () => number;
+  private readonly maxPopulation: number;
+  /** 出生どうぶつの通し番号 (seed の v_* と衝突しない born_N を振る)。 */
+  private bornCount = 0;
+  /** その日の裁判結末。applyReform が incident/trial を null にする前に ketsuStep で捕捉する。 */
+  private dayOutcome: { incident: Incident; verdict: Verdict; defendantId: VillagerId } | null = null;
 
   constructor(
     public readonly world: World,
@@ -48,6 +74,9 @@ export class TermMachine {
   ) {
     this.director = opts.director ?? null;
     this.newIncidentId = opts.newIncidentId ?? counterIdGen('inc');
+    this.worldBrain = opts.worldBrain ?? null;
+    this.rng = opts.rng ?? Math.random;
+    this.maxPopulation = opts.maxPopulation ?? 16;
   }
 
   /** その日 (ターム) を開始する。idle → 起。 */
@@ -251,6 +280,12 @@ export class TermMachine {
     }
     const trial = this.world.trial;
     const defendant = this.get(trial.defendant as VillagerId);
+    // applyReform が後で incident/trial を null にするため、日末評価用にここで捕捉する。
+    this.dayOutcome = {
+      incident: this.world.incident,
+      verdict: trial.verdict as Verdict,
+      defendantId: trial.defendant as VillagerId,
+    };
     if (trial.verdict === 'death') {
       // 殺す → 追放 (退場)。
       this.pendingReform = { kind: 'exile', villager: defendant.id, rationale: '村の投票により処刑された' };
@@ -315,5 +350,89 @@ export class TermMachine {
     }
     this.world.phase = 'idle';
     return { monthRolled, holiday: holidayName(cal.month, cal.dayOfMonth) };
+  }
+
+  // --- 日末: 世界側 LLM 評価 (徳目評判更新 + 個体性格更新 + 偏り出生) ---
+  // phase は変えない (server が advance フェーズで advanceDay の前に呼ぶ)。
+  async evaluateDay(): Promise<DayEvaluation | null> {
+    if (!this.worldBrain || !this.dayOutcome) return null;
+    const outcome = this.dayOutcome;
+
+    const defendant = this.world.villagers.get(outcome.defendantId);
+    if (!defendant) {
+      // 被告がワールドから消えている = 状態不整合。無言フォールバックせず捕捉を破棄する。
+      this.dayOutcome = null;
+      throw new Error(`evaluateDay: 被告が見つかりません: ${outcome.defendantId}`);
+    }
+
+    const involved: Villager[] = [];
+    for (const id of outcome.incident.involved) {
+      const v = this.world.villagers.get(id);
+      if (v) involved.push(v);
+    }
+
+    const ctx: WorldEvalContext = {
+      reputation: this.world.reputation,
+      verdict: outcome.verdict,
+      defendant,
+      incident: outcome.incident,
+      involved,
+      calendar: this.world.calendar,
+    };
+    const evaluation = await this.worldBrain.evaluateDay(ctx);
+
+    // 徳目評判 (村レーダー) を加算・クランプ。
+    for (const virtue of VIRTUES) {
+      const delta = evaluation.reputationDelta[virtue];
+      if (delta !== undefined) {
+        this.world.reputation[virtue] = clamp01(this.world.reputation[virtue] + delta);
+      }
+    }
+
+    // 個体性格 (気質6軸) を加算・クランプ (存在する個体のみ)。
+    for (const vd of evaluation.villagerDeltas) {
+      const villager = this.world.villagers.get(vd.villager);
+      if (!villager) continue;
+      for (const axis of PERSONALITY_AXES) {
+        const delta = vd.personalityDelta[axis];
+        if (delta !== undefined) {
+          villager.persona.traits[axis] = clamp01(villager.persona.traits[axis] + delta);
+        }
+      }
+    }
+
+    // 村ベクトルに偏った新個体を出生。
+    if (evaluation.spawn > 0) this.spawnBiased(evaluation.spawn);
+
+    this.dayOutcome = null;
+    return evaluation;
+  }
+
+  /** 村の徳目評判を基準性格にした新個体を n 体出生する (maxPopulation 未満の範囲)。 */
+  private spawnBiased(n: number): void {
+    const base = personalityFromVirtue(this.world.reputation);
+    for (let i = 0; i < n; i += 1) {
+      if (aliveVillagers(this.world).length >= this.maxPopulation) break;
+      const traits: Partial<Record<PersonalityAxis, number>> = {};
+      for (const axis of PERSONALITY_AXES) {
+        traits[axis] = clamp01(base[axis] + (this.rng() - 0.5) * 0.3);
+      }
+      this.bornCount += 1;
+      const species = SPAWN_SPECIES[Math.floor(this.rng() * SPAWN_SPECIES.length)] ?? '猫';
+      const activity = SPAWN_ACTIVITIES[Math.floor(this.rng() * SPAWN_ACTIVITIES.length)] ?? 'diurnal';
+      const position = {
+        x: Math.floor(this.rng() * this.world.config.gridWidth),
+        y: Math.floor(this.rng() * this.world.config.gridHeight),
+      };
+      const villager = createVillager({
+        id: `born_${this.bornCount}`,
+        name: `新入り${this.bornCount}`,
+        position,
+        species,
+        activity,
+        traits,
+      });
+      this.world.villagers.set(villager.id, villager);
+    }
   }
 }

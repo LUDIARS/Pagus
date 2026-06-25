@@ -101,6 +101,9 @@ export class TermLoop {
         this.h.onLog('kisho', '✦ 改変が適用された');
         break;
       case 'advance': {
+        // 日末: 世界側 LLM が裁判結末を評価し、徳目評判・性格・出生を反映する。
+        const ev = await this.tm.evaluateDay();
+        if (ev) this.h.onLog('kisho', ev.narrative);
         const r = this.tm.advanceDay();
         const extra = `${r.monthRolled ? ' / 月がかわった' : ''}${r.holiday ? ` (${r.holiday})` : ''}`;
         this.h.onLog('kisho', `日が暮れた${extra}`);

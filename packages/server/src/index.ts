@@ -1,7 +1,7 @@
 // Pagus server エントリ。data からワールドを起こし、TermLoop と WS を配線する。
 // v0.1 は思考を StubBrain で代替 (LLM 配線は v0.2)。
 
-import { createWorld, TermMachine, StubBrain, EventDirector } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
 import { TermLoop } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
@@ -26,8 +26,9 @@ function main(): void {
   });
 
   const brain = new StubBrain({ triggerAfter: numEnv('PAGUS_TRIGGER_AFTER', 6), damagePerStep: 4 });
+  const worldBrain = new StubWorldBrain();
   const director = new EventDirector({ maxRepsPerSegment: numEnv('PAGUS_REPS', 3) });
-  const tm = new TermMachine(world, brain, { director });
+  const tm = new TermMachine(world, brain, { director, worldBrain });
 
   const port = numEnv('PAGUS_WS_PORT', 4310);
   const pace = { accel: numEnv('PAGUS_ACCEL', 600), minMs: numEnv('PAGUS_MIN_MS', 400) };
