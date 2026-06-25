@@ -1,10 +1,11 @@
 // Pagus server エントリ。data からワールドを起こし、TermLoop と WS を配線する。
-// v0.1 は思考を StubBrain で代替 (LLM 配線は v0.2)。
+// 思考は PAGUS_BRAIN で切替: 'stub'(既定/決定的) | 'llm'(実 LLM = claude/codex CLI)。
 
 import { createWorld, TermMachine, StubBrain, EventDirector } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
-import { TermLoop } from './term-loop.js';
+import { TermLoop, type LoopBrain } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
+import { BackendRegistry, LlmBrain } from './llm/index.js';
 
 function numEnv(name: string, fallback: number): number {
   const v = process.env[name];
@@ -12,6 +13,22 @@ function numEnv(name: string, fallback: number): number {
   const n = Number(v);
   if (Number.isNaN(n)) throw new Error(`環境変数 ${name} が数値ではありません: ${v}`);
   return n;
+}
+
+/**
+ * PAGUS_BRAIN で Brain を選ぶ (既定 'stub')。'llm' は claude/codex CLI 駆動の LlmBrain。
+ * 世界側 LLM (LlmWorldBrain) は v0.5 で worldBrain 配線時に同様に分岐する。
+ * 不正値は無言フォールバックせず即エラー (RULE_CODE §7.1)。
+ */
+function selectBrain(): LoopBrain {
+  const mode = process.env.PAGUS_BRAIN ?? 'stub';
+  if (mode === 'stub') {
+    return new StubBrain({ triggerAfter: numEnv('PAGUS_TRIGGER_AFTER', 6), damagePerStep: 4 });
+  }
+  if (mode === 'llm') {
+    return new LlmBrain(new BackendRegistry());
+  }
+  throw new Error(`環境変数 PAGUS_BRAIN は 'stub' | 'llm' のいずれか: ${mode}`);
 }
 
 function main(): void {
@@ -25,7 +42,7 @@ function main(): void {
     month: now.getMonth() + 1,
   });
 
-  const brain = new StubBrain({ triggerAfter: numEnv('PAGUS_TRIGGER_AFTER', 6), damagePerStep: 4 });
+  const brain = selectBrain();
   const director = new EventDirector({ maxRepsPerSegment: numEnv('PAGUS_REPS', 3) });
   const tm = new TermMachine(world, brain, { director });
 

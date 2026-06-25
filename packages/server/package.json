@@ -10,6 +10,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@ludiars/llm-gateway": "^0.1.0",
     "@pagus/sim": "workspace:*",
     "ws": "^8.18.0"
   },

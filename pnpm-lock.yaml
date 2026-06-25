@@ -26,6 +26,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@ludiars/llm-gateway':
+        specifier: ^0.1.0
+        version: 0.1.0
       '@pagus/sim':
         specifier: workspace:*
         version: link:../sim
@@ -194,6 +197,9 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
+
+  '@ludiars/llm-gateway@0.1.0':
+    resolution: {integrity: sha512-NH9FOv8r0oJZhSAtPx4apePevTBthvkUvRkQ3+2zH3oBzQW9CyZ0pIDw/njJDtgORcBcqoQ77U9I9C3sbx0D8A==, tarball: https://npm.pkg.github.com/download/@ludiars/llm-gateway/0.1.0/0f5d3bc936b2cabebbb38831468ca8dcf2d0b341}
 
   '@pixi/colord@2.9.6':
     resolution: {integrity: sha512-nezytU2pw587fQstUu1AsJZDVEynjskwOL+kibwcdxsMBFqPsFFNA7xl0ii/gXuDi6M0xj3mfRJj8pBSc2jCfA==}
@@ -667,6 +673,8 @@ snapshots:
     optional: true
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
+
+  '@ludiars/llm-gateway@0.1.0': {}
 
   '@pixi/colord@2.9.6': {}
 
