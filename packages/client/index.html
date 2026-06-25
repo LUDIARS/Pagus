@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pagus — AI村</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; background: #0b0e14; color: #cdd6e4; font-family: system-ui, sans-serif; }
+      #topbar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: #11151f; border-bottom: 1px solid #222; }
+      #hud { font-size: 13px; }
+      #status { font-size: 12px; color: #7f8aa3; margin-left: auto; }
+      button { background: #1e2533; color: #cdd6e4; border: 1px solid #38405a; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+      button:hover { background: #283044; }
+      #incite { border-color: #eb5757; }
+      #calm { border-color: #56ccf2; }
+      #main { display: flex; gap: 12px; padding: 12px; }
+      #village { border: 1px solid #222; border-radius: 8px; overflow: hidden; line-height: 0; }
+      #side { display: flex; flex-direction: column; gap: 12px; width: 280px; }
+      #radar { background: #0e121b; border: 1px solid #222; border-radius: 8px; }
+      #log { flex: 1; overflow-y: auto; max-height: 360px; font-size: 12px; background: #0e121b; border: 1px solid #222; border-radius: 8px; padding: 8px; }
+      #log > div { padding: 2px 0; border-bottom: 1px solid #161b27; }
+      .log-sho { color: #f2c94c; }
+      .log-ten { color: #f2994a; }
+      .log-ketsu { color: #eb5757; }
+    </style>
+  </head>
+  <body>
+    <div id="topbar">
+      <span id="hud">接続待ち…</span>
+      <button id="incite">扇動</button>
+      <button id="calm">沈静化</button>
+      <span id="status"></span>
+    </div>
+    <div id="main">
+      <div id="village"></div>
+      <div id="side">
+        <canvas id="radar" width="280" height="240"></canvas>
+        <div id="log"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
