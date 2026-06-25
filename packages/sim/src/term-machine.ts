@@ -1,9 +1,11 @@
 // 起承転結ステートマシン。World と Brain を保持し、フェーズを 1 ステップずつ進める。
-// 時間制御 (tick 間隔・ターム長) は server が所有し、本クラスは純粋な遷移ロジックを提供する。
+// 1 日 = 1 ターム = 12 セグメント。時間制御 (segmentRealMs のペース) は server が所有し、
+// 本クラスは純粋な遷移ロジックを提供する。
 
-import type { World, Villager, VillagerId, Incident, TrialState, Verdict, Reform } from './types/index.js';
+import type { World, Villager, VillagerId, Incident, TrialState, Reform } from './types/index.js';
 import type { Brain } from './brain.js';
-import { aliveVillagers, environmentView, clampPos } from './world.js';
+import { awakeVillagers, environmentView, clampPos } from './world.js';
+import { season, daysInMonth, holidayName } from './calendar.js';
 
 export type IdGen = () => string;
 
@@ -13,10 +15,17 @@ function counterIdGen(prefix: string): IdGen {
 }
 
 export interface KishoTickResult {
-  /** 各村人の行動概要。 */
+  /** 起きていて行動した どうぶつ の行動概要。 */
   actions: Array<{ villager: VillagerId; action: string }>;
   /** この tick で事件が発火したか。 */
   incidentStarted: boolean;
+}
+
+export interface AdvanceDayResult {
+  /** 月が変わったか (= 実 1 日境界の「大きな転換」)。 */
+  monthRolled: boolean;
+  /** 新しい日が祝日ならその名前。 */
+  holiday: string | null;
 }
 
 export class TermMachine {
@@ -28,8 +37,8 @@ export class TermMachine {
     private readonly newIncidentId: IdGen = counterIdGen('inc'),
   ) {}
 
-  /** ターム開始。idle → 起。 */
-  start(): void {
+  /** その日 (ターム) を開始する。idle → 起。 */
+  startDay(): void {
     this.world.phase = 'kisho';
   }
 
@@ -39,11 +48,11 @@ export class TermMachine {
     return v;
   }
 
-  // --- 起: 自律行動 1 tick ---
+  // --- 起: 現セグメントの自律行動 (起きている どうぶつ のみ) ---
   async kishoTick(): Promise<KishoTickResult> {
     if (this.world.phase !== 'kisho') throw new Error(`kishoTick in phase ${this.world.phase}`);
     const actions: KishoTickResult['actions'] = [];
-    for (const villager of aliveVillagers(this.world)) {
+    for (const villager of awakeVillagers(this.world)) {
       const decision = await this.brain.decideAction({
         villager,
         environment: environmentView(this.world, villager),
@@ -59,6 +68,18 @@ export class TermMachine {
       }
     }
     return { actions, incidentStarted: false };
+  }
+
+  /** 現セグメントを終え、次セグメントへ。日末 (segment 一巡) に達したら phase=advance。 */
+  advanceSegment(): { dayEnded: boolean } {
+    if (this.world.phase !== 'kisho') throw new Error(`advanceSegment in phase ${this.world.phase}`);
+    const next = this.world.calendar.segment + 1;
+    if (next >= this.world.config.segmentsPerDay) {
+      this.world.phase = 'advance';
+      return { dayEnded: true };
+    }
+    this.world.calendar.segment = next;
+    return { dayEnded: false };
   }
 
   private startIncident(
@@ -147,8 +168,7 @@ export class TermMachine {
     }
     const trial = this.world.trial;
     if (trial.verdict === 'innocent') {
-      // 無罪は平和に終了。改変なし。
-      this.pendingReform = null;
+      this.pendingReform = null; // 無罪は平和に終了。改変なし。
     } else {
       this.pendingReform = await this.brain.decideEducation({
         trial,
@@ -159,14 +179,14 @@ export class TermMachine {
     this.world.phase = 'reform';
   }
 
-  /** 結の保留中の改変を適用。 */
+  /** 結の保留中の改変を適用し、その日の残りセグメントへ復帰 (起)。 */
   applyReform(): void {
     if (this.world.phase !== 'reform') throw new Error(`applyReform in phase ${this.world.phase}`);
     if (this.pendingReform) this.reform(this.pendingReform);
     this.pendingReform = null;
     this.world.incident = null;
     this.world.trial = null;
-    this.world.phase = 'advance';
+    this.world.phase = 'kisho';
   }
 
   private reform(reform: Reform): void {
@@ -188,23 +208,26 @@ export class TermMachine {
     v.reformCount += 1;
   }
 
-  /** 時間進行 (朝→昼→夜→翌タームの朝)。夜→朝の折返しでターム番号を進める。 */
-  advanceTime(): void {
-    if (this.world.phase !== 'advance') throw new Error(`advanceTime in phase ${this.world.phase}`);
-    switch (this.world.timeOfDay) {
-      case 'morning':
-        this.world.timeOfDay = 'noon';
-        break;
-      case 'noon':
-        this.world.timeOfDay = 'night';
-        break;
-      case 'night':
-        this.world.timeOfDay = 'morning';
-        this.world.term += 1;
-        break;
+  /** 日を進める。月の日数を超えたら月遷移 (= 実 1 日境界の大きな転換)。 */
+  advanceDay(): AdvanceDayResult {
+    if (this.world.phase !== 'advance') throw new Error(`advanceDay in phase ${this.world.phase}`);
+    const cal = this.world.calendar;
+    this.world.term += 1;
+    cal.segment = 0;
+    let monthRolled = false;
+    cal.dayOfMonth += 1;
+    if (cal.dayOfMonth > cal.daysInMonth) {
+      monthRolled = true;
+      cal.dayOfMonth = 1;
+      cal.month += 1;
+      if (cal.month > 12) {
+        cal.month = 1;
+        cal.year += 1;
+      }
+      cal.daysInMonth = daysInMonth(cal.year, cal.month);
+      cal.season = season(cal.month);
     }
     this.world.phase = 'idle';
+    return { monthRolled, holiday: holidayName(cal.month, cal.dayOfMonth) };
   }
 }
-
-export type { Verdict };

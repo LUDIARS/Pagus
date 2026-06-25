@@ -13,8 +13,14 @@ export interface StubBrainOptions {
 
 export class StubBrain implements Brain {
   private actionCount = 0;
+  private forced = false;
 
   constructor(private readonly opts: StubBrainOptions = {}) {}
+
+  /** 次に周囲がいる村人が行動するとき、強制的に事件を発火させる (プレイヤーの扇動)。 */
+  forceNext(): void {
+    this.forced = true;
+  }
 
   async updateEmotion(ctx: EmotionContext): Promise<EmotionState> {
     return ctx.villager.emotion;
@@ -23,7 +29,8 @@ export class StubBrain implements Brain {
   async decideAction(ctx: ActionContext): Promise<ActionDecision> {
     this.actionCount += 1;
     const hasNeighbor = ctx.environment.nearby.length > 0;
-    const trigger = hasNeighbor && this.actionCount >= (this.opts.triggerAfter ?? 3);
+    const trigger = hasNeighbor && (this.forced || this.actionCount >= (this.opts.triggerAfter ?? 3));
+    if (trigger) this.forced = false;
     return {
       move: { x: ctx.villager.position.x + 1, y: ctx.villager.position.y },
       action: `${ctx.villager.name} は ${ctx.environment.place} をうろついた`,

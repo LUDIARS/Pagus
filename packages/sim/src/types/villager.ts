@@ -11,6 +11,9 @@ export interface GridPos {
   y: number;
 }
 
+/** どうぶつの活動特性。睡眠帯を決める。 */
+export type ActivityPattern = 'diurnal' | 'nocturnal' | 'crepuscular' | 'always';
+
 /** 改変対象となる村人の全人格パラメータ。 */
 export interface Persona {
   /** 特性ベクトル (-1..1)。 */
@@ -57,6 +60,10 @@ export interface Villager {
   /** 環境 (プログラムが算出・管理)。 */
   position: GridPos;
   appearance: Appearance;
+  /** どうぶつの種 (例: 猫, 梟, 兎)。 */
+  species: string;
+  /** 活動特性 → 睡眠帯を決める。 */
+  activity: ActivityPattern;
   /** 改変された回数。 */
   reformCount: number;
 }

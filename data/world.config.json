@@ -1,0 +1,7 @@
+{
+  "gridWidth": 24,
+  "gridHeight": 24,
+  "segmentsPerDay": 12,
+  "damageThreshold": 10,
+  "trialWinningScore": 3
+}

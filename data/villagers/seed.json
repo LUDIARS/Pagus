@@ -1,0 +1,62 @@
+[
+  {
+    "id": "v_ao",
+    "name": "アオ",
+    "species": "猫",
+    "activity": "crepuscular",
+    "position": { "x": 12, "y": 12 },
+    "traits": { "aggression": 0.5, "curiosity": 0.7, "kindness": 0.2 },
+    "values": ["自由気まま", "面白いことが好き"],
+    "speechStyle": "のんびり"
+  },
+  {
+    "id": "v_bel",
+    "name": "ベル",
+    "species": "兎",
+    "activity": "diurnal",
+    "position": { "x": 13, "y": 12 },
+    "traits": { "aggression": -0.3, "curiosity": 0.4, "kindness": 0.8 },
+    "values": ["平和が一番", "みんな仲良く"],
+    "speechStyle": "ていねい"
+  },
+  {
+    "id": "v_fuku",
+    "name": "フク",
+    "species": "梟",
+    "activity": "nocturnal",
+    "position": { "x": 11, "y": 13 },
+    "traits": { "aggression": 0.1, "curiosity": 0.9, "kindness": 0.3 },
+    "values": ["知識こそ力", "夜の静けさを好む"],
+    "speechStyle": "理屈っぽい"
+  },
+  {
+    "id": "v_kuma",
+    "name": "クマ",
+    "species": "熊",
+    "activity": "diurnal",
+    "position": { "x": 14, "y": 13 },
+    "traits": { "aggression": 0.7, "curiosity": 0.2, "kindness": 0.4 },
+    "values": ["腹が減ると不機嫌", "縄張りを守る"],
+    "speechStyle": "ぶっきらぼう"
+  },
+  {
+    "id": "v_momo",
+    "name": "モモ",
+    "species": "栗鼠",
+    "activity": "diurnal",
+    "position": { "x": 12, "y": 14 },
+    "traits": { "aggression": -0.1, "curiosity": 0.8, "kindness": 0.6 },
+    "values": ["集めるのが趣味", "心配性"],
+    "speechStyle": "早口"
+  },
+  {
+    "id": "v_neru",
+    "name": "ネル",
+    "species": "鼯鼠",
+    "activity": "nocturnal",
+    "position": { "x": 13, "y": 14 },
+    "traits": { "aggression": 0.0, "curiosity": 0.5, "kindness": 0.5 },
+    "values": ["眠いのが基本", "夜更かし"],
+    "speechStyle": "ねむそう"
+  }
+]

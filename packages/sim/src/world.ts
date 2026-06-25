@@ -1,11 +1,11 @@
-import type { World, WorldConfig, Villager, GridPos } from './types/index.js';
+import type { World, WorldConfig, Villager, GridPos, Calendar } from './types/index.js';
 import type { EnvironmentView } from './brain.js';
+import { season, daysInMonth, timeOfDayForSegment, isAwake } from './calendar.js';
 
 export const DEFAULT_CONFIG: WorldConfig = {
   gridWidth: 24,
   gridHeight: 24,
-  termDurationMs: 10 * 60 * 1000, // 10 分
-  tickIntervalMs: 10 * 1000, // 10 秒
+  segmentsPerDay: 12,
   damageThreshold: 10,
   trialWinningScore: 3,
 };
@@ -13,11 +13,33 @@ export const DEFAULT_CONFIG: WorldConfig = {
 /** 「周囲のキャラ」と見なすチェビシェフ距離。 */
 export const NEARBY_RADIUS = 3;
 
-export function createWorld(villagers: Villager[], config: WorldConfig = DEFAULT_CONFIG): World {
+export interface CalendarInit {
+  year: number;
+  month: number;
+  dayOfMonth?: number;
+  segment?: number;
+}
+
+export function makeCalendar(init: CalendarInit): Calendar {
+  return {
+    year: init.year,
+    month: init.month,
+    dayOfMonth: init.dayOfMonth ?? 1,
+    daysInMonth: daysInMonth(init.year, init.month),
+    segment: init.segment ?? 0,
+    season: season(init.month),
+  };
+}
+
+export function createWorld(
+  villagers: Villager[],
+  config: WorldConfig = DEFAULT_CONFIG,
+  calendar: CalendarInit = { year: 2026, month: 1 },
+): World {
   return {
     config,
     term: 0,
-    timeOfDay: 'morning',
+    calendar: makeCalendar(calendar),
     phase: 'idle',
     villagers: new Map(villagers.map((v) => [v.id, v])),
     incident: null,
@@ -27,6 +49,13 @@ export function createWorld(villagers: Villager[], config: WorldConfig = DEFAULT
 
 export function aliveVillagers(world: World): Villager[] {
   return [...world.villagers.values()].filter((v) => v.alive);
+}
+
+/** いま起きている (行動できる) どうぶつ。 */
+export function awakeVillagers(world: World): Villager[] {
+  const { segment } = world.calendar;
+  const { segmentsPerDay } = world.config;
+  return aliveVillagers(world).filter((v) => isAwake(v.activity, segment, segmentsPerDay));
 }
 
 function chebyshev(a: GridPos, b: GridPos): number {
@@ -54,7 +83,7 @@ export function environmentView(world: World, villager: Villager): EnvironmentVi
   return {
     position: { ...villager.position },
     place: placeAt(world, villager.position),
-    timeOfDay: world.timeOfDay,
+    timeOfDay: timeOfDayForSegment(world.calendar.segment, world.config.segmentsPerDay),
     nearby,
   };
 }
