@@ -38,7 +38,9 @@ describe('TermMachine 起承転結 (セグメント駆動)', () => {
 
     for (let i = 0; i < 10 && world.phase === 'ten'; i += 1) await tm.tenStep();
     expect(world.phase).toBe('ketsu');
-    expect(world.trial?.verdict).toBe('death'); // StubBrain は常に victim 完封
+    // 被告は最も攻撃的な a。kill(攻撃性群) と spare(優しさ群) が同数 → 活かす。
+    expect(world.trial?.defendant).toBe('a');
+    expect(world.trial?.verdict).toBe('spared');
 
     await tm.ketsuStep();
     expect(world.phase).toBe('reform');
@@ -46,7 +48,7 @@ describe('TermMachine 起承転結 (セグメント駆動)', () => {
     tm.applyReform();
     expect(world.phase).toBe('kisho'); // その日の残りセグメントへ復帰
     const perp = world.villagers.get('a');
-    expect(perp?.appearance.body).toBe('machine');
+    expect(perp?.appearance.body).toBe('machine'); // 活かされ → 強制教育で改変
     expect(perp?.persona.traits.aggression).toBe(-0.5);
     expect(perp?.reformCount).toBe(1);
     expect(world.incident).toBeNull();

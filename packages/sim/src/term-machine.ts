@@ -4,8 +4,9 @@
 
 import type { World, Villager, VillagerId, Incident, TrialState, Reform } from './types/index.js';
 import type { Brain, ActionDecision } from './brain.js';
-import { awakeVillagers, environmentView, clampPos } from './world.js';
+import { aliveVillagers, awakeVillagers, environmentView, clampPos } from './world.js';
 import { season, daysInMonth, holidayName } from './calendar.js';
+import { groupByDominant, dominantAxis, type PersonalityAxis } from './personality.js';
 import type { EventDirector } from './event-director.js';
 
 export type IdGen = () => string;
@@ -161,43 +162,86 @@ export class TermMachine {
     }
   }
 
+  private groupAxes(): PersonalityAxis[] {
+    return [...groupByDominant(aliveVillagers(this.world), (v) => v.persona.traits).keys()];
+  }
+
+  private votersOf(axis: PersonalityAxis): Villager[] {
+    return aliveVillagers(this.world).filter((v) => dominantAxis(v.persona.traits) === axis);
+  }
+
   private openTrial(incident: Incident): TrialState {
     return {
       incidentId: incident.id,
       judge: { kind: 'nekomori' },
-      scorePerpetrator: 0,
-      scoreVictim: 0,
-      rounds: [],
+      candidates: [incident.perpetrator, ...incident.involved],
+      stage: 'foolish',
+      pendingGroups: this.groupAxes(),
+      foolishVotes: {},
+      defendant: null,
+      fateVotes: { kill: 0, spare: 0 },
+      votes: [],
       verdict: null,
     };
   }
 
-  // --- 転: 裁判 1 ラウンド (3 点先取) ---
+  /** 外部 (接続ユーザの通知投票) の 1 票を現段階に加える。 */
+  addUserVote(pick: string): void {
+    const trial = this.world.trial;
+    if (!trial || trial.stage === 'decided') return;
+    trial.votes.push({ voter: 'user', weight: 1, pick });
+    if (trial.stage === 'foolish') trial.foolishVotes[pick] = (trial.foolishVotes[pick] ?? 0) + 1;
+    else if (pick === 'kill') trial.fateVotes.kill += 1;
+    else if (pick === 'spare') trial.fateVotes.spare += 1;
+  }
+
+  // --- 転: グループ bloc 投票 (1 グループ/ステップ) ---
   async tenStep(): Promise<void> {
     if (this.world.phase !== 'ten' || !this.world.trial || !this.world.incident) {
       throw new Error(`tenStep without active trial (phase ${this.world.phase})`);
     }
     const trial = this.world.trial;
     const incident = this.world.incident;
-    const round = await this.brain.judgeRound({
-      trial,
-      incident,
-      perpetrator: this.get(incident.perpetrator),
-      victims: incident.involved.map((id) => this.get(id)),
-    });
-    trial.rounds.push(round);
-    if (round.winner === 'perpetrator') trial.scorePerpetrator += 1;
-    else trial.scoreVictim += 1;
+    const axis = trial.pendingGroups.shift();
+    if (!axis) return; // 念のため (グループ無し)
+    const voters = this.votersOf(axis);
 
-    const win = this.world.config.trialWinningScore;
-    if (trial.scorePerpetrator >= win) {
-      trial.verdict = 'innocent';
-      this.world.phase = 'ketsu';
-    } else if (trial.scoreVictim >= win) {
-      // 完封 (加害者 0 点) なら死刑、それ以外は有罪。
-      trial.verdict = trial.scorePerpetrator === 0 ? 'death' : 'guilty';
-      this.world.phase = 'ketsu';
+    if (trial.stage === 'foolish') {
+      const candidates = trial.candidates.map((id) => this.get(id));
+      const pick = await this.brain.groupVoteFoolish({ axis, voters, candidates, incident });
+      trial.foolishVotes[pick] = (trial.foolishVotes[pick] ?? 0) + voters.length;
+      trial.votes.push({ voter: axis, weight: voters.length, pick });
+      if (trial.pendingGroups.length === 0) {
+        trial.defendant = this.argmaxCandidate(trial);
+        trial.stage = 'fate';
+        trial.pendingGroups = this.groupAxes();
+      }
+    } else if (trial.stage === 'fate') {
+      const defendant = this.get(trial.defendant as VillagerId);
+      const vote = await this.brain.groupVoteFate({ axis, voters, defendant, incident });
+      if (vote === 'kill') trial.fateVotes.kill += voters.length;
+      else trial.fateVotes.spare += voters.length;
+      trial.votes.push({ voter: axis, weight: voters.length, pick: vote });
+      if (trial.pendingGroups.length === 0) {
+        trial.verdict = trial.fateVotes.kill > trial.fateVotes.spare ? 'death' : 'spared';
+        trial.stage = 'decided';
+        this.world.phase = 'ketsu';
+      }
     }
+  }
+
+  /** 最多得票の候補 (同票は candidates の並び順で先勝ち)。 */
+  private argmaxCandidate(trial: TrialState): VillagerId {
+    let best = trial.candidates[0] as VillagerId;
+    let bestVotes = trial.foolishVotes[best] ?? 0;
+    for (const id of trial.candidates) {
+      const v = trial.foolishVotes[id] ?? 0;
+      if (v > bestVotes) {
+        best = id;
+        bestVotes = v;
+      }
+    }
+    return best;
   }
 
   // --- 結: 教育内容決定 ---
@@ -206,13 +250,16 @@ export class TermMachine {
       throw new Error(`ketsuStep without verdict (phase ${this.world.phase})`);
     }
     const trial = this.world.trial;
-    if (trial.verdict === 'innocent') {
-      this.pendingReform = null; // 無罪は平和に終了。改変なし。
+    const defendant = this.get(trial.defendant as VillagerId);
+    if (trial.verdict === 'death') {
+      // 殺す → 追放 (退場)。
+      this.pendingReform = { kind: 'exile', villager: defendant.id, rationale: '村の投票により処刑された' };
     } else {
+      // 活かす → 強制的に良い子へ教育。
       this.pendingReform = await this.brain.decideEducation({
         trial,
         incident: this.world.incident,
-        perpetrator: this.get(this.world.incident.perpetrator),
+        perpetrator: defendant,
       });
     }
     this.world.phase = 'reform';

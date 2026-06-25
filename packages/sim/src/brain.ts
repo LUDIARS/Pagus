@@ -4,6 +4,7 @@
 
 import type {
   Villager,
+  VillagerId,
   GridPos,
   TimeOfDay,
   EmotionState,
@@ -13,6 +14,7 @@ import type {
   Reform,
 } from './types/index.js';
 import type { EventDirective } from './events.js';
+import type { PersonalityAxis } from './personality.js';
 
 /** sim がプログラムで算出して Brain へ渡す環境ビュー。 */
 export interface EnvironmentView {
@@ -72,20 +74,22 @@ export interface IncidentStep {
   ended: boolean;
 }
 
-// --- 転: 裁判 1 ラウンド ---
+// --- 転: グループ bloc 投票 ---
 
-export interface TrialContext {
-  trial: TrialState;
+/** ①「どの住民の行動が最も愚かしかったか」を 1 グループが投票。 */
+export interface FoolishVoteContext {
+  axis: PersonalityAxis;
+  voters: Villager[];
+  candidates: Villager[];
   incident: Incident;
-  perpetrator: Villager;
-  victims: Villager[];
 }
 
-export interface TrialRound {
-  winner: 'perpetrator' | 'victim';
-  perpetratorClaim: string;
-  victimClaim: string;
-  judgement: string;
+/** ②「被告を殺す/活かす」を 1 グループが投票。 */
+export interface FateVoteContext {
+  axis: PersonalityAxis;
+  voters: Villager[];
+  defendant: Villager;
+  incident: Incident;
 }
 
 // --- 結: 教育内容決定 ---
@@ -100,6 +104,9 @@ export interface Brain {
   updateEmotion(ctx: EmotionContext): Promise<EmotionState>;
   decideAction(ctx: ActionContext): Promise<ActionDecision>;
   advanceIncident(ctx: IncidentContext): Promise<IncidentStep>;
-  judgeRound(ctx: TrialContext): Promise<TrialRound>;
+  /** ① 最も愚かな候補へ 1 グループが投票。 */
+  groupVoteFoolish(ctx: FoolishVoteContext): Promise<VillagerId>;
+  /** ② 被告を殺す/活かす を 1 グループが投票。 */
+  groupVoteFate(ctx: FateVoteContext): Promise<'kill' | 'spare'>;
   decideEducation(ctx: EducationContext): Promise<Reform>;
 }

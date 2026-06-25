@@ -44,6 +44,11 @@ export class TermLoop {
     if (inc) inc.damage = Math.max(0, inc.damage - 3);
   }
 
+  /** プレイヤーの裁判投票を加える。 */
+  vote(pick: string): void {
+    this.tm.addUserVote(pick);
+  }
+
   private nextDelay(): number {
     const w = this.tm.world;
     if (w.phase === 'kisho' || w.phase === 'idle') {

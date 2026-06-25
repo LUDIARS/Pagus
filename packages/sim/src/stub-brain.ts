@@ -1,8 +1,8 @@
 // 決定的な stub Brain。test と、LLM 未配線の開発初期 (v0.1) で使う。
 // LLM を一切呼ばず、固定ロジックで起承転結を一巡させられる。
 
-import type { Brain, ActionContext, ActionDecision, EmotionContext, IncidentContext, IncidentStep, TrialContext, TrialRound, EducationContext } from './brain.js';
-import type { EmotionState, Reform } from './types/index.js';
+import type { Brain, ActionContext, ActionDecision, EmotionContext, IncidentContext, IncidentStep, FoolishVoteContext, FateVoteContext, EducationContext } from './brain.js';
+import type { EmotionState, Reform, VillagerId } from './types/index.js';
 
 export interface StubBrainOptions {
   /** decideAction がこの回数に達し、かつ周囲に村人がいれば事件を発火する。 */
@@ -75,13 +75,22 @@ export class StubBrain implements Brain {
     };
   }
 
-  async judgeRound(_ctx: TrialContext): Promise<TrialRound> {
-    return {
-      winner: 'victim',
-      perpetratorClaim: '正当な理由があった',
-      victimClaim: '一方的に被害を受けた',
-      judgement: '被害が甚大であり被害者の訴えを認める',
-    };
+  async groupVoteFoolish(ctx: FoolishVoteContext): Promise<VillagerId> {
+    // 攻撃性が最も高い候補を「最も愚か」とみなす (≈ 加害者)。
+    const first = ctx.candidates[0];
+    if (!first) throw new Error('候補がいません');
+    let pick = first;
+    for (const c of ctx.candidates) {
+      if (c.persona.traits.aggression > pick.persona.traits.aggression) pick = c;
+    }
+    return pick.id;
+  }
+
+  async groupVoteFate(ctx: FateVoteContext): Promise<'kill' | 'spare'> {
+    // 厳格な軸 (攻撃性/規律/野心) のグループは死刑寄り、他は活かす寄り。
+    return ctx.axis === 'aggression' || ctx.axis === 'discipline' || ctx.axis === 'ambition'
+      ? 'kill'
+      : 'spare';
   }
 
   async decideEducation(ctx: EducationContext): Promise<Reform> {

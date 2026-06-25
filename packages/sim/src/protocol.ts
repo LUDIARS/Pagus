@@ -36,4 +36,5 @@ export type ServerMessage =
 /** client → server。 */
 export type ClientMessage =
   | { t: 'incite' } // 次の tick で強制的に事件を起こす
-  | { t: 'calm' }; // 進行中の事件の被害を和らげる
+  | { t: 'calm' } // 進行中の事件の被害を和らげる
+  | { t: 'vote'; pick: string }; // 裁判への 1 票 (foolish 段階=候補id / fate 段階='kill'|'spare')

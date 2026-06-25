@@ -7,6 +7,7 @@ import { toWire, type World, type ServerMessage, type ClientMessage } from '@pag
 export interface WsHandlers {
   onIncite(): void;
   onCalm(): void;
+  onVote(pick: string): void;
 }
 
 export class GameWsServer {
@@ -30,6 +31,7 @@ export class GameWsServer {
       }
       if (msg.t === 'incite') this.h.onIncite();
       else if (msg.t === 'calm') this.h.onCalm();
+      else if (msg.t === 'vote') this.h.onVote(msg.pick);
     });
   }
 

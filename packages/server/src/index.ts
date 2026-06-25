@@ -37,6 +37,7 @@ function main(): void {
   const ws = new GameWsServer(port, {
     onIncite: () => loop.incite(),
     onCalm: () => loop.calm(),
+    onVote: (pick) => loop.vote(pick),
   });
 
   loop = new TermLoop(tm, brain, pace, incidentStepMs, {
