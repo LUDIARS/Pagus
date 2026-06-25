@@ -13,8 +13,8 @@ export type TrialStage = 'foolish' | 'fate' | 'decided';
 
 /** グループ bloc または ユーザの 1 票。 */
 export interface VoteRecord {
-  /** 投票主体: グループは性格軸、ユーザは 'user'。 */
-  voter: PersonalityAxis | 'user';
+  /** 投票主体: グループは性格軸、ユーザは 'user'、狂人の扇動は 'madman'。 */
+  voter: PersonalityAxis | 'user' | 'madman';
   /** bloc の重み (グループ人数 / ユーザは 1)。 */
   weight: number;
   /** foolish 段階は候補 VillagerId、fate 段階は 'kill'|'spare'。 */

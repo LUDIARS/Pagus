@@ -1,0 +1,3 @@
+Animal sprites: "Animal pack" by Kenney (https://kenney.nl / https://kenney-assets.itch.io)
+License: CC0 1.0 Universal (public domain) — no attribution required, credited here as courtesy.
+Source: https://kenney.nl/assets/animal-pack

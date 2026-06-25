@@ -11,7 +11,9 @@
 // 失敗系 (spawn 失敗 / 非ゼロ終了 / タイムアウト / 空出力 / JSON 破損) は全て throw。
 
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import type { LlmClient, LlmInvokeArgs } from './llm-client.js';
 
@@ -57,6 +59,30 @@ export class CliLlmClient implements LlmClient {
     const model = args.model ?? this.model;
     const timeoutMs = args.timeoutMs ?? this.timeoutMs;
     const prompt = composePrompt(args.system, args.prompt);
+
+    // codex は stdout に preamble/ANSI を吐き、user プロンプトの echo に
+    // スキーマ例の JSON が混じる → stdout からの抽出は不安定。
+    // --output-last-message で「最終メッセージだけ」をファイルに書かせ、それを読む。
+    if (this.provider === 'codex') {
+      const dir = mkdtempSync(join(tmpdir(), 'pagus-codex-'));
+      const outFile = join(dir, 'last.txt');
+      try {
+        await spawnCli({
+          provider: this.provider,
+          model,
+          prompt,
+          timeoutMs,
+          gitBashPath: this.gitBashPath,
+          outFile,
+        });
+        const text = readFileSync(outFile, 'utf8').trim();
+        if (text.length === 0) throw new Error('codex cli の最終メッセージが空です');
+        return { text };
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+
     const raw = await spawnCli({
       provider: this.provider,
       model,
@@ -64,8 +90,7 @@ export class CliLlmClient implements LlmClient {
       timeoutMs,
       gitBashPath: this.gitBashPath,
     });
-    const text = this.provider === 'claude' ? parseClaudeCliResult(raw) : parseCodexResult(raw);
-    return { text };
+    return { text: parseClaudeCliResult(raw) };
   }
 }
 
@@ -76,7 +101,7 @@ function composePrompt(system: string | undefined, user: string): string {
 }
 
 /** provider に応じた CLI 引数。codex は spawner.ts の `--model` 形をミラー。 */
-function buildArgs(provider: CliProvider, model: string): string[] {
+function buildArgs(provider: CliProvider, model: string, outFile?: string): string[] {
   const bin = BIN_BY_PROVIDER[provider];
   if (provider === 'claude') {
     // -p (print) + JSON エンベロープで result を機械可読にする。
@@ -84,9 +109,14 @@ function buildArgs(provider: CliProvider, model: string): string[] {
     if (model) a.push('--model', model);
     return a;
   }
-  // codex: 非対話 1-shot は `codex exec`。spawner.ts の `[bin, '--model', model]` を踏襲。
+  // codex: 非対話 1-shot は `codex exec`。
+  //   --skip-git-repo-check : 任意 cwd で動かす (trusted-dir 判定で落とさない)。
+  //   -s read-only          : 1-shot 応答にシェル実行は不要 = 副作用を封じる。
+  //   --output-last-message  : 最終メッセージだけを清書ファイルへ (stdout 抽出を避ける)。
   void bin;
-  return ['exec', '--model', model];
+  const a = ['exec', '--skip-git-repo-check', '-s', 'read-only', '--model', model];
+  if (outFile) a.push('--output-last-message', outFile);
+  return a;
 }
 
 interface SpawnCliArgs {
@@ -95,13 +125,15 @@ interface SpawnCliArgs {
   prompt: string;
   timeoutMs: number;
   gitBashPath?: string | undefined;
+  /** codex の --output-last-message 出力先 (claude では未使用)。 */
+  outFile?: string | undefined;
 }
 
 /** CLI を spawn し、stdout 全文を返す。失敗は reject。 */
 function spawnCli(args: SpawnCliArgs): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const bin = BIN_BY_PROVIDER[args.provider];
-    const cliArgs = buildArgs(args.provider, args.model);
+    const cliArgs = buildArgs(args.provider, args.model, args.outFile);
 
     const env: NodeJS.ProcessEnv = { ...process.env };
     // claude CLI は Windows で git-bash を要する (feedback_claude_cli_windows_bash)。

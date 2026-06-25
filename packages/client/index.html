@@ -6,45 +6,119 @@
     <title>Pagus — AI村</title>
     <style>
       :root { color-scheme: dark; }
-      body { margin: 0; background: #0b0e14; color: #cdd6e4; font-family: system-ui, sans-serif; }
-      #topbar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: #11151f; border-bottom: 1px solid #222; }
-      #hud { font-size: 13px; }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0; background: #0b0e14; color: #cdd6e4;
+        font-family: system-ui, sans-serif;
+        display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+      }
+      #topbar {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 16px; background: #11151f; border-bottom: 1px solid #222; flex: 0 0 auto;
+      }
+      #hud { font-size: 14px; }
       #status { font-size: 12px; color: #7f8aa3; margin-left: auto; }
-      button { background: #1e2533; color: #cdd6e4; border: 1px solid #38405a; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+      button { background: #1e2533; color: #cdd6e4; border: 1px solid #38405a; border-radius: 6px; padding: 7px 14px; cursor: pointer; }
       button:hover { background: #283044; }
       #incite { border-color: #eb5757; }
       #calm { border-color: #56ccf2; }
-      #main { display: flex; gap: 12px; padding: 12px; }
-      #village { border: 1px solid #222; border-radius: 8px; overflow: hidden; line-height: 0; }
-      #side { display: flex; flex-direction: column; gap: 12px; width: 280px; }
-      #trial { display: none; background: #1a1410; border: 1px solid #5a3a2a; border-radius: 8px; padding: 10px; }
+
+      /* 3 カラム: 左=当事者 / 中央=ステージ+ログ / 右=村ステータス。 */
+      #main { display: flex; gap: 12px; padding: 12px; flex: 1 1 auto; min-height: 0; }
+      .col {
+        display: flex; flex-direction: column; gap: 10px;
+        background: #0e121b; border: 1px solid #222; border-radius: 8px;
+        padding: 12px; overflow-y: auto;
+      }
+      #left { width: 300px; flex: 0 0 300px; }
+      #right { width: 340px; flex: 0 0 340px; }
+
+      /* 中央: ステージは全面、ログは中央ちょい下に重ねる。 */
+      #center { flex: 1 1 auto; min-width: 0; position: relative; border: 1px solid #222; border-radius: 8px; overflow: hidden; }
+      #stage { position: absolute; inset: 0; line-height: 0; }
+      #stage canvas { display: block; width: 100%; height: 100%; }
+      #log {
+        position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%);
+        width: 72%; max-height: 38%; overflow: hidden;
+        display: flex; flex-direction: column; gap: 3px;
+        background: rgba(8, 10, 16, 0.62); border: 1px solid #2a3346; border-radius: 10px;
+        padding: 10px 14px; backdrop-filter: blur(2px); pointer-events: none;
+      }
+      .ov-line { font-size: 16px; line-height: 1.45; color: #e6ebf5; text-shadow: 0 1px 2px #000; }
+
+      /* パネル共通 */
+      h3 { margin: 0 0 4px; font-size: 15px; }
+      .sub { margin-top: 8px; font-size: 12px; color: #8b96ad; border-top: 1px solid #1b2231; padding-top: 6px; }
+      .muted { font-size: 12px; color: #8b96ad; }
+      .desc { font-size: 13px; line-height: 1.5; }
+      .verdict { font-size: 14px; font-weight: bold; color: #eb5757; margin-top: 4px; }
+      .ident { display: flex; align-items: center; gap: 10px; }
+      .ident-face { width: 52px; height: 52px; object-fit: contain; background: #0b0e14; border-radius: 8px; }
+      .ident-name { font-size: 17px; font-weight: bold; }
+      .stat-row { display: flex; align-items: center; gap: 8px; }
+      .stat-label { width: 64px; font-size: 12px; color: #b9c2d6; }
+      .bar { flex: 1; height: 9px; background: #1b2231; border-radius: 5px; overflow: hidden; }
+      .bar > i { display: block; height: 100%; border-radius: 5px; }
+      .kv { display: flex; justify-content: space-between; font-size: 13px; padding: 2px 0; }
+      .kv-val { font-weight: bold; }
+
+      /* 右の裁判ボタン */
+      #trial { background: #1a1410; border: 1px solid #5a3a2a; border-radius: 8px; padding: 10px; display: none; }
       #trial .trial-title { font-size: 13px; margin-bottom: 8px; color: #f2c94c; }
       #trial button { display: inline-block; margin: 3px 4px 3px 0; }
       #trial .vote-kill { border-color: #eb5757; }
       #trial .vote-spare { border-color: #56ccf2; }
       #trial .trial-verdict { margin-top: 8px; font-size: 13px; color: #eb5757; }
-      #radar { background: #0e121b; border: 1px solid #222; border-radius: 8px; }
-      #log { flex: 1; overflow-y: auto; max-height: 360px; font-size: 12px; background: #0e121b; border: 1px solid #222; border-radius: 8px; padding: 8px; }
-      #log > div { padding: 2px 0; border-bottom: 1px solid #161b27; }
+      #radar { background: #0e121b; border: 1px solid #222; border-radius: 8px; align-self: center; }
+
       .log-sho { color: #f2c94c; }
       .log-ten { color: #f2994a; }
       .log-ketsu { color: #eb5757; }
+
+      /* モバイル: 中央を全画面、左右はスライドインのドロワー。 */
+      .drawer-toggle { display: none; }
+      #backdrop { display: none; }
+      @media (max-width: 860px) {
+        #hud { font-size: 12px; }
+        .drawer-toggle { display: inline-block; }
+        #main { padding: 8px; gap: 0; }
+        #center { flex: 1 1 auto; }
+        #left, #right {
+          position: fixed; top: 52px; bottom: 0; z-index: 30;
+          width: 80%; max-width: 340px;
+          transition: transform 0.25s ease; box-shadow: 0 0 24px rgba(0,0,0,0.6);
+        }
+        #left { left: 0; transform: translateX(-105%); border-radius: 0 10px 10px 0; }
+        #right { right: 0; transform: translateX(105%); border-radius: 10px 0 0 10px; }
+        #left.open, #right.open { transform: translateX(0); }
+        #backdrop.show { display: block; position: fixed; inset: 52px 0 0 0; background: rgba(0,0,0,0.5); z-index: 20; }
+        #log { width: 86%; bottom: 10%; }
+        .ov-line { font-size: 15px; }
+      }
     </style>
   </head>
   <body>
     <div id="topbar">
+      <button id="btn-left" class="drawer-toggle">🔥 当事者</button>
       <span id="hud">接続待ち…</span>
       <button id="incite">扇動</button>
       <button id="calm">沈静化</button>
+      <button id="btn-right" class="drawer-toggle">📊 村</button>
       <span id="status"></span>
     </div>
     <div id="main">
-      <div id="village"></div>
-      <div id="side">
-        <div id="trial"></div>
-        <canvas id="radar" width="280" height="240"></canvas>
+      <div id="left" class="col"></div>
+      <div id="center">
+        <div id="stage"></div>
         <div id="log"></div>
       </div>
+      <div id="right" class="col">
+        <canvas id="radar" width="316" height="250"></canvas>
+        <div id="trial"></div>
+        <div id="vstatus"></div>
+      </div>
+      <div id="backdrop"></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

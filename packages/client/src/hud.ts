@@ -22,7 +22,6 @@ const PHASE_JA: Record<Phase, string> = {
 export class Hud {
   constructor(
     private readonly bar: HTMLElement,
-    private readonly log: HTMLElement,
     private readonly status: HTMLElement,
   ) {}
 
@@ -32,14 +31,6 @@ export class Hud {
     this.bar.textContent =
       `${c.year}年 ${c.month}月${c.dayOfMonth}日 (${SEASON_JA[c.season]}) ` +
       `時間帯 ${c.segment + 1}/${world.config.segmentsPerDay} ｜ ${PHASE_JA[world.phase]} ｜ ${alive}匹`;
-  }
-
-  addLog(phase: Phase, text: string): void {
-    const div = document.createElement('div');
-    div.className = `log-${phase}`;
-    div.textContent = text;
-    this.log.prepend(div);
-    while (this.log.childElementCount > 120) this.log.lastElementChild?.remove();
   }
 
   setStatus(status: string): void {

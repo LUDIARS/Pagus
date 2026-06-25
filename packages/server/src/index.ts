@@ -6,6 +6,7 @@ import { loadConfig, loadSeed } from './load-data.js';
 import { TermLoop, type LoopBrain } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
 import { BackendRegistry, LlmBrain, LlmWorldBrain } from './llm/index.js';
+import { SessionLog } from './session-log.js';
 
 function numEnv(name: string, fallback: number): number {
   const v = process.env[name];
@@ -48,11 +49,19 @@ function main(): void {
 
   const { brain, worldBrain } = selectBrains();
   const director = new EventDirector({ maxRepsPerSegment: numEnv('PAGUS_REPS', 3) });
-  const tm = new TermMachine(world, brain, { director, worldBrain });
+  const tm = new TermMachine(world, brain, {
+    director,
+    worldBrain,
+    reconcileChance: numEnv('PAGUS_RECONCILE', 0.15), // 事件が和解で収まる基礎確率
+    secondaryChance: numEnv('PAGUS_SECONDARY', 0.18), // 二次被害の確率
+  });
 
   const port = numEnv('PAGUS_WS_PORT', 4310);
   const pace = { accel: numEnv('PAGUS_ACCEL', 600), minMs: numEnv('PAGUS_MIN_MS', 400) };
   const incidentStepMs = numEnv('PAGUS_INCIDENT_MS', 700);
+
+  // 住民の動きを stdout へ流しつつ JSONL へ永続化する (後から振り返れる)。
+  const sessionLog = new SessionLog();
 
   let loop: TermLoop;
   const ws = new GameWsServer(port, {
@@ -62,12 +71,29 @@ function main(): void {
   });
 
   loop = new TermLoop(tm, brain, pace, incidentStepMs, {
-    onSnapshot: (w) => ws.broadcastSnapshot(w),
-    onLog: (phase, text) => ws.broadcastLog(phase, text),
+    onSnapshot: (w) => {
+      ws.broadcastSnapshot(w);
+      sessionLog.snapshot(w);
+    },
+    onLog: (phase, text) => {
+      ws.broadcastLog(phase, text);
+      sessionLog.line(phase, text);
+    },
   });
   loop.start();
 
-  console.log(`[pagus] server ws://localhost:${port} | ${villagers.length} どうぶつ | accel x${pace.accel}`);
+  // Ctrl-C でループを止めログを flush してから抜ける。
+  const shutdown = (): void => {
+    loop.stop();
+    sessionLog.close();
+    process.exit(0);
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
+  const brainLabel = process.env.PAGUS_BRAIN ?? 'stub';
+  console.log(`[pagus] server ws://localhost:${port} | ${villagers.length} どうぶつ | brain=${brainLabel} | accel x${pace.accel}`);
+  if (sessionLog.file) console.log(`[pagus] session log → ${sessionLog.file}`);
 }
 
 main();

@@ -65,4 +65,6 @@ export interface Villager {
   activity: ActivityPattern;
   /** 改変された回数。 */
   reformCount: number;
+  /** 狂人フラグ。村の評判に応じて裁判を扇動し、無実の者を陥れる。 */
+  madman: boolean;
 }

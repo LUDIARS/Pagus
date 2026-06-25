@@ -6,6 +6,7 @@ export interface WsHandlers {
   onSnapshot(world: WireWorld): void;
   onLog(phase: Phase, text: string): void;
   onStatus(status: string): void;
+  onPlayers(count: number): void;
 }
 
 export interface Conn {
@@ -32,6 +33,7 @@ export function connect(url: string, h: WsHandlers): Conn {
       }
       if (msg.t === 'snapshot') h.onSnapshot(msg.world);
       else if (msg.t === 'log') h.onLog(msg.phase, msg.text);
+      else if (msg.t === 'players') h.onPlayers(msg.count);
     };
   };
   open();
