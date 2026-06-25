@@ -1,10 +1,11 @@
 // Pagus server エントリ。data からワールドを起こし、TermLoop と WS を配線する。
-// v0.1 は思考を StubBrain で代替 (LLM 配線は v0.2)。
+// 思考は PAGUS_BRAIN で切替: 'stub'(既定/決定的) | 'llm'(実 LLM = claude/codex CLI)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, type WorldBrain } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
-import { TermLoop } from './term-loop.js';
+import { TermLoop, type LoopBrain } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
+import { BackendRegistry, LlmBrain, LlmWorldBrain } from './llm/index.js';
 
 function numEnv(name: string, fallback: number): number {
   const v = process.env[name];
@@ -12,6 +13,26 @@ function numEnv(name: string, fallback: number): number {
   const n = Number(v);
   if (Number.isNaN(n)) throw new Error(`環境変数 ${name} が数値ではありません: ${v}`);
   return n;
+}
+
+/**
+ * PAGUS_BRAIN で 個体 Brain と 世界側 WorldBrain を一括で選ぶ (既定 'stub')。
+ * 'llm' は claude/codex CLI 駆動。両者で同一 BackendRegistry を共有する。
+ * 不正値は無言フォールバックせず即エラー (RULE_CODE §7.1)。
+ */
+function selectBrains(): { brain: LoopBrain; worldBrain: WorldBrain } {
+  const mode = process.env.PAGUS_BRAIN ?? 'stub';
+  if (mode === 'stub') {
+    return {
+      brain: new StubBrain({ triggerAfter: numEnv('PAGUS_TRIGGER_AFTER', 6), damagePerStep: 4 }),
+      worldBrain: new StubWorldBrain(),
+    };
+  }
+  if (mode === 'llm') {
+    const registry = new BackendRegistry();
+    return { brain: new LlmBrain(registry), worldBrain: new LlmWorldBrain(registry) };
+  }
+  throw new Error(`環境変数 PAGUS_BRAIN は 'stub' | 'llm' のいずれか: ${mode}`);
 }
 
 function main(): void {
@@ -25,8 +46,7 @@ function main(): void {
     month: now.getMonth() + 1,
   });
 
-  const brain = new StubBrain({ triggerAfter: numEnv('PAGUS_TRIGGER_AFTER', 6), damagePerStep: 4 });
-  const worldBrain = new StubWorldBrain();
+  const { brain, worldBrain } = selectBrains();
   const director = new EventDirector({ maxRepsPerSegment: numEnv('PAGUS_REPS', 3) });
   const tm = new TermMachine(world, brain, { director, worldBrain });
 
