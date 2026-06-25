@@ -20,3 +20,12 @@ export const EVENT_AXIS: Record<EventCategory, PersonalityAxis> = {
 
 /** 1 日に各種で最低こなす回数。 */
 export const EVENT_MIN_PER_DAY = 2;
+
+/** EventDirector が決める「誰が何をするか」。Brain はこれを narration する。 */
+export interface EventDirective {
+  category: EventCategory;
+  /** 実行者 (VillagerId)。 */
+  actor: string;
+  /** 嫌がらせの対象 (VillagerId)。無ければ null。 */
+  target: string | null;
+}

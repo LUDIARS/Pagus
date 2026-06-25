@@ -3,15 +3,22 @@
 // 本クラスは純粋な遷移ロジックを提供する。
 
 import type { World, Villager, VillagerId, Incident, TrialState, Reform } from './types/index.js';
-import type { Brain } from './brain.js';
+import type { Brain, ActionDecision } from './brain.js';
 import { awakeVillagers, environmentView, clampPos } from './world.js';
 import { season, daysInMonth, holidayName } from './calendar.js';
+import type { EventDirector } from './event-director.js';
 
 export type IdGen = () => string;
 
 function counterIdGen(prefix: string): IdGen {
   let n = 0;
   return () => `${prefix}_${(n += 1)}`;
+}
+
+export interface TermMachineOptions {
+  /** 起のイベント差配 (省略時は全 awake どうぶつの自由行動)。 */
+  director?: EventDirector;
+  newIncidentId?: IdGen;
 }
 
 export interface KishoTickResult {
@@ -30,16 +37,22 @@ export interface AdvanceDayResult {
 
 export class TermMachine {
   private pendingReform: Reform | null = null;
+  private readonly director: EventDirector | null;
+  private readonly newIncidentId: IdGen;
 
   constructor(
     public readonly world: World,
     private readonly brain: Brain,
-    private readonly newIncidentId: IdGen = counterIdGen('inc'),
-  ) {}
+    opts: TermMachineOptions = {},
+  ) {
+    this.director = opts.director ?? null;
+    this.newIncidentId = opts.newIncidentId ?? counterIdGen('inc');
+  }
 
   /** その日 (ターム) を開始する。idle → 起。 */
   startDay(): void {
     this.world.phase = 'kisho';
+    this.director?.resetDay();
   }
 
   private get(id: VillagerId): Villager {
@@ -48,26 +61,52 @@ export class TermMachine {
     return v;
   }
 
-  // --- 起: 現セグメントの自律行動 (起きている どうぶつ のみ) ---
+  // --- 起: 現セグメントの行動 (director があれば代表のみ、無ければ全 awake) ---
   async kishoTick(): Promise<KishoTickResult> {
     if (this.world.phase !== 'kisho') throw new Error(`kishoTick in phase ${this.world.phase}`);
     const actions: KishoTickResult['actions'] = [];
+
+    if (this.director) {
+      const remaining = this.world.config.segmentsPerDay - this.world.calendar.segment;
+      for (const directive of this.director.planSegment(this.world, remaining)) {
+        const actor = this.world.villagers.get(directive.actor);
+        if (!actor || !actor.alive) continue;
+        const decision = await this.brain.decideAction({
+          villager: actor,
+          environment: environmentView(this.world, actor),
+          directive,
+        });
+        if (this.applyDecision(actor, decision, actions)) return { actions, incidentStarted: true };
+      }
+      return { actions, incidentStarted: false };
+    }
+
     for (const villager of awakeVillagers(this.world)) {
       const decision = await this.brain.decideAction({
         villager,
         environment: environmentView(this.world, villager),
+        directive: null,
       });
-      if (decision.move) villager.position = clampPos(this.world, decision.move);
-      villager.emotion = decision.newEmotion;
-      actions.push({ villager: villager.id, action: decision.action });
-
-      if (decision.triggersIncident && decision.incidentSeed && !this.world.incident) {
-        this.world.incident = this.startIncident(villager.id, decision.incidentSeed);
-        this.world.phase = 'sho';
-        return { actions, incidentStarted: true };
-      }
+      if (this.applyDecision(villager, decision, actions)) return { actions, incidentStarted: true };
     }
     return { actions, incidentStarted: false };
+  }
+
+  /** 行動を適用。事件が発火したら true を返し phase を sho にする。 */
+  private applyDecision(
+    actor: Villager,
+    decision: ActionDecision,
+    actions: KishoTickResult['actions'],
+  ): boolean {
+    if (decision.move) actor.position = clampPos(this.world, decision.move);
+    actor.emotion = decision.newEmotion;
+    actions.push({ villager: actor.id, action: decision.action });
+    if (decision.triggersIncident && decision.incidentSeed && !this.world.incident) {
+      this.world.incident = this.startIncident(actor.id, decision.incidentSeed);
+      this.world.phase = 'sho';
+      return true;
+    }
+    return false;
   }
 
   /** 現セグメントを終え、次セグメントへ。日末 (segment 一巡) に達したら phase=advance。 */

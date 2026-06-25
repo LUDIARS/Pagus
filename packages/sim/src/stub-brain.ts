@@ -27,12 +27,16 @@ export class StubBrain implements Brain {
   }
 
   async decideAction(ctx: ActionContext): Promise<ActionDecision> {
+    const move = { x: ctx.villager.position.x + 1, y: ctx.villager.position.y };
+    if (ctx.directive) return this.narrate(ctx, move);
+
+    // directive 無し (自由行動パス): カウンタ/扇動で事件を起こす。
     this.actionCount += 1;
     const hasNeighbor = ctx.environment.nearby.length > 0;
     const trigger = hasNeighbor && (this.forced || this.actionCount >= (this.opts.triggerAfter ?? 3));
     if (trigger) this.forced = false;
     return {
-      move: { x: ctx.villager.position.x + 1, y: ctx.villager.position.y },
+      move,
       action: `${ctx.villager.name} は ${ctx.environment.place} をうろついた`,
       newEmotion: ctx.villager.emotion,
       triggersIncident: trigger,
@@ -43,6 +47,24 @@ export class StubBrain implements Brain {
           }
         : null,
     };
+  }
+
+  /** EventDirector が差配したイベントを narration する。嫌がらせは事件化。 */
+  private narrate(ctx: ActionContext, move: { x: number; y: number }): ActionDecision {
+    const d = ctx.directive!;
+    const name = ctx.villager.name;
+    if (d.category === 'harass' && d.target) {
+      return {
+        move,
+        action: `${name} は誰かに嫌がらせをした`,
+        newEmotion: ctx.villager.emotion,
+        triggersIncident: true,
+        incidentSeed: { description: `${name} が嫌がらせをした`, involved: [d.target] },
+      };
+    }
+    const text =
+      d.category === 'good' ? `${name} は ${ctx.environment.place} で良い行いをした` : `${name} は雑談した`;
+    return { move, action: text, newEmotion: ctx.villager.emotion, triggersIncident: false, incidentSeed: null };
   }
 
   async advanceIncident(ctx: IncidentContext): Promise<IncidentStep> {

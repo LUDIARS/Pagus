@@ -12,6 +12,7 @@ import type {
   TrialState,
   Reform,
 } from './types/index.js';
+import type { EventDirective } from './events.js';
 
 /** sim がプログラムで算出して Brain へ渡す環境ビュー。 */
 export interface EnvironmentView {
@@ -26,6 +27,8 @@ export interface EnvironmentView {
 export interface ActionContext {
   villager: Villager;
   environment: EnvironmentView;
+  /** EventDirector が差配したイベント (起の代表行動)。自由行動なら null。 */
+  directive: EventDirective | null;
 }
 
 export interface ActionDecision {
