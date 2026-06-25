@@ -39,6 +39,20 @@ export interface TermMachineOptions {
   rng?: () => number;
   /** alive どうぶつの上限。出生はこの数未満の範囲でのみ起こる。既定 16。 */
   maxPopulation?: number;
+  /**
+   * 事件が裁判に至らず「和解」する基礎確率 (0..1, 1 ステップごとに判定)。既定 0 (無効)。
+   * 沈静化 (nudgeCalm) で上がり、扇動 (nudgeIncite) で下がる。
+   */
+  reconcileChance?: number;
+  /** 事件中に第三者を巻き込む「二次被害」の確率 (0..1)。既定 0 (無効)。 */
+  secondaryChance?: number;
+}
+
+/** shoStep の結果。server がログ表示に使う。 */
+export interface ShoResult {
+  outcome: 'ongoing' | 'trial' | 'reconciled';
+  /** 二次被害に巻き込まれた どうぶつ の名前 (無ければ null)。 */
+  secondaryVictim: string | null;
 }
 
 export interface KishoTickResult {
@@ -62,6 +76,12 @@ export class TermMachine {
   private readonly worldBrain: WorldBrain | null;
   private readonly rng: () => number;
   private readonly maxPopulation: number;
+  private readonly reconcileChance: number;
+  private readonly secondaryChance: number;
+  /** 沈静化/扇動が動かす和解バイアス (事件ごとに 0 へリセット)。 */
+  private reconcileBias = 0;
+  /** 現ステージのユーザ票 (投票し直しで差し替えるため保持)。 */
+  private userVote: { stage: TrialState['stage']; pick: string } | null = null;
   /** 出生どうぶつの通し番号 (seed の v_* と衝突しない born_N を振る)。 */
   private bornCount = 0;
   /** その日の裁判結末。applyReform が incident/trial を null にする前に ketsuStep で捕捉する。 */
@@ -77,6 +97,18 @@ export class TermMachine {
     this.worldBrain = opts.worldBrain ?? null;
     this.rng = opts.rng ?? Math.random;
     this.maxPopulation = opts.maxPopulation ?? 16;
+    this.reconcileChance = opts.reconcileChance ?? 0;
+    this.secondaryChance = opts.secondaryChance ?? 0;
+  }
+
+  /** プレイヤーの沈静化: この事件が和解しやすくなる。 */
+  nudgeCalm(): void {
+    this.reconcileBias = Math.min(0.5, this.reconcileBias + 0.12);
+  }
+
+  /** プレイヤーの扇動: この事件が和解しにくくなる (= 裁判に持ち込みやすい)。 */
+  nudgeIncite(): void {
+    this.reconcileBias = Math.max(-0.5, this.reconcileBias - 0.12);
   }
 
   /** その日 (ターム) を開始する。idle → 起。 */
@@ -155,6 +187,7 @@ export class TermMachine {
     perpetrator: VillagerId,
     seed: { description: string; involved: string[] },
   ): Incident {
+    this.reconcileBias = 0; // 事件ごとに和解バイアスをリセット。
     return {
       id: this.newIncidentId(),
       perpetrator,
@@ -167,7 +200,7 @@ export class TermMachine {
   }
 
   // --- 承: 事件 (GANs) 1 ステップ ---
-  async shoStep(): Promise<void> {
+  async shoStep(): Promise<ShoResult> {
     if (this.world.phase !== 'sho' || !this.world.incident) {
       throw new Error(`shoStep without active incident (phase ${this.world.phase})`);
     }
@@ -184,11 +217,39 @@ export class TermMachine {
     incident.steps.push({ perspective, action: step.action, damageDelta: step.damageDelta });
     incident.damage += step.damageDelta;
 
+    // 事件が一線を越えたら裁判へ (和解より優先)。
     if (step.ended || incident.damage >= this.world.config.damageThreshold) {
       incident.resolved = true;
       this.world.trial = this.openTrial(incident);
       this.world.phase = 'ten';
+      return { outcome: 'trial', secondaryVictim: null };
     }
+
+    // 二次被害: 一定確率で第三者を巻き込む。
+    let secondaryVictim: string | null = null;
+    if (this.rng() < this.secondaryChance) {
+      const bystanders = aliveVillagers(this.world).filter(
+        (v) => v.id !== incident.perpetrator && !incident.involved.includes(v.id),
+      );
+      const victim = bystanders[Math.floor(this.rng() * bystanders.length)];
+      if (victim) {
+        incident.involved.push(victim.id);
+        incident.damage += 2;
+        secondaryVictim = victim.name;
+      }
+    }
+
+    // 和解: 沈静化で上がり扇動で下がる。被害が大きいほど和解しにくい。
+    const damageRatio = incident.damage / this.world.config.damageThreshold;
+    const chance = this.reconcileChance + this.reconcileBias - damageRatio * 0.1;
+    if (incident.steps.length >= 1 && this.rng() < chance) {
+      incident.resolved = true;
+      this.world.incident = null;
+      this.world.phase = 'kisho';
+      return { outcome: 'reconciled', secondaryVictim };
+    }
+
+    return { outcome: 'ongoing', secondaryVictim };
   }
 
   private groupAxes(): PersonalityAxis[] {
@@ -200,6 +261,7 @@ export class TermMachine {
   }
 
   private openTrial(incident: Incident): TrialState {
+    this.userVote = null;
     return {
       incidentId: incident.id,
       judge: { kind: 'nekomori' },
@@ -214,14 +276,61 @@ export class TermMachine {
     };
   }
 
-  /** 外部 (接続ユーザの通知投票) の 1 票を現段階に加える。 */
+  /**
+   * 接続ユーザの通知投票 1 票を現段階に加える。
+   * 同じ段階で投票し直したら前回票を取り消して差し替える。
+   */
   addUserVote(pick: string): void {
     const trial = this.world.trial;
     if (!trial || trial.stage === 'decided') return;
+
+    // 同段階の前回ユーザ票を取り消す (投票し直し)。
+    if (this.userVote && this.userVote.stage === trial.stage) {
+      const prev = this.userVote.pick;
+      if (trial.stage === 'foolish') {
+        trial.foolishVotes[prev] = Math.max(0, (trial.foolishVotes[prev] ?? 0) - 1);
+      } else if (prev === 'kill') {
+        trial.fateVotes.kill = Math.max(0, trial.fateVotes.kill - 1);
+      } else if (prev === 'spare') {
+        trial.fateVotes.spare = Math.max(0, trial.fateVotes.spare - 1);
+      }
+      const i = trial.votes.findIndex((v) => v.voter === 'user' && v.pick === prev);
+      if (i >= 0) trial.votes.splice(i, 1);
+    }
+
     trial.votes.push({ voter: 'user', weight: 1, pick });
     if (trial.stage === 'foolish') trial.foolishVotes[pick] = (trial.foolishVotes[pick] ?? 0) + 1;
     else if (pick === 'kill') trial.fateVotes.kill += 1;
     else if (pick === 'spare') trial.fateVotes.spare += 1;
+    this.userVote = { stage: trial.stage, pick };
+  }
+
+  /** 生存している狂人 (いなければ null)。 */
+  private aliveMadman(): Villager | null {
+    for (const v of this.world.villagers.values()) if (v.alive && v.madman) return v;
+    return null;
+  }
+
+  /** 狂人の扇動の重み。村の評判が悪辣・無秩序なほど強くなる。 */
+  private madmanWeight(): number {
+    const rep = this.world.reputation;
+    return Math.round(1 + rep.malice * 5 + (1 - rep.order) * 2);
+  }
+
+  /** 候補のうち最も「善良で無害」な者 (優しさ高・攻撃性低) = 陥れる標的。 */
+  private scapegoat(candidateIds: VillagerId[]): VillagerId | null {
+    let best: VillagerId | null = null;
+    let bestScore = -Infinity;
+    for (const id of candidateIds) {
+      const v = this.world.villagers.get(id);
+      if (!v || v.madman) continue;
+      const score = v.persona.traits.kindness - v.persona.traits.aggression;
+      if (score > bestScore) {
+        bestScore = score;
+        best = id;
+      }
+    }
+    return best;
   }
 
   // --- 転: グループ bloc 投票 (1 グループ/ステップ) ---
@@ -241,6 +350,16 @@ export class TermMachine {
       trial.foolishVotes[pick] = (trial.foolishVotes[pick] ?? 0) + voters.length;
       trial.votes.push({ voter: axis, weight: voters.length, pick });
       if (trial.pendingGroups.length === 0) {
+        // 狂人の扇動: 全グループ投票後、最も善良な候補へ重い票を投げて陥れる。
+        const madman = this.aliveMadman();
+        if (madman) {
+          const target = this.scapegoat(trial.candidates);
+          if (target) {
+            const w = this.madmanWeight();
+            trial.foolishVotes[target] = (trial.foolishVotes[target] ?? 0) + w;
+            trial.votes.push({ voter: 'madman', weight: w, pick: target });
+          }
+        }
         trial.defendant = this.argmaxCandidate(trial);
         trial.stage = 'fate';
         trial.pendingGroups = this.groupAxes();
@@ -252,6 +371,13 @@ export class TermMachine {
       else trial.fateVotes.spare += voters.length;
       trial.votes.push({ voter: axis, weight: voters.length, pick: vote });
       if (trial.pendingGroups.length === 0) {
+        // 狂人の扇動: 処刑へ重い票を上乗せする。
+        const madman = this.aliveMadman();
+        if (madman) {
+          const w = this.madmanWeight();
+          trial.fateVotes.kill += w;
+          trial.votes.push({ voter: 'madman', weight: w, pick: 'kill' });
+        }
         trial.verdict = trial.fateVotes.kill > trial.fateVotes.spare ? 'death' : 'spared';
         trial.stage = 'decided';
         this.world.phase = 'ketsu';

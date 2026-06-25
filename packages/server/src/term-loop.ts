@@ -39,15 +39,17 @@ export class TermLoop {
     this.timer = null;
   }
 
-  /** プレイヤーの扇動: 次に起きている どうぶつ が必ず事件を起こす。 */
+  /** プレイヤーの扇動: 次に起きている どうぶつ が必ず事件を起こす + 和解しにくくする。 */
   incite(): void {
     this.brain.forceNext();
+    this.tm.nudgeIncite();
   }
 
-  /** プレイヤーの沈静化: 進行中の事件の被害を和らげる。 */
+  /** プレイヤーの沈静化: 進行中の事件の被害を和らげ + 和解しやすくする。 */
   calm(): void {
     const inc = this.tm.world.incident;
     if (inc) inc.damage = Math.max(0, inc.damage - 3);
+    this.tm.nudgeCalm();
   }
 
   /** プレイヤーの裁判投票を加える。 */
@@ -90,11 +92,16 @@ export class TermLoop {
         }
         break;
       }
-      case 'sho':
-        await this.tm.shoStep();
-        // shoStep は tm 経由で phase を変える (TS は alias の変化を追えないので読み直す)。
-        if (this.tm.world.phase === 'ten') this.h.onLog('ten', '⚖ 審判人「猫守さん」登場');
+      case 'sho': {
+        const r = await this.tm.shoStep();
+        if (r.secondaryVictim) this.h.onLog('sho', `⚠ 二次被害: ${r.secondaryVictim} も巻き込まれた`);
+        if (r.outcome === 'reconciled') {
+          this.h.onLog('kisho', '🕊 和解した — 事件は裁判にならず収まった');
+        } else if (this.tm.world.phase === 'ten') {
+          this.h.onLog('ten', '⚖ 審判人「猫守さん」登場');
+        }
         break;
+      }
       case 'ten':
         await this.tm.tenStep();
         if (this.tm.world.phase === 'ketsu') this.h.onLog('ketsu', `判決: ${w.trial?.verdict ?? ''}`);

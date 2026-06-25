@@ -20,8 +20,10 @@ export class GameWsServer {
   }
 
   private onConnection(ws: WebSocket): void {
-    // 接続直後に最新スナップショットを送る。
+    // 接続直後に最新スナップショットと現在の接続人数を送る。
     if (this.lastSnapshot) ws.send(this.lastSnapshot);
+    this.broadcastPlayers();
+    ws.on('close', () => this.broadcastPlayers());
     ws.on('message', (data) => {
       let msg: ClientMessage;
       try {
@@ -33,6 +35,14 @@ export class GameWsServer {
       else if (msg.t === 'calm') this.h.onCalm();
       else if (msg.t === 'vote') this.h.onVote(msg.pick);
     });
+  }
+
+  /** 現在の OPEN な接続数を全員へ配る。 */
+  private broadcastPlayers(): void {
+    let count = 0;
+    for (const c of this.wss.clients) if (c.readyState === WebSocket.OPEN) count++;
+    const msg: ServerMessage = { t: 'players', count };
+    this.fanout(JSON.stringify(msg));
   }
 
   broadcastSnapshot(world: World): void {

@@ -31,7 +31,8 @@ export function toWire(world: World): WireWorld {
 /** server → client。 */
 export type ServerMessage =
   | { t: 'snapshot'; world: WireWorld }
-  | { t: 'log'; phase: Phase; text: string };
+  | { t: 'log'; phase: Phase; text: string }
+  | { t: 'players'; count: number }; // 同時接続プレイヤー数
 
 /** client → server。 */
 export type ClientMessage =

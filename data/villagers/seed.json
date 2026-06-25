@@ -58,5 +58,16 @@
     "traits": { "aggression": 0.0, "curiosity": 0.5, "kindness": 0.5 },
     "values": ["眠いのが基本", "夜更かし"],
     "speechStyle": "ねむそう"
+  },
+  {
+    "id": "v_nushi",
+    "name": "ヌシ",
+    "species": "蛇",
+    "activity": "always",
+    "madman": true,
+    "position": { "x": 12, "y": 13 },
+    "traits": { "aggression": 0.9, "ambition": 0.9, "curiosity": 0.8, "kindness": -0.8, "discipline": -0.6, "sociability": 0.4 },
+    "values": ["混沌が見たい", "村を試したい", "誰かが堕ちる様が好き"],
+    "speechStyle": "ねっとりと囁く"
   }
 ]

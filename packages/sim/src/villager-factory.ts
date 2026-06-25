@@ -11,6 +11,7 @@ export interface VillagerSeed {
   values?: string[];
   speechStyle?: string;
   body?: string;
+  madman?: boolean;
 }
 
 /** シード or テスト用に、既定値で埋めた どうぶつ を作る。 */
@@ -31,5 +32,6 @@ export function createVillager(seed: VillagerSeed): Villager {
     species: seed.species ?? '猫',
     activity: seed.activity ?? 'diurnal',
     reformCount: 0,
+    madman: seed.madman ?? false,
   };
 }
