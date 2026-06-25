@@ -76,6 +76,24 @@
       .log-ten { color: #f2994a; }
       .log-ketsu { color: #eb5757; }
 
+      /* 裁判の有罪/無罪ボタン (中央上寄り、裁判中のみ表示)。 */
+      #verdict { display: none; position: absolute; top: 12%; left: 0; right: 0; justify-content: center; gap: 40px; pointer-events: none; }
+      #verdict.show { display: flex; }
+      .verdict-btn {
+        pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 2px;
+        padding: 14px 30px; border-radius: 14px; cursor: pointer;
+        border: 3px solid; background: rgba(10,12,18,0.72); backdrop-filter: blur(2px);
+        transition: transform 0.08s ease, box-shadow 0.15s ease;
+      }
+      .verdict-btn:hover { transform: scale(1.05); }
+      .verdict-btn:active { transform: scale(0.97); }
+      .vb-ja { font-size: 30px; font-weight: 900; line-height: 1; }
+      .vb-en { font-size: 13px; letter-spacing: 1px; opacity: 0.85; }
+      .verdict-btn.guilty { border-color: #eb5757; color: #ff8a8a; box-shadow: 0 0 22px rgba(235,87,87,0.35); }
+      .verdict-btn.guilty:hover { box-shadow: 0 0 30px rgba(235,87,87,0.6); }
+      .verdict-btn.innocent { border-color: #56ccf2; color: #9be3ff; box-shadow: 0 0 22px rgba(86,204,242,0.35); }
+      .verdict-btn.innocent:hover { box-shadow: 0 0 30px rgba(86,204,242,0.6); }
+
       /* モバイル: 中央を全画面、左右はスライドインのドロワー。 */
       .drawer-toggle { display: none; }
       #backdrop { display: none; }
@@ -95,6 +113,10 @@
         #backdrop.show { display: block; position: fixed; inset: 52px 0 0 0; background: rgba(0,0,0,0.5); z-index: 20; }
         #log { width: 86%; bottom: 10%; }
         .ov-line { font-size: 15px; }
+        #verdict { gap: 16px; top: 8%; }
+        .verdict-btn { padding: 10px 18px; }
+        .vb-ja { font-size: 22px; }
+        .vb-en { font-size: 11px; }
       }
     </style>
   </head>
@@ -111,6 +133,10 @@
       <div id="left" class="col"></div>
       <div id="center">
         <div id="stage"></div>
+        <div id="verdict">
+          <button id="v-guilty" class="verdict-btn guilty"><span class="vb-ja">有罪</span><span class="vb-en">GUILTY</span></button>
+          <button id="v-innocent" class="verdict-btn innocent"><span class="vb-ja">無罪</span><span class="vb-en">NOT GUILTY</span></button>
+        </div>
         <div id="log"></div>
       </div>
       <div id="right" class="col">

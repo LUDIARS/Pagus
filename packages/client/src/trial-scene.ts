@@ -6,7 +6,15 @@
 import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import type { WireWorld, Villager } from '@pagus/sim';
 import { animalFor, type AnimalName } from './assets.js';
-import { AnimatedBubble } from './animated-bubble.js';
+import { AnimatedBubble, type BubbleColors } from './animated-bubble.js';
+
+/** プレイヤーの吹き出し色 (村人と区別)。有罪=紫系 / 無罪=青系。 */
+const PLAYER_COLORS: Record<'guilty' | 'innocent', BubbleColors> = {
+  guilty: { bg: 0xf3c4ff, fill: 0x5e0a82, stroke: 0x9b1fb0 },
+  innocent: { bg: 0xbfe9ff, fill: 0x0a4a6e, stroke: 0x1f7fb0 },
+};
+const TAUNTS = ['有罪だ！', '吊るしてしまえ！', '言い逃れするな！', 'お前がやった！', '万死に値する！'];
+const DEFENSES = ['無罪だ！', 'その子は悪くない！', '証拠がない！', 'やめてやれ！', '冤罪だ！'];
 
 const DENOUNCE = [
   '{d}は最も愚かだ！',
@@ -40,7 +48,6 @@ interface TChar {
 export class TrialScene {
   readonly root = new Container();
   private readonly bg = new Graphics();
-  private readonly fx = new Graphics();
   private readonly layer = new Container();
   private readonly title = new Text({ text: '', style: { fontSize: 22, fill: 0xf2c94c, fontWeight: 'bold' } });
   private readonly chars = new Map<string, TChar>();
@@ -53,14 +60,31 @@ export class TrialScene {
   private defendantId: string | null = null;
   private finale: 'death' | 'spared' | null = null;
   private defFade = 0;
+  private w = 1;
+  private h = 1;
+  private playerBubble: AnimatedBubble | null = null;
 
   constructor(private readonly tex: Map<AnimalName, Texture>) {
     this.title.anchor.set(0.5, 0);
     this.layer.sortableChildren = true;
-    this.root.addChild(this.bg, this.layer, this.fx, this.title);
+    this.root.addChild(this.bg, this.layer, this.title);
+  }
+
+  /** プレイヤーの罵倒(有罪)/擁護(無罪)を画面下部中央に表示する。 */
+  playerSay(side: 'guilty' | 'innocent'): void {
+    const pool = side === 'guilty' ? TAUNTS : DEFENSES;
+    const text = pool[Math.floor(Math.random() * pool.length)] ?? '…';
+    if (this.playerBubble) this.playerBubble.destroy();
+    const b = new AnimatedBubble(`あなた「${text}」`, 'angry', 1700, PLAYER_COLORS[side]);
+    b.node.x = this.w / 2;
+    b.node.y = this.h * 0.96;
+    this.root.addChild(b.node);
+    this.playerBubble = b;
   }
 
   update(world: WireWorld, w: number, h: number): void {
+    this.w = w;
+    this.h = h;
     const trial = world.trial;
     this.bg.clear();
     this.bg.rect(0, 0, w, h).fill(0x161019);
@@ -111,6 +135,17 @@ export class TrialScene {
   }
 
   tick(dtMs: number): void {
+    // プレイヤーの吹き出し。
+    if (this.playerBubble) {
+      this.playerBubble.node.x = this.w / 2;
+      this.playerBubble.node.y = this.h * 0.96;
+      this.playerBubble.tick(dtMs);
+      if (this.playerBubble.done) {
+        this.playerBubble.destroy();
+        this.playerBubble = null;
+      }
+    }
+
     // セリフ送り。
     this.timer -= dtMs;
     if (this.script.length > 0 && this.timer <= 0) {

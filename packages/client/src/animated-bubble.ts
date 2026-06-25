@@ -10,14 +10,22 @@ interface ToneCfg {
   fontSize: number;
   fill: number;
   bg: number;
+  stroke: number;
   cps: number; // 1 秒あたり表示文字数
   waveAmp: number;
   waveSpeed: number;
   shake: number;
 }
 
-const CALM: ToneCfg = { fontSize: 14, fill: 0x241a10, bg: 0xf6eccb, cps: 20, waveAmp: 1.6, waveSpeed: 4, shake: 0 };
-const ANGRY: ToneCfg = { fontSize: 19, fill: 0x6e0a0a, bg: 0xffd6c4, cps: 34, waveAmp: 3.6, waveSpeed: 15, shake: 2.4 };
+const CALM: ToneCfg = { fontSize: 14, fill: 0x241a10, bg: 0xf6eccb, stroke: 0xb89a5a, cps: 20, waveAmp: 1.6, waveSpeed: 4, shake: 0 };
+const ANGRY: ToneCfg = { fontSize: 19, fill: 0x6e0a0a, bg: 0xffd6c4, stroke: 0x8a1a1a, cps: 34, waveAmp: 3.6, waveSpeed: 15, shake: 2.4 };
+
+/** 色だけ差し替える上書き (プレイヤーの吹き出しを村人と区別する用)。 */
+export interface BubbleColors {
+  fill?: number;
+  bg?: number;
+  stroke?: number;
+}
 
 interface Glyph {
   t: Text;
@@ -35,8 +43,16 @@ export class AnimatedBubble {
   private heldMs = 0;
   done = false;
 
-  constructor(text: string, tone: BubbleTone = 'calm', holdMs = 1700) {
-    this.cfg = tone === 'angry' ? ANGRY : CALM;
+  constructor(text: string, tone: BubbleTone = 'calm', holdMs = 1700, colors?: BubbleColors) {
+    const base = tone === 'angry' ? ANGRY : CALM;
+    this.cfg = colors
+      ? {
+          ...base,
+          fill: colors.fill ?? base.fill,
+          bg: colors.bg ?? base.bg,
+          stroke: colors.stroke ?? base.stroke,
+        }
+      : base;
     this.holdMs = holdMs;
     this.node.addChild(this.bg, this.inner);
 
@@ -65,7 +81,7 @@ export class AnimatedBubble {
       // とげとげの糾弾フキダシ。
       this.drawSpiky(0, cy, bw / 2 + 8, bh / 2 + 8);
       this.bg.moveTo(-7, -tail).lineTo(7, -tail).lineTo(0, 0).fill(this.cfg.bg);
-      this.bg.stroke({ width: 2, color: 0x8a1a1a });
+      this.bg.stroke({ width: 2, color: this.cfg.stroke });
     } else {
       this.bg.roundRect(-bw / 2, -bh - tail, bw, bh, 7).fill(this.cfg.bg);
       this.bg.moveTo(-6, -tail).lineTo(6, -tail).lineTo(0, 0).fill(this.cfg.bg);

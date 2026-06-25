@@ -58,6 +58,16 @@ export class StageView {
     this.app.ticker.add(() => this.onTick(this.app.ticker.deltaMS));
   }
 
+  /** 裁判中か (有罪/無罪ボタンの表示制御に使う)。 */
+  get isTrial(): boolean {
+    return this.inTrial;
+  }
+
+  /** プレイヤーの有罪/無罪表明を裁判シーンの吹き出しに出す。 */
+  playerVerdict(side: 'guilty' | 'innocent'): void {
+    if (this.inTrial) this.trial.playerSay(side);
+  }
+
   update(world: WireWorld): void {
     this.last = world;
     this.chatter.setWorld(world);
