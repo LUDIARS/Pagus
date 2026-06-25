@@ -7,6 +7,7 @@ dist/
 data/runtime/
 *.log
 logs/
+.claude/
 .DS_Store
 .vite/
 coverage/
