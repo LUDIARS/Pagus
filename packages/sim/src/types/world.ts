@@ -1,6 +1,7 @@
 import type { Villager, VillagerId } from './villager.js';
 import type { Incident } from './incident.js';
 import type { TrialState } from './trial.js';
+import type { VirtueVector } from '../virtue.js';
 
 /** ターム内の進行フェーズ (起承転結 + 後処理)。 */
 export type Phase =
@@ -49,6 +50,8 @@ export interface World {
   term: number;
   calendar: Calendar;
   phase: Phase;
+  /** 村の評判 (徳目6軸レーダー)。世界側 LLM の日末評価で動く。 */
+  reputation: VirtueVector;
   villagers: Map<VillagerId, Villager>;
   /** 進行中の事件 (なければ null)。 */
   incident: Incident | null;

@@ -1,4 +1,5 @@
 import type { Villager, VillagerId, GridPos, ActivityPattern } from './types/index.js';
+import { makePersonality, type PersonalityAxis } from './personality.js';
 
 export interface VillagerSeed {
   id: VillagerId;
@@ -6,7 +7,7 @@ export interface VillagerSeed {
   position: GridPos;
   species?: string;
   activity?: ActivityPattern;
-  traits?: Record<string, number>;
+  traits?: Partial<Record<PersonalityAxis, number>>;
   values?: string[];
   speechStyle?: string;
   body?: string;
@@ -19,7 +20,7 @@ export function createVillager(seed: VillagerSeed): Villager {
     name: seed.name,
     alive: true,
     persona: {
-      traits: seed.traits ?? {},
+      traits: makePersonality(seed.traits),
       values: seed.values ?? [],
       speechStyle: seed.speechStyle ?? 'ふつう',
     },

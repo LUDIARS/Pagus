@@ -1,5 +1,6 @@
 import type { VillagerId } from './villager.js';
-import type { Persona, Appearance, EmotionState } from './villager.js';
+import type { Appearance, EmotionState } from './villager.js';
+import type { Personality } from '../personality.js';
 
 /** 審判人。基本は猫守さん (最強超人)。教育済み村人が務めることもある。 */
 export type Judge = { kind: 'nekomori' } | { kind: 'villager'; id: VillagerId };
@@ -38,8 +39,8 @@ export type Reform =
       kind: 'educate';
       villager: VillagerId;
       rationale: string;
-      /** 適用する人格の差分。 */
-      persona?: Partial<Persona>;
+      /** 適用する人格の差分 (性格軸は部分指定可)。 */
+      persona?: { traits?: Partial<Personality>; values?: string[]; speechStyle?: string };
       appearance?: Partial<Appearance>;
       emotion?: Partial<EmotionState>;
     };

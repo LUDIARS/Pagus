@@ -1,10 +1,9 @@
 // 村人 (ペルソナエンジン) のドメイン型。
 // 「環境=プログラム / 感情=AI / 情報=蓄積」の三分を型レベルで表す。
 
-export type VillagerId = string;
+import type { Personality } from '../personality.js';
 
-/** 性格特性キー (例: aggression, kindness, curiosity)。値域 -1..1。 */
-export type TraitKey = string;
+export type VillagerId = string;
 
 export interface GridPos {
   x: number;
@@ -16,8 +15,8 @@ export type ActivityPattern = 'diurnal' | 'nocturnal' | 'crepuscular' | 'always'
 
 /** 改変対象となる村人の全人格パラメータ。 */
 export interface Persona {
-  /** 特性ベクトル (-1..1)。 */
-  traits: Record<TraitKey, number>;
+  /** 気質6軸の性格ベクトル (0..1)。dominant 軸でグループ分けされる。 */
+  traits: Personality;
   /** 信条・行動原理 (自然言語)。 */
   values: string[];
   /** 口調。 */

@@ -1,6 +1,7 @@
 import type { World, WorldConfig, Villager, GridPos, Calendar } from './types/index.js';
 import type { EnvironmentView } from './brain.js';
 import { season, daysInMonth, timeOfDayForSegment, isAwake } from './calendar.js';
+import { makeVirtueVector } from './virtue.js';
 
 export const DEFAULT_CONFIG: WorldConfig = {
   gridWidth: 24,
@@ -41,6 +42,7 @@ export function createWorld(
     term: 0,
     calendar: makeCalendar(calendar),
     phase: 'idle',
+    reputation: makeVirtueVector(),
     villagers: new Map(villagers.map((v) => [v.id, v])),
     incident: null,
     trial: null,

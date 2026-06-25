@@ -1,5 +1,8 @@
 export type * from './types/index.js';
 export * from './brain.js';
+export * from './personality.js';
+export * from './virtue.js';
+export * from './events.js';
 export * from './calendar.js';
 export * from './world.js';
 export * from './villager-factory.js';
