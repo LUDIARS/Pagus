@@ -9,6 +9,7 @@ import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, DEFAULT_CAST, D
 import { SessionLog } from './session-log.js';
 import { TrialNarrator } from './trial-narrator.js';
 import { Chronicle } from './chronicle.js';
+import { WorldStore } from './world-store.js';
 
 /** 村の歴史に残す「節目」のログか判定する。 */
 function isMilestone(text: string): boolean {
@@ -68,14 +69,22 @@ function buildLlmInfo(registry: BackendRegistry | null, villagers: { id: string 
 
 function main(): void {
   const config = loadConfig();
-  const villagers = loadSeed();
 
-  // ゲーム内月のテーマは実カレンダーに連動。
-  const now = new Date();
-  const world = createWorld(villagers, config, {
-    year: now.getFullYear(),
-    month: now.getMonth() + 1,
-  });
+  // world スナップショット (data/runtime/world.json) があれば復元。PAGUS_FRESH=1 で無視して新規開始。
+  const store = new WorldStore();
+  const fresh = (process.env.PAGUS_FRESH ?? '') === '1';
+  const restored = fresh ? null : store.load();
+
+  let world;
+  if (restored) {
+    world = restored.world;
+    console.log(`[pagus] world.json を復元 (${world.calendar.month}月${world.calendar.dayOfMonth}日 / ${world.villagers.size} どうぶつ)`);
+  } else {
+    // ゲーム内月のテーマは実カレンダーに連動 (新規開始時のみ)。
+    const now = new Date();
+    world = createWorld(loadSeed(), config, { year: now.getFullYear(), month: now.getMonth() + 1 });
+  }
+  const villagers = [...world.villagers.values()];
 
   const { brain, worldBrain, registry } = selectBrains();
   const llmInfo = buildLlmInfo(registry, villagers);
@@ -88,6 +97,7 @@ function main(): void {
     stressFizzleK: numEnv('PAGUS_STRESS_K', 0.06), // ストレス耐性で嫌がらせを受け流す効き
     marriageChance: numEnv('PAGUS_MARRIAGE', 0.12), // 日末の結婚確率
     birthChance: numEnv('PAGUS_BIRTH', 0.1), // 日末の出産確率
+    bornCount: restored?.bornCount ?? 0, // 出生 id の通し番号を引き継ぐ
   });
 
   const port = numEnv('PAGUS_WS_PORT', 4310);
@@ -119,6 +129,7 @@ function main(): void {
     onSnapshot: (w) => {
       ws.broadcastSnapshot(w);
       sessionLog.snapshot(w);
+      store.maybeSave(w, tm.getBornCount()); // 揮発状態 (出生/改変/評判) を間引いて永続化
     },
     onLog: (phase, text) => {
       ws.broadcastLog(phase, text);
@@ -145,6 +156,7 @@ function main(): void {
   // Ctrl-C でループを止めログを flush してから抜ける。
   const shutdown = (): void => {
     loop.stop();
+    store.save(tm.world, tm.getBornCount()); // 終了時は確実に最新を書き出す
     sessionLog.close();
     process.exit(0);
   };

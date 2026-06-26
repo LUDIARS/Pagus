@@ -28,6 +28,36 @@ export function toWire(world: World): WireWorld {
   };
 }
 
+/** toWire の逆。配列で持つ villagers を Map に戻して World を再構築する (スナップショット復元)。 */
+export function fromWire(wire: WireWorld): World {
+  return {
+    config: wire.config,
+    term: wire.term,
+    calendar: wire.calendar,
+    phase: wire.phase,
+    reputation: wire.reputation,
+    villagers: new Map(wire.villagers.map((v) => [v.id, v])),
+    incident: wire.incident,
+    trial: wire.trial,
+  };
+}
+
+/** 現スナップショット形式のバージョン。型が壊れる変更時に増やし、古い snapshot を破棄する。 */
+export const WORLD_SNAPSHOT_VERSION = 1;
+
+/**
+ * 永続化する world スナップショット。WireWorld (JSON 化可能な world) に加え、
+ * 再起動後も出生 id (born_N) が衝突しないよう TermMachine の通し番号を保持する。
+ */
+export interface WorldSnapshot {
+  version: number;
+  /** 保存時刻 (ISO 文字列, デバッグ用)。 */
+  savedAt: string;
+  world: WireWorld;
+  /** TermMachine.bornCount (出生どうぶつの通し番号)。 */
+  bornCount: number;
+}
+
 /** 裁判の糾弾セリフ (server が生成/再利用して配る)。 */
 export interface TrialLine {
   speaker: string; // 糾弾する村人 id
