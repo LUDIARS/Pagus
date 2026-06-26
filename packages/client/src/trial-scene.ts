@@ -4,7 +4,7 @@
 // キャラは永続ノード、配置は update()、セリフ送り/シェイク/断末魔は tick()。
 
 import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
-import type { WireWorld, Villager } from '@pagus/sim';
+import type { WireWorld, Villager, TrialLine } from '@pagus/sim';
 import { animalFor, type AnimalName } from './assets.js';
 import { AnimatedBubble, type BubbleColors } from './animated-bubble.js';
 
@@ -63,11 +63,21 @@ export class TrialScene {
   private w = 1;
   private h = 1;
   private playerBubble: AnimatedBubble | null = null;
+  private incidentId: string | null = null;
+  /** server から来た糾弾セリフ (speaker id → text)。無ければ定型文。 */
+  private serverLines: { incidentId: string; byId: Map<string, string> } | null = null;
 
   constructor(private readonly tex: Map<AnimalName, Texture>) {
     this.title.anchor.set(0.5, 0);
     this.layer.sortableChildren = true;
     this.root.addChild(this.bg, this.layer, this.title);
+  }
+
+  /** server 生成の糾弾セリフを受け取る (次の update で台本へ反映)。 */
+  setLines(incidentId: string, lines: TrialLine[]): void {
+    const byId = new Map(lines.map((l) => [l.speaker, l.text]));
+    this.serverLines = { incidentId, byId };
+    this.scriptKey = ''; // 台本を組み直させる。
   }
 
   /** プレイヤーの罵倒(有罪)/擁護(無罪)を画面下部中央に表示する。 */
@@ -95,6 +105,7 @@ export class TrialScene {
       this.clearChars(new Set());
       return;
     }
+    this.incidentId = trial.incidentId;
     const byId = new Map(world.villagers.map((v) => [v.id, v]));
     const targetId = trial.defendant ?? world.incident?.perpetrator ?? trial.candidates[0] ?? null;
     this.defendantId = targetId;
@@ -222,8 +233,11 @@ export class TrialScene {
     // 審理中: 一人ずつ糾弾 + 被告のやり返し。
     this.finale = null;
     const out: Utterance[] = [];
+    const sLines = this.serverLines && this.serverLines.incidentId === this.incidentId ? this.serverLines.byId : null;
     accusers.forEach((v, i) => {
-      out.push({ speaker: v.id, text: pick(DENOUNCE, v.id).replace('{d}', dname) });
+      // server 生成 (Haiku) の糾弾があれば優先、無ければ定型文。
+      const text = sLines?.get(v.id) ?? pick(DENOUNCE, v.id).replace('{d}', dname);
+      out.push({ speaker: v.id, text });
       if (target && i % 2 === 1) {
         const tname = victims.length ? byId.get(victims[i % victims.length] ?? '')?.name ?? '被害者' : accusers[0]?.name ?? '誰か';
         out.push({ speaker: target.id, text: pick(RETORT, `${target.id}${i}`).replace('{t}', tname) });

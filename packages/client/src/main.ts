@@ -54,6 +54,7 @@ async function main(): Promise<void> {
     onLog: (phase, text) => log.add(phase, text),
     onStatus: (status) => hud.setStatus(status),
     onPlayers: (count) => vstatus.setPlayers(count),
+    onTrialLines: (incidentId, lines) => stage.setTrialLines(incidentId, lines),
   });
 
   el('incite').addEventListener('click', () => conn.send({ t: 'incite' }));

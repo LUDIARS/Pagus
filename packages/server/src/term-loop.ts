@@ -7,6 +7,8 @@ import { pacedSegmentMs, type PaceOptions } from './clock.js';
 export interface LoopHandlers {
   onSnapshot(world: World): void;
   onLog(phase: World['phase'], text: string): void;
+  /** 裁判が開いた (承→転) ときに 1 度だけ呼ぶ。糾弾セリフ生成のフック。 */
+  onTrialOpen?(world: World): void;
 }
 
 /**
@@ -99,6 +101,7 @@ export class TermLoop {
           this.h.onLog('kisho', '🕊 和解した — 事件は裁判にならず収まった');
         } else if (this.tm.world.phase === 'ten') {
           this.h.onLog('ten', '⚖ 審判人「猫守さん」登場');
+          this.h.onTrialOpen?.(this.tm.world);
         }
         break;
       }

@@ -2,7 +2,7 @@
 // クライアントからの扇動/沈静化コマンドを受ける。
 
 import { WebSocketServer, WebSocket } from 'ws';
-import { toWire, type World, type ServerMessage, type ClientMessage } from '@pagus/sim';
+import { toWire, type World, type ServerMessage, type ClientMessage, type TrialLine } from '@pagus/sim';
 
 export interface WsHandlers {
   onIncite(): void;
@@ -53,6 +53,12 @@ export class GameWsServer {
 
   broadcastLog(phase: World['phase'], text: string): void {
     const msg: ServerMessage = { t: 'log', phase, text };
+    this.fanout(JSON.stringify(msg));
+  }
+
+  /** 裁判の糾弾セリフ (server 生成/再利用) を配る。 */
+  broadcastTrialLines(incidentId: string, lines: TrialLine[]): void {
+    const msg: ServerMessage = { t: 'trialLines', incidentId, lines };
     this.fanout(JSON.stringify(msg));
   }
 
