@@ -23,6 +23,7 @@ import type {
   FateVoteContext,
   EducationContext,
   WorldEvalContext,
+  HolidayContext,
   Villager,
   Personality,
 } from '@pagus/sim';
@@ -244,6 +245,31 @@ export function buildWorldPrompt(ctx: WorldEvalContext): PromptParts {
     `関与者: ${ctx.involved.map((v) => v.name).join(', ') || 'なし'}\n` +
     `暦: ${ctx.calendar.year}年${ctx.calendar.month}月${ctx.calendar.dayOfMonth}日 (${ctx.calendar.season})\n` +
     'この日の村への影響を JSON で返せ。';
+  return partsFromSegments('world', [
+    { stability: 'fixed', role: 'system', text: sys },
+    { stability: 'volatile', role: 'user', text: user },
+  ]);
+}
+
+// --- 世界側 LLM: 祝日イベント --------------------------------------------------
+
+export function buildHolidayPrompt(ctx: HolidayContext): PromptParts {
+  const virtueList = VIRTUES.map((v) => `${v}(${VIRTUE_LABELS[v]})`).join(', ');
+  const sys =
+    'あなたは村全体を見る「世界エンジン」。祝日にあたる日の、村ぐるみの出来事を 1 つ作る。\n' +
+    '出力スキーマ: {"narrative": "祝日にまつわる出来事(日本語1-2文)", ' +
+    '"reputationDelta": {"<徳目>": 増減 -1..1, ...}}\n' +
+    `徳目: ${virtueList}。祝祭なので活気(vitality)寄りの小さめの delta が自然。delta は適用後 0..1 にクランプされる前提。` +
+    JSON_ONLY;
+  const cal = ctx.calendar;
+  const repLine = VIRTUES.map((v) => `${VIRTUE_LABELS[v]}=${ctx.reputation[v].toFixed(2)}`).join(' ');
+  const names = ctx.villagers.slice(0, 8).map((v) => `${v.name}(${v.species})`).join(', ');
+  const user =
+    `祝日: ${ctx.holiday}\n` +
+    `暦: ${cal.year}年${cal.month}月${cal.dayOfMonth}日 (${cal.season})\n` +
+    `村の評判: ${repLine}\n` +
+    `村のどうぶつ: ${names || 'なし'}\n` +
+    'この祝日に村で起きる出来事を JSON で返せ。';
   return partsFromSegments('world', [
     { stability: 'fixed', role: 'system', text: sys },
     { stability: 'volatile', role: 'user', text: user },

@@ -2,14 +2,14 @@
 // その日の裁判結果から村全体を評価する。重い局面なので strong tier (opus/gpt-5.5) 固定。
 // parse 失敗は 1 回リトライ→なお失敗なら throw (無言フォールバック禁止)。
 
-import type { WorldBrain, WorldEvalContext, DayEvaluation } from '@pagus/sim';
+import type { WorldBrain, WorldEvalContext, DayEvaluation, HolidayContext, HolidayEvent } from '@pagus/sim';
 
 import type { LlmClient } from './llm-client.js';
 import { CliLlmClient } from './cli-llm-client.js';
 import { BackendRegistry } from './backend-registry.js';
 import type { Backend } from './backend-registry.js';
-import { buildWorldPrompt } from './prompt-build.js';
-import { extractJson, coerceDayEvaluation } from './json-coerce.js';
+import { buildWorldPrompt, buildHolidayPrompt } from './prompt-build.js';
+import { extractJson, coerceDayEvaluation, coerceHolidayEvent } from './json-coerce.js';
 
 export interface LlmWorldBrainOptions {
   createClient?: (backend: Backend) => LlmClient;
@@ -53,6 +53,27 @@ export class LlmWorldBrain implements WorldBrain {
       }
     }
     throw new Error(`世界評価の parse に失敗 (backend=${backend.id}): ${(lastErr as Error).message}`);
+  }
+
+  async holidayEvent(ctx: HolidayContext): Promise<HolidayEvent> {
+    const parts = buildHolidayPrompt(ctx);
+    // 祝日名を決定的キーに strong tier を選ぶ (年に数回、軽い局面)。
+    const backend = this.registry.strong(`holiday:${ctx.holiday}:${ctx.calendar.year}`);
+    const client = this.clientFor(backend);
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { text } = await client.invoke({
+        system: parts.system,
+        prompt: parts.prompt,
+        model: backend.model,
+      });
+      try {
+        return coerceHolidayEvent(extractJson(text));
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw new Error(`祝日イベントの parse に失敗 (backend=${backend.id}): ${(lastErr as Error).message}`);
   }
 
   private clientFor(backend: Backend): LlmClient {

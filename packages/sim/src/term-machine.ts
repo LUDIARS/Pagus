@@ -9,7 +9,7 @@ import { season, daysInMonth, holidayName } from './calendar.js';
 import { groupByDominant, dominantAxis, PERSONALITY_AXES, PERSONALITY_LABELS, type PersonalityAxis } from './personality.js';
 import { personalityFromVirtue, VIRTUES } from './virtue.js';
 import { createVillager } from './villager-factory.js';
-import type { WorldBrain, DayEvaluation, WorldEvalContext } from './world-brain.js';
+import type { WorldBrain, DayEvaluation, WorldEvalContext, HolidayEvent } from './world-brain.js';
 import type { EventDirector } from './event-director.js';
 
 export type IdGen = () => string;
@@ -619,7 +619,28 @@ export class TermMachine {
       cal.season = season(cal.month);
     }
     this.world.phase = 'idle';
-    return { monthRolled, holiday: holidayName(cal.month, cal.dayOfMonth) };
+    return { monthRolled, holiday: holidayName(cal.year, cal.month, cal.dayOfMonth) };
+  }
+
+  /**
+   * 祝日にあたる日のイベントを (AI) で発火する (§4.7)。worldBrain が無ければ null。
+   * 祝祭は村の評判をわずかに動かす (適用後 0..1 クランプ)。phase は変えない。
+   */
+  async fireHolidayEvent(holiday: string): Promise<HolidayEvent | null> {
+    if (!this.worldBrain) return null;
+    const event = await this.worldBrain.holidayEvent({
+      holiday,
+      calendar: this.world.calendar,
+      reputation: this.world.reputation,
+      villagers: aliveVillagers(this.world),
+    });
+    for (const virtue of VIRTUES) {
+      const delta = event.reputationDelta[virtue];
+      if (delta !== undefined) {
+        this.world.reputation[virtue] = clamp01(this.world.reputation[virtue] + delta);
+      }
+    }
+    return event;
   }
 
   // --- 日末: 世界側 LLM 評価 (徳目評判更新 + 個体性格更新 + 偏り出生) ---

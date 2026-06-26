@@ -14,7 +14,7 @@ import { WorldStore } from './world-store.js';
 /** 村の歴史に残す「節目」のログか判定する。 */
 function isMilestone(text: string): boolean {
   return (
-    /^[⚡✦💍👶]/.test(text) ||
+    /^[⚡✦💍👶📅]/.test(text) ||
     text.startsWith('—— 審判') ||
     text.startsWith('判決') ||
     text.startsWith('🕊') ||
