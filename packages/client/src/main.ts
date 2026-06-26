@@ -8,6 +8,7 @@ import { IncidentPanel } from './incident-panel.js';
 import { VillageStatus } from './village-status.js';
 import { LogOverlay } from './log-overlay.js';
 import { LlmPanel } from './llm-panel.js';
+import { ChronicleView } from './chronicle-view.js';
 import { connect, type Conn } from './ws-client.js';
 
 // 既定は同一オリジンの /ws (Vite が game server 4310 へ proxy)。
@@ -34,6 +35,7 @@ async function main(): Promise<void> {
   const incident = new IncidentPanel(el('left'));
   const vstatus = new VillageStatus(el('vstatus'));
   const llmPanel = new LlmPanel(el('llm-head'), el('llm-body'));
+  const chronicle = new ChronicleView(el('chronicle'), el('chronicle-body'), el('hist-btn'), el('chronicle-close'));
 
   let conn: Conn;
   const trial = new TrialPanel(el('trial'), (pick) => conn.send({ t: 'vote', pick }));
@@ -59,6 +61,7 @@ async function main(): Promise<void> {
     onPlayers: (count) => vstatus.setPlayers(count),
     onTrialLines: (incidentId, lines) => stage.setTrialLines(incidentId, lines),
     onLlm: (info) => llmPanel.setInfo(info),
+    onChronicle: (entries) => chronicle.setEntries(entries),
   });
 
   el('incite').addEventListener('click', () => conn.send({ t: 'incite' }));

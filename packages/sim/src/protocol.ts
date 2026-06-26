@@ -34,6 +34,13 @@ export interface TrialLine {
   text: string;
 }
 
+/** 村の歴史の 1 エントリ (節目の出来事)。 */
+export interface ChronicleEntry {
+  /** ゲーム内日付 (例 "6月12日")。 */
+  date: string;
+  text: string;
+}
+
 /** 稼働中の LLM 構成 (UI 表示用)。 */
 export interface LlmInfo {
   mode: 'stub' | 'llm';
@@ -51,7 +58,8 @@ export type ServerMessage =
   | { t: 'log'; phase: Phase; text: string }
   | { t: 'players'; count: number } // 同時接続プレイヤー数
   | { t: 'trialLines'; incidentId: string; lines: TrialLine[] } // 裁判の糾弾セリフ
-  | { t: 'llm'; info: LlmInfo }; // 稼働中の LLM 構成
+  | { t: 'llm'; info: LlmInfo } // 稼働中の LLM 構成
+  | { t: 'chronicle'; entries: ChronicleEntry[] }; // 村の歴史
 
 /** client → server。 */
 export type ClientMessage =

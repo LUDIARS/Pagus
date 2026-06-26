@@ -8,6 +8,19 @@ import { GameWsServer } from './ws-server.js';
 import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND } from './llm/index.js';
 import { SessionLog } from './session-log.js';
 import { TrialNarrator } from './trial-narrator.js';
+import { Chronicle } from './chronicle.js';
+
+/** 村の歴史に残す「節目」のログか判定する。 */
+function isMilestone(text: string): boolean {
+  return (
+    /^[⚡✦💍👶]/.test(text) ||
+    text.startsWith('—— 審判') ||
+    text.startsWith('判決') ||
+    text.startsWith('🕊') ||
+    text.startsWith('──') ||
+    text.includes('月がかわった')
+  );
+}
 
 function numEnv(name: string, fallback: number): number {
   const v = process.env[name];
@@ -90,6 +103,9 @@ function main(): void {
     llmMode ? { client: new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5' }) } : {},
   );
 
+  // 村の歴史 (節目を記録・永続化)。
+  const chronicle = new Chronicle();
+
   let loop: TermLoop;
   const ws = new GameWsServer(port, {
     onIncite: () => loop.incite(),
@@ -97,6 +113,7 @@ function main(): void {
     onVote: (pick) => loop.vote(pick),
   });
   ws.setLlmInfo(llmInfo);
+  ws.updateChronicle(chronicle.recent()); // 既存の歴史を初期配信対象に。
 
   loop = new TermLoop(tm, brain, pace, incidentStepMs, {
     onSnapshot: (w) => {
@@ -106,6 +123,11 @@ function main(): void {
     onLog: (phase, text) => {
       ws.broadcastLog(phase, text);
       sessionLog.line(phase, text);
+      if (isMilestone(text)) {
+        const cal = tm.world.calendar;
+        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, text);
+        ws.updateChronicle(chronicle.recent());
+      }
     },
     onTrialOpen: (w) => {
       const incidentId = w.incident?.id;
