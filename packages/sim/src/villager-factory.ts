@@ -33,5 +33,7 @@ export function createVillager(seed: VillagerSeed): Villager {
     activity: seed.activity ?? 'diurnal',
     reformCount: 0,
     madman: seed.madman ?? false,
+    stress: 0,
+    partnerId: null,
   };
 }

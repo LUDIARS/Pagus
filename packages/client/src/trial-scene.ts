@@ -115,7 +115,7 @@ export class TrialScene {
 
     const stageLabel =
       trial.stage === 'foolish' ? '最も愚かな行動を裁く' : trial.stage === 'fate' ? '殺すか、活かすか' : '判決';
-    this.title.text = `⚖ 裁判 — ${stageLabel}`;
+    this.title.text = `—— 審判の時 ——　${stageLabel}`;
     this.title.x = w / 2;
     this.title.y = 12;
 

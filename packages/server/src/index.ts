@@ -72,6 +72,9 @@ function main(): void {
     worldBrain,
     reconcileChance: numEnv('PAGUS_RECONCILE', 0.15), // 事件が和解で収まる基礎確率
     secondaryChance: numEnv('PAGUS_SECONDARY', 0.18), // 二次被害の確率
+    stressFizzleK: numEnv('PAGUS_STRESS_K', 0.06), // ストレス耐性で嫌がらせを受け流す効き
+    marriageChance: numEnv('PAGUS_MARRIAGE', 0.12), // 日末の結婚確率
+    birthChance: numEnv('PAGUS_BIRTH', 0.1), // 日末の出産確率
   });
 
   const port = numEnv('PAGUS_WS_PORT', 4310);
