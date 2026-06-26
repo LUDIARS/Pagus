@@ -7,6 +7,7 @@ import { TrialPanel } from './trial-panel.js';
 import { IncidentPanel } from './incident-panel.js';
 import { VillageStatus } from './village-status.js';
 import { LogOverlay } from './log-overlay.js';
+import { LlmPanel } from './llm-panel.js';
 import { connect, type Conn } from './ws-client.js';
 
 // 既定は同一オリジンの /ws (Vite が game server 4310 へ proxy)。
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
   const log = new LogOverlay(el('log'));
   const incident = new IncidentPanel(el('left'));
   const vstatus = new VillageStatus(el('vstatus'));
+  const llmPanel = new LlmPanel(el('llm-head'), el('llm-body'));
 
   let conn: Conn;
   const trial = new TrialPanel(el('trial'), (pick) => conn.send({ t: 'vote', pick }));
@@ -49,12 +51,14 @@ async function main(): Promise<void> {
       trial.update(world);
       incident.update(world);
       vstatus.update(world);
+      llmPanel.setNames(world);
       verdict.classList.toggle('show', showVerdict(world));
     },
     onLog: (phase, text) => log.add(phase, text),
     onStatus: (status) => hud.setStatus(status),
     onPlayers: (count) => vstatus.setPlayers(count),
     onTrialLines: (incidentId, lines) => stage.setTrialLines(incidentId, lines),
+    onLlm: (info) => llmPanel.setInfo(info),
   });
 
   el('incite').addEventListener('click', () => conn.send({ t: 'incite' }));

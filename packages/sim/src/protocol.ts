@@ -34,12 +34,24 @@ export interface TrialLine {
   text: string;
 }
 
+/** 稼働中の LLM 構成 (UI 表示用)。 */
+export interface LlmInfo {
+  mode: 'stub' | 'llm';
+  /** どうぶつ駆動に使うバックエンド一覧。 */
+  backends: { id: string; provider: string; model: string }[];
+  /** 重い局面 (裁判/教育) で寄せる strong tier の id 一覧。 */
+  strong: string[];
+  /** villager id → backend id の (準固定) 割当。 */
+  assignments: Record<string, string>;
+}
+
 /** server → client。 */
 export type ServerMessage =
   | { t: 'snapshot'; world: WireWorld }
   | { t: 'log'; phase: Phase; text: string }
   | { t: 'players'; count: number } // 同時接続プレイヤー数
-  | { t: 'trialLines'; incidentId: string; lines: TrialLine[] }; // 裁判の糾弾セリフ
+  | { t: 'trialLines'; incidentId: string; lines: TrialLine[] } // 裁判の糾弾セリフ
+  | { t: 'llm'; info: LlmInfo }; // 稼働中の LLM 構成
 
 /** client → server。 */
 export type ClientMessage =

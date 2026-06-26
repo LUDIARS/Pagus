@@ -76,6 +76,16 @@
       .log-ten { color: #f2994a; }
       .log-ketsu { color: #eb5757; }
 
+      /* 右上の LLM 設定パネル。 */
+      #llm-panel { position: fixed; top: 56px; right: 12px; z-index: 40; width: 230px;
+        background: rgba(14,18,27,0.92); border: 1px solid #2a3346; border-radius: 8px; font-size: 12px; }
+      #llm-head { padding: 6px 10px; cursor: pointer; user-select: none; color: #9be3ff; font-weight: bold; }
+      #llm-head:hover { background: #1a2230; }
+      #llm-body { padding: 0 10px 8px; max-height: 50vh; overflow-y: auto; }
+      #llm-body .sub { margin-top: 6px; color: #8b96ad; border-top: 1px solid #1b2231; padding-top: 4px; }
+      #llm-body .mono { font-family: ui-monospace, monospace; font-size: 11px; padding: 1px 0; }
+      #llm-body .muted { color: #6b7689; font-size: 10px; }
+
       /* 裁判の有罪/無罪ボタン (中央上寄り、裁判中のみ表示)。 */
       #verdict { display: none; position: absolute; top: 12%; left: 0; right: 0; justify-content: center; gap: 40px; pointer-events: none; }
       #verdict.show { display: flex; }
@@ -128,6 +138,10 @@
       <button id="calm">沈静化</button>
       <button id="btn-right" class="drawer-toggle">📊 村</button>
       <span id="status"></span>
+    </div>
+    <div id="llm-panel">
+      <div id="llm-head">🧠 LLM ▸</div>
+      <div id="llm-body"></div>
     </div>
     <div id="main">
       <div id="left" class="col"></div>

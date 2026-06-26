@@ -1,6 +1,6 @@
 // WS 接続。server からの snapshot/log を受け、扇動/沈静化コマンドを送る。自動再接続。
 
-import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine } from '@pagus/sim';
+import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo } from '@pagus/sim';
 
 export interface WsHandlers {
   onSnapshot(world: WireWorld): void;
@@ -8,6 +8,7 @@ export interface WsHandlers {
   onStatus(status: string): void;
   onPlayers(count: number): void;
   onTrialLines(incidentId: string, lines: TrialLine[]): void;
+  onLlm(info: LlmInfo): void;
 }
 
 export interface Conn {
@@ -36,6 +37,7 @@ export function connect(url: string, h: WsHandlers): Conn {
       else if (msg.t === 'log') h.onLog(msg.phase, msg.text);
       else if (msg.t === 'players') h.onPlayers(msg.count);
       else if (msg.t === 'trialLines') h.onTrialLines(msg.incidentId, msg.lines);
+      else if (msg.t === 'llm') h.onLlm(msg.info);
     };
   };
   open();
