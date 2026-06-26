@@ -4,7 +4,7 @@
 // - 暇な間は雑談ディレクタがにぎやかにする。
 
 import { Application } from 'pixi.js';
-import type { WireWorld, Phase } from '@pagus/sim';
+import type { WireWorld, Phase, TrialLine } from '@pagus/sim';
 import { loadAnimalTextures } from './assets.js';
 import { VillageScene } from './village-scene.js';
 import { TrialScene } from './trial-scene.js';
@@ -66,6 +66,11 @@ export class StageView {
   /** プレイヤーの有罪/無罪表明を裁判シーンの吹き出しに出す。 */
   playerVerdict(side: 'guilty' | 'innocent'): void {
     if (this.inTrial) this.trial.playerSay(side);
+  }
+
+  /** server 生成の糾弾セリフを裁判シーンへ渡す。 */
+  setTrialLines(incidentId: string, lines: TrialLine[]): void {
+    this.trial.setLines(incidentId, lines);
   }
 
   update(world: WireWorld): void {

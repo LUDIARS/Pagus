@@ -28,11 +28,18 @@ export function toWire(world: World): WireWorld {
   };
 }
 
+/** 裁判の糾弾セリフ (server が生成/再利用して配る)。 */
+export interface TrialLine {
+  speaker: string; // 糾弾する村人 id
+  text: string;
+}
+
 /** server → client。 */
 export type ServerMessage =
   | { t: 'snapshot'; world: WireWorld }
   | { t: 'log'; phase: Phase; text: string }
-  | { t: 'players'; count: number }; // 同時接続プレイヤー数
+  | { t: 'players'; count: number } // 同時接続プレイヤー数
+  | { t: 'trialLines'; incidentId: string; lines: TrialLine[] }; // 裁判の糾弾セリフ
 
 /** client → server。 */
 export type ClientMessage =

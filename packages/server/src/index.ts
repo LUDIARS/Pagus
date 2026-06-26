@@ -5,8 +5,9 @@ import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, typ
 import { loadConfig, loadSeed } from './load-data.js';
 import { TermLoop, type LoopBrain } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
-import { BackendRegistry, LlmBrain, LlmWorldBrain, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND } from './llm/index.js';
+import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND } from './llm/index.js';
 import { SessionLog } from './session-log.js';
+import { TrialNarrator } from './trial-narrator.js';
 
 function numEnv(name: string, fallback: number): number {
   const v = process.env[name];
@@ -67,6 +68,12 @@ function main(): void {
   // 住民の動きを stdout へ流しつつ JSONL へ永続化する (後から振り返れる)。
   const sessionLog = new SessionLog();
 
+  // 裁判の糾弾セリフ: llm モードでは Haiku 生成 (65%) + レパートリー蓄積。
+  const llmMode = (process.env.PAGUS_BRAIN ?? 'stub') === 'llm';
+  const narrator = new TrialNarrator(
+    llmMode ? { client: new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5' }) } : {},
+  );
+
   let loop: TermLoop;
   const ws = new GameWsServer(port, {
     onIncite: () => loop.incite(),
@@ -82,6 +89,16 @@ function main(): void {
     onLog: (phase, text) => {
       ws.broadcastLog(phase, text);
       sessionLog.line(phase, text);
+    },
+    onTrialOpen: (w) => {
+      const incidentId = w.incident?.id;
+      if (!incidentId) return;
+      void narrator
+        .linesFor(w)
+        .then((lines) => {
+          if (lines.length > 0) ws.broadcastTrialLines(incidentId, lines);
+        })
+        .catch((e) => console.error('[pagus] 糾弾生成エラー', e));
     },
   });
   loop.start();
