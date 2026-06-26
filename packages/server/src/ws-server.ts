@@ -2,7 +2,7 @@
 // クライアントからの扇動/沈静化コマンドを受ける。
 
 import { WebSocketServer, WebSocket } from 'ws';
-import { toWire, type World, type ServerMessage, type ClientMessage, type TrialLine } from '@pagus/sim';
+import { toWire, type World, type ServerMessage, type ClientMessage, type TrialLine, type LlmInfo } from '@pagus/sim';
 
 export interface WsHandlers {
   onIncite(): void;
@@ -13,15 +13,22 @@ export interface WsHandlers {
 export class GameWsServer {
   private readonly wss: WebSocketServer;
   private lastSnapshot: string | null = null;
+  private llmInfo: LlmInfo | null = null;
 
   constructor(port: number, private readonly h: WsHandlers) {
     this.wss = new WebSocketServer({ port });
     this.wss.on('connection', (ws) => this.onConnection(ws));
   }
 
+  /** 稼働中の LLM 構成を設定 (接続時に各クライアントへ送る)。 */
+  setLlmInfo(info: LlmInfo): void {
+    this.llmInfo = info;
+  }
+
   private onConnection(ws: WebSocket): void {
-    // 接続直後に最新スナップショットと現在の接続人数を送る。
+    // 接続直後に最新スナップショット・接続人数・LLM 構成を送る。
     if (this.lastSnapshot) ws.send(this.lastSnapshot);
+    if (this.llmInfo) ws.send(JSON.stringify({ t: 'llm', info: this.llmInfo } satisfies ServerMessage));
     this.broadcastPlayers();
     ws.on('close', () => this.broadcastPlayers());
     ws.on('message', (data) => {

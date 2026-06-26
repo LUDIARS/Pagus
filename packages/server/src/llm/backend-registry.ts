@@ -70,6 +70,16 @@ export class BackendRegistry {
     this.initial = opts.initialAssignments ?? {};
   }
 
+  /** キャスト全体 (UI 表示用)。 */
+  get backends(): readonly Backend[] {
+    return this.cast;
+  }
+
+  /** strong tier 一覧 (UI 表示用)。 */
+  get strongBackends(): readonly Backend[] {
+    return this.strongCast;
+  }
+
   /** villager の既定バックエンド (tick/感情/行動など軽い局面)。 */
   assign(villagerId: string): Backend {
     const memo = this.assigned.get(villagerId);

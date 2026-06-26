@@ -1,7 +1,7 @@
 // Pagus server エントリ。data からワールドを起こし、TermLoop と WS を配線する。
 // 思考は PAGUS_BRAIN で切替: 'stub'(既定/決定的) | 'llm'(実 LLM = claude/codex CLI)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, type WorldBrain } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, type WorldBrain, type LlmInfo } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
 import { TermLoop, type LoopBrain } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
@@ -22,12 +22,13 @@ function numEnv(name: string, fallback: number): number {
  * 'llm' は claude/codex CLI 駆動。両者で同一 BackendRegistry を共有する。
  * 不正値は無言フォールバックせず即エラー (RULE_CODE §7.1)。
  */
-function selectBrains(): { brain: LoopBrain; worldBrain: WorldBrain } {
+function selectBrains(): { brain: LoopBrain; worldBrain: WorldBrain; registry: BackendRegistry | null } {
   const mode = process.env.PAGUS_BRAIN ?? 'stub';
   if (mode === 'stub') {
     return {
       brain: new StubBrain({ triggerAfter: numEnv('PAGUS_TRIGGER_AFTER', 6), damagePerStep: 4 }),
       worldBrain: new StubWorldBrain(),
+      registry: null,
     };
   }
   if (mode === 'llm') {
@@ -36,9 +37,20 @@ function selectBrains(): { brain: LoopBrain; worldBrain: WorldBrain } {
     const cast = enableCodex ? [...DEFAULT_CAST, GPT_BACKEND] : DEFAULT_CAST;
     const strong = enableCodex ? [...DEFAULT_STRONG, GPT_BACKEND] : DEFAULT_STRONG;
     const registry = new BackendRegistry({ cast, strong });
-    return { brain: new LlmBrain(registry), worldBrain: new LlmWorldBrain(registry) };
+    return { brain: new LlmBrain(registry), worldBrain: new LlmWorldBrain(registry), registry };
   }
   throw new Error(`環境変数 PAGUS_BRAIN は 'stub' | 'llm' のいずれか: ${mode}`);
+}
+
+/** UI 表示用の LLM 構成を作る。 */
+function buildLlmInfo(registry: BackendRegistry | null, villagers: { id: string }[]): LlmInfo {
+  if (!registry) return { mode: 'stub', backends: [], strong: [], assignments: {} };
+  return {
+    mode: 'llm',
+    backends: registry.backends.map((b) => ({ id: b.id, provider: b.provider, model: b.model })),
+    strong: registry.strongBackends.map((b) => b.id),
+    assignments: Object.fromEntries(villagers.map((v) => [v.id, registry.assign(v.id).id])),
+  };
 }
 
 function main(): void {
@@ -52,7 +64,8 @@ function main(): void {
     month: now.getMonth() + 1,
   });
 
-  const { brain, worldBrain } = selectBrains();
+  const { brain, worldBrain, registry } = selectBrains();
+  const llmInfo = buildLlmInfo(registry, villagers);
   const director = new EventDirector({ maxRepsPerSegment: numEnv('PAGUS_REPS', 3) });
   const tm = new TermMachine(world, brain, {
     director,
@@ -80,6 +93,7 @@ function main(): void {
     onCalm: () => loop.calm(),
     onVote: (pick) => loop.vote(pick),
   });
+  ws.setLlmInfo(llmInfo);
 
   loop = new TermLoop(tm, brain, pace, incidentStepMs, {
     onSnapshot: (w) => {
