@@ -49,10 +49,11 @@ function selectBrains(): { brain: LoopBrain; worldBrain: WorldBrain; registry: B
     };
   }
   if (mode === 'llm') {
-    // codex(gpt-5.5) は一過性 exit 1 が安定するまで既定オフ。PAGUS_ENABLE_CODEX=1 で合流。
-    const enableCodex = (process.env.PAGUS_ENABLE_CODEX ?? '') === '1';
-    const cast = enableCodex ? [...DEFAULT_CAST, GPT_BACKEND] : DEFAULT_CAST;
-    const strong = enableCodex ? [...DEFAULT_STRONG, GPT_BACKEND] : DEFAULT_STRONG;
+    // codex(gpt-5.5) は既定キャストに合流済 (一過性 exit 1 は CLI レベルのリトライで吸収、
+    // PAGUS_CLI_RETRIES で調整)。PAGUS_DISABLE_CODEX=1 で外せる。
+    const disableCodex = (process.env.PAGUS_DISABLE_CODEX ?? '') === '1';
+    const cast = disableCodex ? DEFAULT_CAST : [...DEFAULT_CAST, GPT_BACKEND];
+    const strong = disableCodex ? DEFAULT_STRONG : [...DEFAULT_STRONG, GPT_BACKEND];
     const registry = new BackendRegistry({ cast, strong });
     return { brain: new LlmBrain(registry), worldBrain: new LlmWorldBrain(registry), registry };
   }

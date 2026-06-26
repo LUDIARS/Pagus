@@ -28,6 +28,18 @@ const BIN_BY_PROVIDER: Record<CliProvider, string> = {
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 
+/**
+ * CLI の一過性失敗 (codex exec の hook 由来 exit 1 / レート / sandbox blip 等) を
+ * 吸収するリトライ既定回数。env `PAGUS_CLI_RETRIES` で上書き可 (0 で無効)。
+ * リトライは「同じ呼び出しをやり直す」だけで、設定不備の無言フォールバックではない。
+ */
+const DEFAULT_RETRIES = ((): number => {
+  const v = Number(process.env.PAGUS_CLI_RETRIES);
+  return Number.isInteger(v) && v >= 0 ? v : 2;
+})();
+/** リトライ間の基礎待機 ms (試行ごとに線形に伸ばす)。 */
+const DEFAULT_RETRY_BACKOFF_MS = 500;
+
 export interface CliLlmClientOptions {
   provider: CliProvider;
   /** 既定モデル ID (per-invoke の args.model が優先)。 */
@@ -36,6 +48,14 @@ export interface CliLlmClientOptions {
   timeoutMs?: number;
   /** Windows で claude CLI が要する git-bash パス (未指定なら自動検出)。 */
   gitBashPath?: string;
+  /** 一過性失敗のリトライ回数 (既定 PAGUS_CLI_RETRIES or 2)。 */
+  retries?: number;
+  /** リトライ間の基礎待機 ms (既定 500、試行ごとに線形)。 */
+  retryBackoffMs?: number;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -47,15 +67,41 @@ export class CliLlmClient implements LlmClient {
   private readonly model: string;
   private readonly timeoutMs: number;
   private readonly gitBashPath: string | undefined;
+  private readonly retries: number;
+  private readonly retryBackoffMs: number;
 
   constructor(opts: CliLlmClientOptions) {
     this.provider = opts.provider;
     this.model = opts.model;
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.gitBashPath = opts.gitBashPath;
+    this.retries = opts.retries ?? DEFAULT_RETRIES;
+    this.retryBackoffMs = opts.retryBackoffMs ?? DEFAULT_RETRY_BACKOFF_MS;
   }
 
+  /**
+   * CLI を起動して応答を得る。一過性の transport 失敗 (非ゼロ終了/タイムアウト/
+   * 空出力/spawn 失敗) は retries 回まで backoff 付きでやり直す。brain 側の parse
+   * リトライは別レイヤ (JSON 不正用)。全試行失敗で throw (無言フォールバック禁止)。
+   */
   async invoke(args: LlmInvokeArgs): Promise<{ text: string }> {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= this.retries; attempt++) {
+      try {
+        return await this.invokeOnce(args);
+      } catch (e) {
+        lastErr = e;
+        if (attempt < this.retries) {
+          await delay(this.retryBackoffMs * (attempt + 1));
+        }
+      }
+    }
+    throw new Error(
+      `${this.provider} cli が ${this.retries + 1} 回試行しても失敗: ${(lastErr as Error).message}`,
+    );
+  }
+
+  private async invokeOnce(args: LlmInvokeArgs): Promise<{ text: string }> {
     const model = args.model ?? this.model;
     const timeoutMs = args.timeoutMs ?? this.timeoutMs;
     const prompt = composePrompt(args.system, args.prompt);

@@ -7,7 +7,7 @@
 
 v0.0〜v0.5 + 実LLM観戦UI + 創発/生活メカニクスまで実装済み (main)。本書 §1〜§9 の設計に、以下の実装追補が乗っている。**実装の詳細追補は `spec/feature/emergent-and-life.md`** に集約 (ファイルパス付き)。
 
-- **実LLM 駆動**: claude `-p` (opus/sonnet/haiku) でどうぶつを駆動。codex(gpt-5.5) は一過性 `exit 1` が安定するまで**既定オフ** (`PAGUS_ENABLE_CODEX=1` で合流) — §5.2。
+- **実LLM 駆動**: claude `-p` (opus/sonnet/haiku) + codex(gpt-5.5) でどうぶつを駆動。**codex は既定キャストに合流済** (一過性 `exit 1` は CLI レベルのリトライで吸収、`PAGUS_DISABLE_CODEX=1` で外す) — §5.2。
 - **創発メカニクス** (§8B): 狂人(madman) の裁判扇動 / 事件の和解 / 二次被害。
 - **村の生活** (§8B): **ストレス耐性**(些細な嫌がらせを受け流す) / **結婚・出産**(夫婦から気質ブレンドの子) / **改変のいじられ方ログ**。
 - **裁判の糾弾を実LLM化** (§5.3): 65% は Haiku が事件文脈で生成しレパートリーへ蓄積、35% は再利用。
@@ -228,7 +228,7 @@ interface Brain {
 - **役割別 override**: 裁判/教育など重い局面は割当に依らず strong tier (Opus/GPT-5.5) へ寄せられる (§5.1 と併用)。
 - **transport (実装)**: Claude = `claude -p --output-format json` (stdin 投入、`.result` 抽出、fence 対応)。
   GPT-5.5 = `codex exec --skip-git-repo-check -s read-only --model gpt-5.5 --output-last-message <file>` (stdin 投入、最終メッセージをファイルから読む)。
-  **codex は一過性 `exit 1` が安定するまで既定キャストから外している** (`PAGUS_ENABLE_CODEX=1` で `GPT_BACKEND` を cast/strong へ合流)。実装 `packages/server/src/llm/cli-llm-client.ts`。
+  **codex は既定キャストに合流済**。一過性 `exit 1` (codex の Stop hook 由来 / レート / sandbox blip 等) は **CLI レベルのリトライ** (`CliLlmClient`、既定 2 回、`PAGUS_CLI_RETRIES` で調整、backoff 付き) で吸収する。`PAGUS_DISABLE_CODEX=1` で `GPT_BACKEND` を外せる。実装 `packages/server/src/llm/cli-llm-client.ts`。
 - 確定形は `spec/interface/brain-backends.md`。
 
 ### 5.3 裁判の糾弾セリフ (Haiku 生成 + レパートリー)
@@ -384,7 +384,7 @@ data/
 |---|---|
 | **v0.0** | scaffold + 本 spec + sim 核型 + 起承転結ステートマシン骨格 |
 | **v0.1** | 時間モデル刷新 (日=ターム/12セグメント/カレンダー/季節/祝節) + どうぶつ睡眠 + 起ループ(stub) + client 村ビュー + WS 配信 |
-| v0.2 ✅ | claude -p Brain 実装 (感情/行動)・llm-gateway 配線・起→承 発火。codex(gpt-5.5)は既定オフ |
+| v0.2 ✅ | claude -p Brain 実装 (感情/行動)・llm-gateway 配線・起→承 発火 |
 | v0.3 ✅ | イベント種別(嫌がらせ/良い行動/雑談)+グループ/代表選出+承 GANs+事件フィード UI+扇動/沈静化 |
 | v0.4 ✅ | 転=投票裁判(殺す/活かす・最も愚か)+グループbloc投票+ユーザ投票(中央ボタン一本化)+評判6軸レーダー |
 | v0.5 ✅ | 結 教育/改変 + 世界側LLM日末評価→6軸更新+個体ベクトル更新 (祝日イベント生成は未) |

@@ -69,8 +69,11 @@ claude 3 モデルに codex(gpt-5.5) を混ぜる = **村人ごとに別 LLM の
   (`orderSegments` で安定度順に整列)。
 - 各プロンプトは **「JSON だけで返せ」** と指示し、返り値スキーマを sim 型に一致させる。
 - `json-coerce` が応答 JSON を検証して sim 型へ変換。**parse 失敗は LlmBrain が 1 回リトライ→
-  なお失敗なら throw**。CLI 自体のエラー (spawn/timeout/非ゼロ終了/空出力) は即 throw。
-- **無言フォールバック禁止** (RULE_CODE §7.1): 設定不正・応答不正は黙って既定値に落とさず必ず例外。
+  なお失敗なら throw**。
+- **transport の一過性失敗** (spawn/timeout/非ゼロ終了/空出力) は `CliLlmClient` が backoff 付きで
+  **リトライ** (既定 2 回 = `PAGUS_CLI_RETRIES`)。codex の Stop hook 由来 `exit 1` 等の一過性 blip を
+  吸収し、全試行失敗で throw。これにより codex(gpt-5.5) を既定キャストに合流できる (`PAGUS_DISABLE_CODEX=1` で外す)。
+- **無言フォールバック禁止** (RULE_CODE §7.1): 設定不正・応答不正は黙って既定値に落とさず必ず例外。リトライは「同じ呼び出しのやり直し」であってフォールバックではない。
 
 ## 起動切替
 

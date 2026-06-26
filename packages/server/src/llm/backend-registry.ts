@@ -18,9 +18,9 @@ export interface Backend {
 }
 
 /**
- * デフォルトキャスト = claude 3 モデルのみ。
- * codex(gpt-5.5) は一過性の `exit 1` が安定するまで既定から外し、
- * `PAGUS_ENABLE_CODEX=1` のとき index.ts が GPT_BACKEND を足す。
+ * デフォルトキャスト = claude 3 モデル。
+ * codex(gpt-5.5) は GPT_BACKEND として index.ts が既定で合流させる
+ * (一過性 `exit 1` は CliLlmClient のリトライで吸収)。`PAGUS_DISABLE_CODEX=1` で外せる。
  */
 export const DEFAULT_CAST: readonly Backend[] = [
   { id: 'opus', provider: 'claude', model: 'claude-opus-4-8' },
@@ -33,7 +33,7 @@ export const DEFAULT_STRONG: readonly Backend[] = [
   { id: 'opus', provider: 'claude', model: 'claude-opus-4-8' },
 ] as const;
 
-/** codex 経由の GPT-5.5。`PAGUS_ENABLE_CODEX=1` で cast/strong へ合流させる。 */
+/** codex 経由の GPT-5.5。既定で cast/strong へ合流 (`PAGUS_DISABLE_CODEX=1` で外す)。 */
 export const GPT_BACKEND: Backend = { id: 'gpt', provider: 'codex', model: 'gpt-5.5' };
 
 export interface BackendRegistryOptions {
