@@ -19,6 +19,8 @@ export interface VoteRecord {
   weight: number;
   /** foolish 段階は候補 VillagerId、fate 段階は 'kill'|'spare'。 */
   pick: string;
+  /** ユーザ票のとき、どの接続ユーザの票か (重み合算 + 投票し直しの単位)。 */
+  userId?: string;
 }
 
 /** 転: 投票による裁判の状態。 */

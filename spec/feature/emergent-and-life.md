@@ -17,6 +17,7 @@
 | 村の歴史 | 節目を日付つきで永続化、接続時+発生毎に配信 | `server/chronicle.ts`、`server/index.ts` (`isMilestone`) |
 | 祝日イベント | 春分/秋分を年から天文計算 (`vernalEquinoxDay`/`autumnalEquinoxDay`)。祝日にあたる日に (AI) が祝祭を実発火 (`📅`、評判を活気寄りに微調整) | `sim/calendar.ts` (`holidayName`)、`sim/term-machine.ts` (`fireHolidayEvent`)、`sim/world-brain.ts` (`holidayEvent`)、`server/term-loop.ts` |
 | プレイヤー裁判介入 | 中央「有罪/無罪」=殺活投票+扇動/沈静化+罵倒/擁護フキダシ。投票し直し可 | `sim/term-machine.ts` (`addUserVote`)、`client/main.ts` |
+| push 通知投票 | 裁判が開くと WebPush で離脱中の端末も呼び戻す。`userId` ごと 1 席の重み合算 (WS/HTTP)。VAPID 未設定なら無効 | `server/{push-service,http-api}.ts`、`client/{push-client,public/sw.js}`、spec `interface/notification-voting.md` |
 
 ## 観戦UI (client / PixiJS)
 
@@ -44,6 +45,8 @@
 | `PAGUS_BIRTH` | 0.1 | 日末の出産確率 |
 | `PAGUS_WS_PORT` | 4310 | game server WS ポート |
 | `PAGUS_FRESH` | (off) | `1` で `data/runtime/world.json` を無視し新規開始 |
+| `PAGUS_PUSH` | (off) | `1` で WebPush 通知を有効化 (要 VAPID 鍵) |
+| `PAGUS_VAPID_PUBLIC` / `PAGUS_VAPID_PRIVATE` / `PAGUS_VAPID_SUBJECT` | — | VAPID 鍵 (秘密)。生成 `npx web-push generate-vapid-keys` |
 | `PAGUS_ACCEL` / `PAGUS_MIN_MS` / `PAGUS_INCIDENT_MS` / `PAGUS_REPS` | — | dev のペース/負荷調整 |
 | `PAGUS_LOG_STDOUT` / `PAGUS_LOG_FILE` / `PAGUS_LOG_DIR` | on | セッションログ出力 |
 
@@ -55,3 +58,4 @@ client は Vite 4320 (Memoria 5180 と分離)、WS は同一オリジン `/ws` �
 - `data/runtime/denunciations.json` — 糾弾レパートリー (成長)
 - `data/runtime/chronicle.json` — 村の歴史 (上限500件)
 - `data/runtime/world.json` — **world スナップショット** (どうぶつ状態・評判・暦・進行中の事件/裁判)。起動時に復元、tick で間引き保存 + 終了時に確実に書き出し。`PAGUS_FRESH=1` で無視して新規開始。実装 `server/world-store.ts` (`toWire`/`fromWire`)。
+- `data/runtime/push-subscriptions.json` — **WebPush 購読** (endpoint で重複排除)。失効購読は送信時に除去。実装 `server/push-service.ts`。

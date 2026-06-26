@@ -1,6 +1,7 @@
 // WS サーバ。world スナップショットとログを全クライアントへ配信し、
 // クライアントからの扇動/沈静化コマンドを受ける。
 
+import type { Server as HttpServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import {
   toWire,
@@ -15,7 +16,7 @@ import {
 export interface WsHandlers {
   onIncite(): void;
   onCalm(): void;
-  onVote(pick: string): void;
+  onVote(pick: string, userId?: string): void;
 }
 
 export class GameWsServer {
@@ -24,8 +25,9 @@ export class GameWsServer {
   private llmInfo: LlmInfo | null = null;
   private chronicle: ChronicleEntry[] = [];
 
-  constructor(port: number, private readonly h: WsHandlers) {
-    this.wss = new WebSocketServer({ port });
+  /** HTTP サーバに相乗りして WS を待ち受ける (HTTP API と同一ポート/同一オリジン)。 */
+  constructor(server: HttpServer, private readonly h: WsHandlers) {
+    this.wss = new WebSocketServer({ server });
     this.wss.on('connection', (ws) => this.onConnection(ws));
   }
 
@@ -58,7 +60,7 @@ export class GameWsServer {
       }
       if (msg.t === 'incite') this.h.onIncite();
       else if (msg.t === 'calm') this.h.onCalm();
-      else if (msg.t === 'vote') this.h.onVote(msg.pick);
+      else if (msg.t === 'vote') this.h.onVote(msg.pick, msg.userId);
     });
   }
 

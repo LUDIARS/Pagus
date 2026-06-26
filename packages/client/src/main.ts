@@ -10,6 +10,7 @@ import { LogOverlay } from './log-overlay.js';
 import { LlmPanel } from './llm-panel.js';
 import { ChronicleView } from './chronicle-view.js';
 import { connect, type Conn } from './ws-client.js';
+import { getUserId, enablePush } from './push-client.js';
 
 // 既定は同一オリジンの /ws (Vite が game server 4310 へ proxy)。
 // → ローカルでもトンネル (pagus.vtn-game.com) 越しでも繋がる。VITE_WS_URL で上書き可。
@@ -37,8 +38,9 @@ async function main(): Promise<void> {
   const llmPanel = new LlmPanel(el('llm-head'), el('llm-body'));
   const chronicle = new ChronicleView(el('chronicle'), el('chronicle-body'), el('hist-btn'), el('chronicle-close'));
 
+  const userId = getUserId();
   let conn: Conn;
-  const trial = new TrialPanel(el('trial'), (pick) => conn.send({ t: 'vote', pick }));
+  const trial = new TrialPanel(el('trial'), (pick) => conn.send({ t: 'vote', pick, userId }));
 
   const verdict = el('verdict');
   // 有罪/無罪ボタンは「殺す/活かす」を決める fate 段階でのみ出す (foolish=被告選びは右パネル)。
@@ -71,14 +73,29 @@ async function main(): Promise<void> {
   //   有罪 = 殺す(kill) 投票 + 扇動、無罪 = 活かす(spare) 投票 + 沈静化。
   //   同時にプレイヤーの罵倒/擁護を吹き出しで表示。投票し直しは server 側で前票を差し替え。
   el('v-guilty').addEventListener('click', () => {
-    conn.send({ t: 'vote', pick: 'kill' });
+    conn.send({ t: 'vote', pick: 'kill', userId });
     conn.send({ t: 'incite' });
     stage.playerVerdict('guilty');
   });
   el('v-innocent').addEventListener('click', () => {
-    conn.send({ t: 'vote', pick: 'spare' });
+    conn.send({ t: 'vote', pick: 'spare', userId });
     conn.send({ t: 'calm' });
     stage.playerVerdict('innocent');
+  });
+
+  // 🔔 通知: 裁判が始まったら端末へ push (接続を閉じていても投票を促す)。
+  const pushBtn = el('push-btn');
+  pushBtn.addEventListener('click', () => {
+    pushBtn.textContent = '🔔 …';
+    enablePush()
+      .then((label) => {
+        pushBtn.textContent = label;
+        (pushBtn as HTMLButtonElement).disabled = true;
+      })
+      .catch((e: unknown) => {
+        pushBtn.textContent = `🔔 ${e instanceof Error ? e.message : '失敗'}`;
+        setTimeout(() => (pushBtn.textContent = '🔔 通知'), 3000);
+      });
   });
 
   setupDrawers();
