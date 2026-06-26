@@ -67,4 +67,8 @@ export interface Villager {
   reformCount: number;
   /** 狂人フラグ。村の評判に応じて裁判を扇動し、無実の者を陥れる。 */
   madman: boolean;
+  /** ストレス耐性 (0..)。事件/裁判をくぐるほど上がり、些細な嫌がらせに動じなくなる。 */
+  stress: number;
+  /** 配偶者 (結婚イベントで設定)。未婚は null。 */
+  partnerId: VillagerId | null;
 }

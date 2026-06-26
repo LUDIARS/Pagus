@@ -6,7 +6,7 @@ import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict
 import type { Brain, ActionDecision } from './brain.js';
 import { aliveVillagers, awakeVillagers, environmentView, clampPos } from './world.js';
 import { season, daysInMonth, holidayName } from './calendar.js';
-import { groupByDominant, dominantAxis, PERSONALITY_AXES, type PersonalityAxis } from './personality.js';
+import { groupByDominant, dominantAxis, PERSONALITY_AXES, PERSONALITY_LABELS, type PersonalityAxis } from './personality.js';
 import { personalityFromVirtue, VIRTUES } from './virtue.js';
 import { createVillager } from './villager-factory.js';
 import type { WorldBrain, DayEvaluation, WorldEvalContext } from './world-brain.js';
@@ -46,6 +46,25 @@ export interface TermMachineOptions {
   reconcileChance?: number;
   /** 事件中に第三者を巻き込む「二次被害」の確率 (0..1)。既定 0 (無効)。 */
   secondaryChance?: number;
+  /** ストレス耐性の効き (被害者の平均 stress × これ = 受け流す確率)。既定 0 (無効)。 */
+  stressFizzleK?: number;
+  /** 日末に結婚イベントが起きる確率 (0..1)。既定 0。 */
+  marriageChance?: number;
+  /** 日末に夫婦から出産イベントが起きる確率 (0..1)。既定 0。 */
+  birthChance?: number;
+}
+
+/** 日末の生活イベント (結婚/出産)。server がログ表示する。 */
+export interface LifeEvents {
+  marriages: Array<{ a: VillagerId; b: VillagerId; aName: string; bName: string }>;
+  births: Array<{ childId: VillagerId; childName: string; parents: string }>;
+}
+
+/** 改変(いじられ方)の要約。server がログ表示する。 */
+export interface ReformSummary {
+  villager: VillagerId;
+  name: string;
+  text: string;
 }
 
 /** shoStep の結果。server がログ表示に使う。 */
@@ -78,6 +97,9 @@ export class TermMachine {
   private readonly maxPopulation: number;
   private readonly reconcileChance: number;
   private readonly secondaryChance: number;
+  private readonly stressFizzleK: number;
+  private readonly marriageChance: number;
+  private readonly birthChance: number;
   /** 沈静化/扇動が動かす和解バイアス (事件ごとに 0 へリセット)。 */
   private reconcileBias = 0;
   /** 現ステージのユーザ票 (投票し直しで差し替えるため保持)。 */
@@ -99,6 +121,9 @@ export class TermMachine {
     this.maxPopulation = opts.maxPopulation ?? 16;
     this.reconcileChance = opts.reconcileChance ?? 0;
     this.secondaryChance = opts.secondaryChance ?? 0;
+    this.stressFizzleK = opts.stressFizzleK ?? 0;
+    this.marriageChance = opts.marriageChance ?? 0;
+    this.birthChance = opts.birthChance ?? 0;
   }
 
   /** プレイヤーの沈静化: この事件が和解しやすくなる。 */
@@ -164,11 +189,36 @@ export class TermMachine {
     actor.emotion = decision.newEmotion;
     actions.push({ villager: actor.id, action: decision.action });
     if (decision.triggersIncident && decision.incidentSeed && !this.world.incident) {
-      this.world.incident = this.startIncident(actor.id, decision.incidentSeed);
+      const seed = decision.incidentSeed;
+      const victimIds = seed.involved.filter((id) => id !== actor.id);
+      // ストレス耐性: 被害者が慣れっこなら、些細な嫌がらせは受け流して事件化しない。
+      if (this.shrugsOff(victimIds)) {
+        const v0 = victimIds[0] ? this.world.villagers.get(victimIds[0]) : undefined;
+        actions.push({ villager: v0?.id ?? actor.id, action: `${v0?.name ?? '相手'}は慣れっこで受け流した` });
+        return false;
+      }
+      this.world.incident = this.startIncident(actor.id, seed);
       this.world.phase = 'sho';
       return true;
     }
     return false;
+  }
+
+  /** 被害者の平均ストレス耐性で嫌がらせを受け流すか判定。 */
+  private shrugsOff(victimIds: VillagerId[]): boolean {
+    if (this.stressFizzleK <= 0 || victimIds.length === 0) return false;
+    let sum = 0;
+    let n = 0;
+    for (const id of victimIds) {
+      const v = this.world.villagers.get(id);
+      if (v) {
+        sum += v.stress;
+        n += 1;
+      }
+    }
+    if (n === 0) return false;
+    const chance = Math.min(0.8, (sum / n) * this.stressFizzleK);
+    return this.rng() < chance;
   }
 
   /** 現セグメントを終え、次セグメントへ。日末 (segment 一巡) に達したら phase=advance。 */
@@ -188,10 +238,16 @@ export class TermMachine {
     seed: { description: string; involved: string[] },
   ): Incident {
     this.reconcileBias = 0; // 事件ごとに和解バイアスをリセット。
+    const involved = seed.involved.filter((id) => id !== perpetrator);
+    // 事件をくぐった者はストレス耐性が上がる (次から些細な嫌がらせに動じにくい)。
+    for (const id of [perpetrator, ...involved]) {
+      const v = this.world.villagers.get(id);
+      if (v) v.stress += 1;
+    }
     return {
       id: this.newIncidentId(),
       perpetrator,
-      involved: seed.involved.filter((id) => id !== perpetrator),
+      involved,
       description: seed.description,
       damage: 0,
       steps: [],
@@ -426,33 +482,113 @@ export class TermMachine {
     this.world.phase = 'reform';
   }
 
-  /** 結の保留中の改変を適用し、その日の残りセグメントへ復帰 (起)。 */
-  applyReform(): void {
+  /** 結の保留中の改変を適用し、その日の残りセグメントへ復帰 (起)。改変内容を要約で返す。 */
+  applyReform(): ReformSummary | null {
     if (this.world.phase !== 'reform') throw new Error(`applyReform in phase ${this.world.phase}`);
-    if (this.pendingReform) this.reform(this.pendingReform);
+    let summary: ReformSummary | null = null;
+    if (this.pendingReform) {
+      const v = this.world.villagers.get(this.pendingReform.villager);
+      const text = this.reform(this.pendingReform);
+      summary = { villager: this.pendingReform.villager, name: v?.name ?? this.pendingReform.villager, text };
+    }
     this.pendingReform = null;
     this.world.incident = null;
     this.world.trial = null;
     this.world.phase = 'kisho';
+    return summary;
   }
 
-  private reform(reform: Reform): void {
+  /** 改変を適用し「どういじられたか」の要約文を返す。 */
+  private reform(reform: Reform): string {
     const v = this.get(reform.villager);
     if (reform.kind === 'exile') {
       v.alive = false;
-      return;
+      return `${v.name} は村を追放された (${reform.rationale})`;
     }
-    if (reform.persona) {
-      if (reform.persona.traits) v.persona.traits = { ...v.persona.traits, ...reform.persona.traits };
-      if (reform.persona.values) v.persona.values = reform.persona.values;
-      if (reform.persona.speechStyle) v.persona.speechStyle = reform.persona.speechStyle;
+    const changes: string[] = [];
+    if (reform.persona?.traits) {
+      for (const [k, nv] of Object.entries(reform.persona.traits)) {
+        if (typeof nv !== 'number') continue;
+        const ax = k as PersonalityAxis;
+        const ov = v.persona.traits[ax];
+        const arrow = nv > ov ? '↑' : nv < ov ? '↓' : '→';
+        changes.push(`${PERSONALITY_LABELS[ax] ?? ax}${arrow}`);
+      }
+      v.persona.traits = { ...v.persona.traits, ...reform.persona.traits };
+    }
+    if (reform.persona?.values) {
+      v.persona.values = reform.persona.values;
+      changes.push(`信条「${reform.persona.values.join('・') || 'なし'}」`);
+    }
+    if (reform.persona?.speechStyle) {
+      v.persona.speechStyle = reform.persona.speechStyle;
+      changes.push(`口調「${reform.persona.speechStyle}」`);
     }
     if (reform.appearance) {
-      if (reform.appearance.body) v.appearance.body = reform.appearance.body;
+      if (reform.appearance.body) {
+        changes.push(`体→${reform.appearance.body}`);
+        v.appearance.body = reform.appearance.body;
+      }
       if (reform.appearance.descriptors) v.appearance.descriptors = reform.appearance.descriptors;
     }
     if (reform.emotion) v.emotion = { ...v.emotion, ...reform.emotion };
     v.reformCount += 1;
+    return `${v.name} は教育で作り替えられた: ${changes.join(' / ') || '微調整'} (${reform.rationale})`;
+  }
+
+  /** 日末の生活イベント (結婚/出産)。確率は option 既定 0 (= テスト不変)。 */
+  lifeEvents(): LifeEvents {
+    const out: LifeEvents = { marriages: [], births: [] };
+    const alive = aliveVillagers(this.world);
+
+    if (this.rng() < this.marriageChance) {
+      const singles = alive.filter((v) => v.partnerId === null && !v.madman);
+      if (singles.length >= 2) {
+        const a = singles[Math.floor(this.rng() * singles.length)];
+        const rest = a ? singles.filter((x) => x.id !== a.id) : [];
+        const b = rest[Math.floor(this.rng() * rest.length)];
+        if (a && b) {
+          a.partnerId = b.id;
+          b.partnerId = a.id;
+          out.marriages.push({ a: a.id, b: b.id, aName: a.name, bName: b.name });
+        }
+      }
+    }
+
+    if (this.rng() < this.birthChance && alive.length < this.maxPopulation) {
+      const reps = alive.filter(
+        (v) => v.partnerId !== null && (this.world.villagers.get(v.partnerId)?.alive ?? false) && v.id < v.partnerId,
+      );
+      const p1 = reps[Math.floor(this.rng() * reps.length)];
+      const p2 = p1?.partnerId ? this.world.villagers.get(p1.partnerId) : undefined;
+      if (p1 && p2) {
+        const child = this.spawnChild(p1, p2);
+        out.births.push({ childId: child.id, childName: child.name, parents: `${p1.name}と${p2.name}` });
+      }
+    }
+    return out;
+  }
+
+  /** 夫婦から子を 1 体出生 (気質はブレンド)。 */
+  private spawnChild(p1: Villager, p2: Villager): Villager {
+    this.bornCount += 1;
+    const traits: Partial<Record<PersonalityAxis, number>> = {};
+    for (const ax of PERSONALITY_AXES) {
+      traits[ax] = clamp01((p1.persona.traits[ax] + p2.persona.traits[ax]) / 2 + (this.rng() - 0.5) * 0.2);
+    }
+    const child = createVillager({
+      id: `born_${this.bornCount}`,
+      name: `${p1.name}の子${this.bornCount}`,
+      position: {
+        x: Math.floor(this.rng() * this.world.config.gridWidth),
+        y: Math.floor(this.rng() * this.world.config.gridHeight),
+      },
+      species: this.rng() < 0.5 ? p1.species : p2.species,
+      activity: this.rng() < 0.5 ? p1.activity : p2.activity,
+      traits,
+    });
+    this.world.villagers.set(child.id, child);
+    return child;
   }
 
   /** 日を進める。月の日数を超えたら月遷移 (= 実 1 日境界の大きな転換)。 */

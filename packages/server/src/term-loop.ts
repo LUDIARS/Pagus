@@ -100,7 +100,7 @@ export class TermLoop {
         if (r.outcome === 'reconciled') {
           this.h.onLog('kisho', '🕊 和解した — 事件は裁判にならず収まった');
         } else if (this.tm.world.phase === 'ten') {
-          this.h.onLog('ten', '⚖ 審判人「猫守さん」登場');
+          this.h.onLog('ten', '—— 審判の時 ——');
           this.h.onTrialOpen?.(this.tm.world);
         }
         break;
@@ -112,10 +112,12 @@ export class TermLoop {
       case 'ketsu':
         await this.tm.ketsuStep();
         break;
-      case 'reform':
-        this.tm.applyReform();
-        this.h.onLog('kisho', '✦ 改変が適用された');
+      case 'reform': {
+        // どのように「いじられた」かをログに出す。
+        const summary = this.tm.applyReform();
+        this.h.onLog('kisho', summary ? `✦ ${summary.text}` : '✦ 改変が適用された');
         break;
+      }
       case 'advance': {
         // 日末: 世界側 LLM が裁判結末を評価し、徳目評判・性格・出生を反映する。
         const ev = await this.tm.evaluateDay();
@@ -123,6 +125,10 @@ export class TermLoop {
         const r = this.tm.advanceDay();
         const extra = `${r.monthRolled ? ' / 月がかわった' : ''}${r.holiday ? ` (${r.holiday})` : ''}`;
         this.h.onLog('kisho', `日が暮れた${extra}`);
+        // 日末の生活イベント (結婚/出産)。
+        const life = this.tm.lifeEvents();
+        for (const m of life.marriages) this.h.onLog('kisho', `💍 ${m.aName} と ${m.bName} が結ばれた`);
+        for (const b of life.births) this.h.onLog('kisho', `👶 ${b.parents} に ${b.childName} が生まれた`);
         break;
       }
     }
