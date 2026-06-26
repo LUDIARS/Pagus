@@ -2,7 +2,15 @@
 // クライアントからの扇動/沈静化コマンドを受ける。
 
 import { WebSocketServer, WebSocket } from 'ws';
-import { toWire, type World, type ServerMessage, type ClientMessage, type TrialLine, type LlmInfo } from '@pagus/sim';
+import {
+  toWire,
+  type World,
+  type ServerMessage,
+  type ClientMessage,
+  type TrialLine,
+  type LlmInfo,
+  type ChronicleEntry,
+} from '@pagus/sim';
 
 export interface WsHandlers {
   onIncite(): void;
@@ -14,6 +22,7 @@ export class GameWsServer {
   private readonly wss: WebSocketServer;
   private lastSnapshot: string | null = null;
   private llmInfo: LlmInfo | null = null;
+  private chronicle: ChronicleEntry[] = [];
 
   constructor(port: number, private readonly h: WsHandlers) {
     this.wss = new WebSocketServer({ port });
@@ -25,10 +34,19 @@ export class GameWsServer {
     this.llmInfo = info;
   }
 
+  /** 村の歴史を更新し、全クライアントへ配る。 */
+  updateChronicle(entries: ChronicleEntry[]): void {
+    this.chronicle = entries;
+    this.fanout(JSON.stringify({ t: 'chronicle', entries } satisfies ServerMessage));
+  }
+
   private onConnection(ws: WebSocket): void {
-    // 接続直後に最新スナップショット・接続人数・LLM 構成を送る。
+    // 接続直後に最新スナップショット・接続人数・LLM 構成・村の歴史を送る。
     if (this.lastSnapshot) ws.send(this.lastSnapshot);
     if (this.llmInfo) ws.send(JSON.stringify({ t: 'llm', info: this.llmInfo } satisfies ServerMessage));
+    if (this.chronicle.length > 0) {
+      ws.send(JSON.stringify({ t: 'chronicle', entries: this.chronicle } satisfies ServerMessage));
+    }
     this.broadcastPlayers();
     ws.on('close', () => this.broadcastPlayers());
     ws.on('message', (data) => {
