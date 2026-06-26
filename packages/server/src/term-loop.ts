@@ -54,9 +54,9 @@ export class TermLoop {
     this.tm.nudgeCalm();
   }
 
-  /** プレイヤーの裁判投票を加える。 */
-  vote(pick: string): void {
-    this.tm.addUserVote(pick);
+  /** プレイヤーの裁判投票を加える (userId ごとに 1 席、重み合算)。 */
+  vote(pick: string, userId?: string): void {
+    this.tm.addUserVote(pick, userId);
   }
 
   private nextDelay(): number {

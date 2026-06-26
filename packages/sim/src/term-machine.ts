@@ -104,8 +104,8 @@ export class TermMachine {
   private readonly birthChance: number;
   /** 沈静化/扇動が動かす和解バイアス (事件ごとに 0 へリセット)。 */
   private reconcileBias = 0;
-  /** 現ステージのユーザ票 (投票し直しで差し替えるため保持)。 */
-  private userVote: { stage: TrialState['stage']; pick: string } | null = null;
+  /** 接続ユーザごとの現ステージの票 (userId → {stage, pick})。投票し直しで自分の前票を差し替える。 */
+  private userVotes = new Map<string, { stage: TrialState['stage']; pick: string }>();
   /** 出生どうぶつの通し番号 (seed の v_* と衝突しない born_N を振る)。 */
   private bornCount: number;
   /** その日の裁判結末。applyReform が incident/trial を null にする前に ketsuStep で捕捉する。 */
@@ -325,7 +325,7 @@ export class TermMachine {
   }
 
   private openTrial(incident: Incident): TrialState {
-    this.userVote = null;
+    this.userVotes.clear();
     return {
       incidentId: incident.id,
       judge: { kind: 'nekomori' },
@@ -341,16 +341,19 @@ export class TermMachine {
   }
 
   /**
-   * 接続ユーザの通知投票 1 票を現段階に加える。
-   * 同じ段階で投票し直したら前回票を取り消して差し替える。
+   * 接続ユーザの通知投票 1 票を現段階に加える (§4.8)。
+   * 各 userId が 1 席 (重み 1) を持ち、複数ユーザの票は合算される。
+   * 同じユーザが同段階で投票し直したら、自分の前票だけを取り消して差し替える。
+   * userId 省略時は単独ローカル観戦者 ('local') として扱う。
    */
-  addUserVote(pick: string): void {
+  addUserVote(pick: string, userId = 'local'): void {
     const trial = this.world.trial;
     if (!trial || trial.stage === 'decided') return;
 
-    // 同段階の前回ユーザ票を取り消す (投票し直し)。
-    if (this.userVote && this.userVote.stage === trial.stage) {
-      const prev = this.userVote.pick;
+    // 同段階の自分の前票を取り消す (投票し直し)。
+    const prevVote = this.userVotes.get(userId);
+    if (prevVote && prevVote.stage === trial.stage) {
+      const prev = prevVote.pick;
       if (trial.stage === 'foolish') {
         trial.foolishVotes[prev] = Math.max(0, (trial.foolishVotes[prev] ?? 0) - 1);
       } else if (prev === 'kill') {
@@ -358,15 +361,15 @@ export class TermMachine {
       } else if (prev === 'spare') {
         trial.fateVotes.spare = Math.max(0, trial.fateVotes.spare - 1);
       }
-      const i = trial.votes.findIndex((v) => v.voter === 'user' && v.pick === prev);
+      const i = trial.votes.findIndex((v) => v.voter === 'user' && v.userId === userId && v.pick === prev);
       if (i >= 0) trial.votes.splice(i, 1);
     }
 
-    trial.votes.push({ voter: 'user', weight: 1, pick });
+    trial.votes.push({ voter: 'user', weight: 1, pick, userId });
     if (trial.stage === 'foolish') trial.foolishVotes[pick] = (trial.foolishVotes[pick] ?? 0) + 1;
     else if (pick === 'kill') trial.fateVotes.kill += 1;
     else if (pick === 'spare') trial.fateVotes.spare += 1;
-    this.userVote = { stage: trial.stage, pick };
+    this.userVotes.set(userId, { stage: trial.stage, pick });
   }
 
   /** 生存している狂人 (いなければ null)。 */

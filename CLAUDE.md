@@ -27,8 +27,9 @@ LLM 駆動で村人が自律行動し、事件 → 裁判 → 教育(改変) を
 
 - game server: `PAGUS_BRAIN=llm node packages/server/dist/index.js` → WS **4310**。`stub` で決定的観戦。
 - client: `pnpm --filter @pagus/client dev` → **4320** (Memoria 5180 と分離)。WS は同一オリジン `/ws` を 4310 へ proxy (Tunnel 対応)。
-- 主な env: `PAGUS_RECONCILE`(和解0.15) / `PAGUS_SECONDARY`(二次被害0.18) / `PAGUS_STRESS_K`(耐性0.06) / `PAGUS_MARRIAGE`(結婚0.12) / `PAGUS_BIRTH`(出産0.1) / `PAGUS_ENABLE_CODEX` / `PAGUS_ACCEL`(dev加速) / `PAGUS_LOG_STDOUT` / `PAGUS_FRESH`(world.json を無視し新規開始)。
-- 永続化: world スナップショットは `data/runtime/world.json` (どうぶつ状態・評判・暦・進行中の事件/裁判を JSON 保存→再起動で復元、`server/world-store.ts`)。
+- 主な env: `PAGUS_RECONCILE`(和解0.15) / `PAGUS_SECONDARY`(二次被害0.18) / `PAGUS_STRESS_K`(耐性0.06) / `PAGUS_MARRIAGE`(結婚0.12) / `PAGUS_BIRTH`(出産0.1) / `PAGUS_ENABLE_CODEX` / `PAGUS_ACCEL`(dev加速) / `PAGUS_LOG_STDOUT` / `PAGUS_FRESH`(world.json を無視し新規開始) / `PAGUS_PUSH`(WebPush 有効化, 要 VAPID 鍵)。
+- 永続化: world スナップショットは `data/runtime/world.json` (どうぶつ状態・評判・暦・進行中の事件/裁判を JSON 保存→再起動で復元、`server/world-store.ts`)。WebPush 購読は `data/runtime/push-subscriptions.json`。
+- 通知投票 (§4.8): 裁判が開くと接続を閉じた端末へ WebPush。`userId` ごと 1 席の重み合算投票 (WS / HTTP `/api/vote`)。VAPID 鍵は秘密で env から、未設定時は push 無効 (`PAGUS_PUSH=1` で鍵欠落なら即エラー)。`server/{push-service,http-api}.ts` / `client/{push-client,public/sw.js}`。
 - 創発・生活メカニクスと観戦UIの仕様は `spec/SPEC.md` §5.3 / §6 / §8B、実装索引は `spec/feature/emergent-and-life.md`。
 
 ## branch 運用

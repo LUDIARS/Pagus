@@ -6,10 +6,13 @@ import { loadConfig, loadSeed } from './load-data.js';
 import { TermLoop, type LoopBrain } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
 import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND } from './llm/index.js';
+import { createServer } from 'node:http';
 import { SessionLog } from './session-log.js';
 import { TrialNarrator } from './trial-narrator.js';
 import { Chronicle } from './chronicle.js';
 import { WorldStore } from './world-store.js';
+import { PushService } from './push-service.js';
+import { createRequestListener } from './http-api.js';
 
 /** 村の歴史に残す「節目」のログか判定する。 */
 function isMilestone(text: string): boolean {
@@ -116,11 +119,18 @@ function main(): void {
   // 村の歴史 (節目を記録・永続化)。
   const chronicle = new Chronicle();
 
+  // WebPush 通知 (§4.8)。VAPID 未設定なら無効 (PAGUS_PUSH=1 + 鍵で有効化)。
+  const push = new PushService();
+
   let loop: TermLoop;
-  const ws = new GameWsServer(port, {
+  // HTTP API (push 購読 / 通知経由の投票) と WS を同一ポートに相乗りさせる。
+  const httpServer = createServer(
+    createRequestListener({ push, onVote: (pick, userId) => loop.vote(pick, userId) }),
+  );
+  const ws = new GameWsServer(httpServer, {
     onIncite: () => loop.incite(),
     onCalm: () => loop.calm(),
-    onVote: (pick) => loop.vote(pick),
+    onVote: (pick, userId) => loop.vote(pick, userId),
   });
   ws.setLlmInfo(llmInfo);
   ws.updateChronicle(chronicle.recent()); // 既存の歴史を初期配信対象に。
@@ -143,6 +153,13 @@ function main(): void {
     onTrialOpen: (w) => {
       const incidentId = w.incident?.id;
       if (!incidentId) return;
+      // 投票が要る局面 → 接続を閉じている端末へも通知して投票を促す (§4.8)。
+      const desc = w.incident?.description;
+      void push.notifyAll({
+        title: 'Pagus — 審判の時',
+        body: desc ? `「${desc}」の裁判。投票で運命を決めよう` : '裁判がはじまった。投票しよう',
+        url: '/',
+      });
       void narrator
         .linesFor(w)
         .then((lines) => {
@@ -163,8 +180,10 @@ function main(): void {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
+  httpServer.listen(port);
+
   const brainLabel = process.env.PAGUS_BRAIN ?? 'stub';
-  console.log(`[pagus] server ws://localhost:${port} | ${villagers.length} どうぶつ | brain=${brainLabel} | accel x${pace.accel}`);
+  console.log(`[pagus] server ws://localhost:${port} (+HTTP API) | ${villagers.length} どうぶつ | brain=${brainLabel} | accel x${pace.accel}`);
   if (sessionLog.file) console.log(`[pagus] session log → ${sessionLog.file}`);
 }
 
