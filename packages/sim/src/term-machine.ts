@@ -52,6 +52,8 @@ export interface TermMachineOptions {
   marriageChance?: number;
   /** 日末に夫婦から出産イベントが起きる確率 (0..1)。既定 0。 */
   birthChance?: number;
+  /** スナップショット復元時の出生通し番号 (born_N が衝突しないよう引き継ぐ)。既定 0。 */
+  bornCount?: number;
 }
 
 /** 日末の生活イベント (結婚/出産)。server がログ表示する。 */
@@ -105,7 +107,7 @@ export class TermMachine {
   /** 現ステージのユーザ票 (投票し直しで差し替えるため保持)。 */
   private userVote: { stage: TrialState['stage']; pick: string } | null = null;
   /** 出生どうぶつの通し番号 (seed の v_* と衝突しない born_N を振る)。 */
-  private bornCount = 0;
+  private bornCount: number;
   /** その日の裁判結末。applyReform が incident/trial を null にする前に ketsuStep で捕捉する。 */
   private dayOutcome: { incident: Incident; verdict: Verdict; defendantId: VillagerId } | null = null;
 
@@ -124,6 +126,12 @@ export class TermMachine {
     this.stressFizzleK = opts.stressFizzleK ?? 0;
     this.marriageChance = opts.marriageChance ?? 0;
     this.birthChance = opts.birthChance ?? 0;
+    this.bornCount = opts.bornCount ?? 0;
+  }
+
+  /** スナップショット保存用: 出生通し番号 (born_N が再起動後も衝突しないよう保持する)。 */
+  getBornCount(): number {
+    return this.bornCount;
   }
 
   /** プレイヤーの沈静化: この事件が和解しやすくなる。 */

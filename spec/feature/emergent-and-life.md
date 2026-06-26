@@ -42,6 +42,7 @@
 | `PAGUS_MARRIAGE` | 0.12 | 日末の結婚確率 |
 | `PAGUS_BIRTH` | 0.1 | 日末の出産確率 |
 | `PAGUS_WS_PORT` | 4310 | game server WS ポート |
+| `PAGUS_FRESH` | (off) | `1` で `data/runtime/world.json` を無視し新規開始 |
 | `PAGUS_ACCEL` / `PAGUS_MIN_MS` / `PAGUS_INCIDENT_MS` / `PAGUS_REPS` | — | dev のペース/負荷調整 |
 | `PAGUS_LOG_STDOUT` / `PAGUS_LOG_FILE` / `PAGUS_LOG_DIR` | on | セッションログ出力 |
 
@@ -52,5 +53,4 @@ client は Vite 4320 (Memoria 5180 と分離)、WS は同一オリジン `/ws` �
 - `logs/pagus-*.jsonl` — セッションログ (節目+スナップショット要約)
 - `data/runtime/denunciations.json` — 糾弾レパートリー (成長)
 - `data/runtime/chronicle.json` — 村の歴史 (上限500件)
-
-> world 全体 (どうぶつ状態) のスナップショット保存・復元は未実装 (SPEC §11 / Memoria task)。
+- `data/runtime/world.json` — **world スナップショット** (どうぶつ状態・評判・暦・進行中の事件/裁判)。起動時に復元、tick で間引き保存 + 終了時に確実に書き出し。`PAGUS_FRESH=1` で無視して新規開始。実装 `server/world-store.ts` (`toWire`/`fromWire`)。
