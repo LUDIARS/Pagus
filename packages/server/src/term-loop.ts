@@ -125,6 +125,11 @@ export class TermLoop {
         const r = this.tm.advanceDay();
         const extra = `${r.monthRolled ? ' / 月がかわった' : ''}${r.holiday ? ` (${r.holiday})` : ''}`;
         this.h.onLog('kisho', `日が暮れた${extra}`);
+        // 祝日にあたる日は (AI) が祝祭イベントを発火する (§4.7)。
+        if (r.holiday) {
+          const hev = await this.tm.fireHolidayEvent(r.holiday);
+          if (hev) this.h.onLog('kisho', `📅 ${r.holiday}: ${hev.narrative}`);
+        }
         // 日末の生活イベント (結婚/出産)。
         const life = this.tm.lifeEvents();
         for (const m of life.marriages) this.h.onLog('kisho', `💍 ${m.aName} と ${m.bName} が結ばれた`);

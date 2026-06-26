@@ -25,6 +25,26 @@ export interface DayEvaluation {
   narrative: string;
 }
 
+/** 祝日にあたる日の文脈。世界側 LLM が祝祭の出来事を作る。 */
+export interface HolidayContext {
+  /** 祝日名 (例: 元日, 春分の日)。 */
+  holiday: string;
+  calendar: Calendar;
+  reputation: VirtueVector;
+  /** 祝祭に参加する生存どうぶつ (名前を彩りに使う)。 */
+  villagers: Villager[];
+}
+
+/** 祝日イベントの結果。 */
+export interface HolidayEvent {
+  /** 祝日にまつわる出来事 (ログ/村の歴史に出す日本語)。 */
+  narrative: string;
+  /** 祝祭が村の評判に与える小さな変化 (適用後 0..1 にクランプ)。 */
+  reputationDelta: Partial<VirtueVector>;
+}
+
 export interface WorldBrain {
   evaluateDay(ctx: WorldEvalContext): Promise<DayEvaluation>;
+  /** 祝日にあたる日のイベントを生成する (§4.7)。 */
+  holidayEvent(ctx: HolidayContext): Promise<HolidayEvent>;
 }

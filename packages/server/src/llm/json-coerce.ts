@@ -12,6 +12,7 @@ import type {
   Reform,
   VillagerId,
   DayEvaluation,
+  HolidayEvent,
   PersonalityAxis,
   Personality,
   Virtue,
@@ -188,6 +189,14 @@ function coerceVirtueDelta(u: unknown): Partial<VirtueVector> {
     }
   }
   return out;
+}
+
+export function coerceHolidayEvent(u: unknown): HolidayEvent {
+  const o = asObj(u);
+  return {
+    narrative: asString(o.narrative, 'narrative'),
+    reputationDelta: coerceVirtueDelta(o.reputationDelta),
+  };
 }
 
 export function coerceDayEvaluation(u: unknown): DayEvaluation {

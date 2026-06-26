@@ -15,6 +15,7 @@
 | 改変ログ | `applyReform` が「どういじられたか」(気質↑↓/体/信条/口調 or 追放理由) を `ReformSummary` で返す | `sim/term-machine.ts` (`reform`)、`server/term-loop.ts` |
 | Haiku 糾弾 | 裁判開始時、糾弾者ごとに65%生成(保存)/35%再利用。プールは成長 | `server/{trial-narrator,repertoire}.ts`、`server/index.ts` (onTrialOpen) |
 | 村の歴史 | 節目を日付つきで永続化、接続時+発生毎に配信 | `server/chronicle.ts`、`server/index.ts` (`isMilestone`) |
+| 祝日イベント | 春分/秋分を年から天文計算 (`vernalEquinoxDay`/`autumnalEquinoxDay`)。祝日にあたる日に (AI) が祝祭を実発火 (`📅`、評判を活気寄りに微調整) | `sim/calendar.ts` (`holidayName`)、`sim/term-machine.ts` (`fireHolidayEvent`)、`sim/world-brain.ts` (`holidayEvent`)、`server/term-loop.ts` |
 | プレイヤー裁判介入 | 中央「有罪/無罪」=殺活投票+扇動/沈静化+罵倒/擁護フキダシ。投票し直し可 | `sim/term-machine.ts` (`addUserVote`)、`client/main.ts` |
 
 ## 観戦UI (client / PixiJS)

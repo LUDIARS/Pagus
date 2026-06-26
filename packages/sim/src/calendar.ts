@@ -22,23 +22,38 @@ export function daysInMonth(year: number, month: number): number {
   return DAYS[month - 1] as number;
 }
 
-/** 日本の祝日 (固定日のみ; 春分/秋分は近似)。確定形は spec/data/holidays.md。 */
-export function holidayName(month: number, day: number): string | null {
+// 春分/秋分の日は天文計算 (NASA 由来の近似式)。1900-2099 の範囲で実用上正確。
+// floor(基準 + 0.242194×(年-1980) − floor((年-1980)/4))。
+
+/** その年の春分の日 (3 月)。 */
+export function vernalEquinoxDay(year: number): number {
+  return Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+}
+
+/** その年の秋分の日 (9 月)。 */
+export function autumnalEquinoxDay(year: number): number {
+  return Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+}
+
+/** 日本の祝日。固定日テーブル + 春分/秋分は年から天文計算で算出。 */
+export function holidayName(year: number, month: number, day: number): string | null {
   const fixed: Record<string, string> = {
     '1-1': '元日',
     '2-11': '建国記念の日',
     '2-23': '天皇誕生日',
-    '3-20': '春分の日(近似)',
     '4-29': '昭和の日',
     '5-3': '憲法記念日',
     '5-4': 'みどりの日',
     '5-5': 'こどもの日',
     '8-11': '山の日',
-    '9-23': '秋分の日(近似)',
     '11-3': '文化の日',
     '11-23': '勤労感謝の日',
   };
-  return fixed[`${month}-${day}`] ?? null;
+  const f = fixed[`${month}-${day}`];
+  if (f) return f;
+  if (month === 3 && day === vernalEquinoxDay(year)) return '春分の日';
+  if (month === 9 && day === autumnalEquinoxDay(year)) return '秋分の日';
+  return null;
 }
 
 /** セグメントを時間帯に写す。例 (segmentsPerDay=12): 0-1夜 2-5朝 6-9昼 10-11夕。 */

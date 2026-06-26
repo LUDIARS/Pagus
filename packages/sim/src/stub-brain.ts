@@ -2,7 +2,7 @@
 // LLM を一切呼ばず、固定ロジックで起承転結を一巡させられる。
 
 import type { Brain, ActionContext, ActionDecision, EmotionContext, IncidentContext, IncidentStep, FoolishVoteContext, FateVoteContext, EducationContext } from './brain.js';
-import type { WorldBrain, WorldEvalContext, DayEvaluation } from './world-brain.js';
+import type { WorldBrain, WorldEvalContext, DayEvaluation, HolidayContext, HolidayEvent } from './world-brain.js';
 import type { EmotionState, Reform, VillagerId } from './types/index.js';
 
 export interface StubBrainOptions {
@@ -121,6 +121,15 @@ export class StubWorldBrain implements WorldBrain {
       villagerDeltas: [{ villager: ctx.defendant.id, personalityDelta: { aggression: -0.2, kindness: 0.2 } }],
       spawn: 1,
       narrative: `${ctx.defendant.name} は教育され、村に優しさが芽生えた`,
+    };
+  }
+
+  async holidayEvent(ctx: HolidayContext): Promise<HolidayEvent> {
+    // 祝祭は村に活気と善良さをわずかに灯す (決定的)。
+    const cheer = ctx.villagers[0]?.name ?? '村のみんな';
+    return {
+      reputationDelta: { vitality: 0.06, benevolence: 0.03 },
+      narrative: `${ctx.holiday}を迎え、${cheer}たちが集って村は賑わった`,
     };
   }
 }
