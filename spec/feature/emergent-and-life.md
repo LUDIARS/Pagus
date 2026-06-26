@@ -37,7 +37,8 @@
 | env | 既定 | 効果 |
 |---|---|---|
 | `PAGUS_BRAIN` | `stub` | `llm` で実LLM駆動 |
-| `PAGUS_ENABLE_CODEX` | (off) | `1` で codex(gpt-5.5) を cast/strong に合流 |
+| `PAGUS_DISABLE_CODEX` | (off) | `1` で codex(gpt-5.5) を既定キャストから外す (既定は合流) |
+| `PAGUS_CLI_RETRIES` | 2 | CLI (claude/codex) の一過性失敗のリトライ回数 (0 で無効) |
 | `PAGUS_RECONCILE` | 0.15 | 和解の基礎確率 |
 | `PAGUS_SECONDARY` | 0.18 | 二次被害の確率 |
 | `PAGUS_STRESS_K` | 0.06 | ストレス耐性の効き |

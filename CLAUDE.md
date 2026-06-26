@@ -20,14 +20,14 @@ LLM 駆動で村人が自律行動し、事件 → 裁判 → 教育(改変) を
 - **環境 = プログラム / 感情 = AI / 情報 = 蓄積** の三分。型レベルで分離 (`spec/SPEC.md`)。
 - **sim は LLM/描画を知らない**。`Brain` interface 越しにのみ AI を呼ぶ → stub で決定的にテスト。
 - LLM は **API 不使用 = CLI** (LUDIARS 規約)。claude=`claude -p`、GPT-5.5=`codex exec`。tier は `@ludiars/llm-gateway` の `pickTier`: tick/感情 = cheap(Haiku)、承GANs/裁判/教育 = strong(Sonnet/Opus)。
-  - **codex(gpt-5.5) は一過性 `exit 1` が安定するまで既定オフ**。`PAGUS_ENABLE_CODEX=1` で合流。
+  - **codex(gpt-5.5) は既定キャストに合流済**。一過性 `exit 1` (codex Stop hook 由来等) は CLI レベルのリトライ (`PAGUS_CLI_RETRIES` 既定2) で吸収。`PAGUS_DISABLE_CODEX=1` で外せる。
 - 設定不備の**無言フォールバック禁止** = 即エラー (RULE_CODE §7.1)。
 
 ## 起動 / 観戦 (実装済)
 
 - game server: `PAGUS_BRAIN=llm node packages/server/dist/index.js` → WS **4310**。`stub` で決定的観戦。
 - client: `pnpm --filter @pagus/client dev` → **4320** (Memoria 5180 と分離)。WS は同一オリジン `/ws` を 4310 へ proxy (Tunnel 対応)。
-- 主な env: `PAGUS_RECONCILE`(和解0.15) / `PAGUS_SECONDARY`(二次被害0.18) / `PAGUS_STRESS_K`(耐性0.06) / `PAGUS_MARRIAGE`(結婚0.12) / `PAGUS_BIRTH`(出産0.1) / `PAGUS_ENABLE_CODEX` / `PAGUS_ACCEL`(dev加速) / `PAGUS_LOG_STDOUT` / `PAGUS_FRESH`(world.json を無視し新規開始) / `PAGUS_PUSH`(WebPush 有効化, 要 VAPID 鍵)。
+- 主な env: `PAGUS_RECONCILE`(和解0.15) / `PAGUS_SECONDARY`(二次被害0.18) / `PAGUS_STRESS_K`(耐性0.06) / `PAGUS_MARRIAGE`(結婚0.12) / `PAGUS_BIRTH`(出産0.1) / `PAGUS_DISABLE_CODEX`(codex を外す) / `PAGUS_CLI_RETRIES`(CLI リトライ既定2) / `PAGUS_ACCEL`(dev加速) / `PAGUS_LOG_STDOUT` / `PAGUS_FRESH`(world.json を無視し新規開始) / `PAGUS_PUSH`(WebPush 有効化, 要 VAPID 鍵)。
 - 永続化: world スナップショットは `data/runtime/world.json` (どうぶつ状態・評判・暦・進行中の事件/裁判を JSON 保存→再起動で復元、`server/world-store.ts`)。WebPush 購読は `data/runtime/push-subscriptions.json`。
 - 通知投票 (§4.8): 裁判が開くと接続を閉じた端末へ WebPush。`userId` ごと 1 席の重み合算投票 (WS / HTTP `/api/vote`)。VAPID 鍵は秘密で env から、未設定時は push 無効 (`PAGUS_PUSH=1` で鍵欠落なら即エラー)。`server/{push-service,http-api}.ts` / `client/{push-client,public/sw.js}`。
 - 創発・生活メカニクスと観戦UIの仕様は `spec/SPEC.md` §5.3 / §6 / §8B、実装索引は `spec/feature/emergent-and-life.md`。
