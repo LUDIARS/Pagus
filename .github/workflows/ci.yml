@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# @ludiars/llm-gateway を GitHub Packages から取得するため packages: read が要る。
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # packageManager (pnpm@9.x) を package.json から読む。
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # スコープ @ludiars は npm.pkg.github.com 解決 (.npmrc 済)。読み取りトークンを付与。
+      - name: Auth to GitHub Packages
+        run: echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build (sim/server tsc + client tsc/vite)
+        run: pnpm -r build
+
+      - name: Test (sim vitest)
+        run: pnpm --filter @pagus/sim test
