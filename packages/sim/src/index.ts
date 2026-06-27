@@ -7,6 +7,7 @@ export * from './events.js';
 export * from './calendar.js';
 export * from './world.js';
 export * from './villager-factory.js';
+export * from './daily-engine.js';
 export * from './event-director.js';
 export * from './term-machine.js';
 export * from './stub-brain.js';

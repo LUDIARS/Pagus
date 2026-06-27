@@ -1,7 +1,7 @@
 // WS 配線契約。World は Map を持ち JSON 化できないので、villagers を配列にした
 // WireWorld を介して server→client へ送る。client もこの型だけ見れば描画できる。
 
-import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState } from './types/index.js';
+import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 
 export interface WireWorld {
@@ -13,6 +13,8 @@ export interface WireWorld {
   villagers: Villager[];
   incident: Incident | null;
   trial: TrialState | null;
+  scheduledIncident: ScheduledIncident | null;
+  villageRules: VillageRule[];
 }
 
 export function toWire(world: World): WireWorld {
@@ -25,6 +27,8 @@ export function toWire(world: World): WireWorld {
     villagers: [...world.villagers.values()],
     incident: world.incident,
     trial: world.trial,
+    scheduledIncident: world.scheduledIncident,
+    villageRules: world.villageRules,
   };
 }
 
@@ -39,11 +43,13 @@ export function fromWire(wire: WireWorld): World {
     villagers: new Map(wire.villagers.map((v) => [v.id, v])),
     incident: wire.incident,
     trial: wire.trial,
+    scheduledIncident: wire.scheduledIncident ?? null,
+    villageRules: wire.villageRules ?? [],
   };
 }
 
 /** 現スナップショット形式のバージョン。型が壊れる変更時に増やし、古い snapshot を破棄する。 */
-export const WORLD_SNAPSHOT_VERSION = 1;
+export const WORLD_SNAPSHOT_VERSION = 2;
 
 /**
  * 永続化する world スナップショット。WireWorld (JSON 化可能な world) に加え、

@@ -1,7 +1,7 @@
 // TermMachine をフェーズに応じて 1 ステップずつ駆動するループ。
 // 時間制御はここが所有する: 起のセグメントはカレンダー導出ペース、事件の局面は速めに刻む。
 
-import type { TermMachine, Brain, World } from '@pagus/sim';
+import type { TermMachine, World } from '@pagus/sim';
 import { pacedSegmentMs, type PaceOptions } from './clock.js';
 
 export interface LoopHandlers {
@@ -11,19 +11,12 @@ export interface LoopHandlers {
   onTrialOpen?(world: World): void;
 }
 
-/**
- * TermLoop が要求する Brain。incite (扇動) のため forceNext を持つ。
- * StubBrain (固定ロジック) と LlmBrain (扇動フラグ) の両方が構造的に満たす。
- */
-export type LoopBrain = Brain & { forceNext(): void };
-
 export class TermLoop {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
 
   constructor(
     private readonly tm: TermMachine,
-    private readonly brain: LoopBrain,
     private readonly pace: PaceOptions,
     private readonly incidentStepMs: number,
     private readonly h: LoopHandlers,
@@ -43,7 +36,7 @@ export class TermLoop {
 
   /** プレイヤーの扇動: 次に起きている どうぶつ が必ず事件を起こす + 和解しにくくする。 */
   incite(): void {
-    this.brain.forceNext();
+    this.tm.forceNext();
     this.tm.nudgeIncite();
   }
 

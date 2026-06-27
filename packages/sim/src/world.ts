@@ -1,4 +1,4 @@
-import type { World, WorldConfig, Villager, GridPos, Calendar } from './types/index.js';
+import type { World, WorldConfig, Villager, GridPos, Calendar, VillageRule } from './types/index.js';
 import type { EnvironmentView } from './brain.js';
 import { season, daysInMonth, timeOfDayForSegment, isAwake } from './calendar.js';
 import { makeVirtueVector } from './virtue.js';
@@ -36,6 +36,7 @@ export function createWorld(
   villagers: Villager[],
   config: WorldConfig = DEFAULT_CONFIG,
   calendar: CalendarInit = { year: 2026, month: 1 },
+  villageRules: VillageRule[] = [],
 ): World {
   return {
     config,
@@ -46,7 +47,14 @@ export function createWorld(
     villagers: new Map(villagers.map((v) => [v.id, v])),
     incident: null,
     trial: null,
+    scheduledIncident: null,
+    villageRules,
   };
+}
+
+/** どうぶつのイベント由来パラメータ (§12.6) を加算する。日常エンジンの発火条件に使う。 */
+export function bumpEventParam(villager: Villager, tag: string, amount = 1): void {
+  villager.eventParams[tag] = (villager.eventParams[tag] ?? 0) + amount;
 }
 
 export function aliveVillagers(world: World): Villager[] {

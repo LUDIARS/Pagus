@@ -1,4 +1,4 @@
-import type { Villager, VillagerId, GridPos, ActivityPattern } from './types/index.js';
+import type { Villager, VillagerId, GridPos, ActivityPattern, VillagerOrigin } from './types/index.js';
 import { makePersonality, type PersonalityAxis } from './personality.js';
 
 export interface VillagerSeed {
@@ -12,6 +12,8 @@ export interface VillagerSeed {
   speechStyle?: string;
   body?: string;
   madman?: boolean;
+  /** 出自 (既定 'seed')。出生は 'born'、事件用キャラは 'incident'。 */
+  origin?: VillagerOrigin;
 }
 
 /** シード or テスト用に、既定値で埋めた どうぶつ を作る。 */
@@ -35,5 +37,7 @@ export function createVillager(seed: VillagerSeed): Villager {
     madman: seed.madman ?? false,
     stress: 0,
     partnerId: null,
+    origin: seed.origin ?? 'seed',
+    eventParams: {},
   };
 }

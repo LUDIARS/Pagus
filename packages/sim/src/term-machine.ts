@@ -4,7 +4,8 @@
 
 import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern } from './types/index.js';
 import type { Brain, ActionDecision } from './brain.js';
-import { aliveVillagers, awakeVillagers, environmentView, clampPos } from './world.js';
+import { aliveVillagers, awakeVillagers, environmentView, clampPos, bumpEventParam } from './world.js';
+import { DailyEngine, REACTION_EXPOSURE, type DailyEngineOptions } from './daily-engine.js';
 import { season, daysInMonth, holidayName } from './calendar.js';
 import { groupByDominant, dominantAxis, PERSONALITY_AXES, PERSONALITY_LABELS, type PersonalityAxis } from './personality.js';
 import { personalityFromVirtue, VIRTUES } from './virtue.js';
@@ -32,6 +33,10 @@ const SPAWN_ACTIVITIES: readonly ActivityPattern[] = ['diurnal', 'nocturnal', 'c
 export interface TermMachineOptions {
   /** 起のイベント差配 (省略時は全 awake どうぶつの自由行動)。 */
   director?: EventDirector;
+  /** 日常行動エンジン (LLM 非依存)。省略時は内部で生成する (§12.2)。 */
+  dailyEngine?: DailyEngine;
+  /** 日常エンジンの事件化閾値 (dailyEngine 未指定時に使う)。 */
+  dailyTriggerAfter?: number;
   newIncidentId?: IdGen;
   /** 世界側 LLM。日末評価 (徳目評判・性格・出生) を司る。省略時は日末評価を行わない。 */
   worldBrain?: WorldBrain;
@@ -93,6 +98,8 @@ export interface AdvanceDayResult {
 export class TermMachine {
   private pendingReform: Reform | null = null;
   private readonly director: EventDirector | null;
+  /** 日常行動エンジン (LLM 非依存)。起の行動はここが決める (§12.2)。 */
+  private readonly daily: DailyEngine;
   private readonly newIncidentId: IdGen;
   private readonly worldBrain: WorldBrain | null;
   private readonly rng: () => number;
@@ -117,6 +124,10 @@ export class TermMachine {
     opts: TermMachineOptions = {},
   ) {
     this.director = opts.director ?? null;
+    const dailyOpts: DailyEngineOptions = {};
+    if (opts.rng) dailyOpts.rng = opts.rng;
+    if (opts.dailyTriggerAfter !== undefined) dailyOpts.triggerAfter = opts.dailyTriggerAfter;
+    this.daily = opts.dailyEngine ?? new DailyEngine(dailyOpts);
     this.newIncidentId = opts.newIncidentId ?? counterIdGen('inc');
     this.worldBrain = opts.worldBrain ?? null;
     this.rng = opts.rng ?? Math.random;
@@ -144,6 +155,11 @@ export class TermMachine {
     this.reconcileBias = Math.max(-0.5, this.reconcileBias - 0.12);
   }
 
+  /** プレイヤーの扇動: 次の自由行動で事件化を促す (§12.4、日常エンジンへ委譲)。 */
+  forceNext(): void {
+    this.daily.forceNext();
+  }
+
   /** その日 (ターム) を開始する。idle → 起。 */
   startDay(): void {
     this.world.phase = 'kisho';
@@ -166,22 +182,15 @@ export class TermMachine {
       for (const directive of this.director.planSegment(this.world, remaining)) {
         const actor = this.world.villagers.get(directive.actor);
         if (!actor || !actor.alive) continue;
-        const decision = await this.brain.decideAction({
-          villager: actor,
-          environment: environmentView(this.world, actor),
-          directive,
-        });
+        // 日常エンジン (LLM 非依存) が行動を決める (§12.2)。
+        const decision = this.daily.decide(actor, environmentView(this.world, actor), directive);
         if (this.applyDecision(actor, decision, actions)) return { actions, incidentStarted: true };
       }
       return { actions, incidentStarted: false };
     }
 
     for (const villager of awakeVillagers(this.world)) {
-      const decision = await this.brain.decideAction({
-        villager,
-        environment: environmentView(this.world, villager),
-        directive: null,
-      });
+      const decision = this.daily.decide(villager, environmentView(this.world, villager), null);
       if (this.applyDecision(villager, decision, actions)) return { actions, incidentStarted: true };
     }
     return { actions, incidentStarted: false };
@@ -247,10 +256,14 @@ export class TermMachine {
   ): Incident {
     this.reconcileBias = 0; // 事件ごとに和解バイアスをリセット。
     const involved = seed.involved.filter((id) => id !== perpetrator);
-    // 事件をくぐった者はストレス耐性が上がる (次から些細な嫌がらせに動じにくい)。
+    // 事件をくぐった者はストレス耐性が上がり (些細な嫌がらせに動じにくい)、
+    // イベント由来パラメータ (§12.6) が溜まって以後アルゴリズムイベントを起こしやすくなる。
     for (const id of [perpetrator, ...involved]) {
       const v = this.world.villagers.get(id);
-      if (v) v.stress += 1;
+      if (v) {
+        v.stress += 1;
+        bumpEventParam(v, REACTION_EXPOSURE, 1);
+      }
     }
     return {
       id: this.newIncidentId(),
@@ -597,6 +610,7 @@ export class TermMachine {
       species: this.rng() < 0.5 ? p1.species : p2.species,
       activity: this.rng() < 0.5 ? p1.activity : p2.activity,
       traits,
+      origin: 'born',
     });
     this.world.villagers.set(child.id, child);
     return child;
@@ -725,6 +739,7 @@ export class TermMachine {
         species,
         activity,
         traits,
+        origin: 'born',
       });
       this.world.villagers.set(villager.id, villager);
     }

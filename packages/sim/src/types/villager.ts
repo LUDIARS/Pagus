@@ -48,6 +48,9 @@ export interface Appearance {
   descriptors: string[];
 }
 
+/** どうぶつの出自。事件用キャラ (incident) は通常住民と区別する (§12.3)。 */
+export type VillagerOrigin = 'seed' | 'born' | 'incident';
+
 export interface Villager {
   id: VillagerId;
   name: string;
@@ -71,4 +74,11 @@ export interface Villager {
   stress: number;
   /** 配偶者 (結婚イベントで設定)。未婚は null。 */
   partnerId: VillagerId | null;
+  /** 出自 (種/出生/事件用キャラ)。既定 'seed'。 */
+  origin: VillagerOrigin;
+  /**
+   * イベント由来パラメータ (§12.6)。事件種別ごとに反応値を溜める (例: 'murder' → 殺人を見た反応)。
+   * 日常エンジン (BT) のアルゴリズムイベント発火条件に使い、人間が定期レビューで消す。
+   */
+  eventParams: Record<string, number>;
 }
