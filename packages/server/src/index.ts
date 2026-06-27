@@ -1,10 +1,11 @@
 // Pagus server エントリ。data からワールドを起こし、TermLoop と WS を配線する。
 // 思考は PAGUS_BRAIN で切替: 'stub'(既定/決定的) | 'llm'(実 LLM = claude/codex CLI)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, type Brain, type WorldBrain, type LlmInfo } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
 import { TermLoop } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
+import { PlayerState } from './player-state.js';
 import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND } from './llm/index.js';
 import { createServer } from 'node:http';
 import { SessionLog } from './session-log.js';
@@ -125,14 +126,77 @@ function main(): void {
   // WebPush 通知 (§4.8)。VAPID 未設定なら無効 (PAGUS_PUSH=1 + 鍵で有効化)。
   const push = new PushService();
 
+  // プレイヤーのカルマ/善性 (userId ごと, §4.4)。1 秒間隔で accrue する。
+  const ps = new PlayerState();
+  const knownUsers = new Set<string>();
+  // 人間の行動記録のリングバッファ (§8, 上限 200)。
+  const PLAYER_ACTIONS_CAP = 200;
+  const playerActions: PlayerActionEntry[] = [];
+
   let loop: TermLoop;
+  let ws: GameWsServer;
+
+  /** その userId の現状態を本人の全接続へ push。 */
+  const pushState = (userId: string): void => {
+    ws.sendPlayerState(userId, ps.snapshot(userId, Date.now()));
+  };
+  /** 人間の行動を記録し全クライアントへ配る (target はどうぶつ名)。 */
+  const recordAction = (userId: string, type: PlayerActionEntry['type'], targetId: string): void => {
+    const cal = tm.world.calendar;
+    const name = tm.world.villagers.get(targetId)?.name ?? targetId;
+    playerActions.push({ date: `${cal.month}月${cal.dayOfMonth}日`, userId, type, target: name });
+    if (playerActions.length > PLAYER_ACTIONS_CAP) playerActions.shift();
+    ws.broadcastPlayerActions(playerActions);
+  };
+
   // HTTP API (push 購読 / 通知経由の投票) と WS を同一ポートに相乗りさせる。
   const httpServer = createServer(
     createRequestListener({ push, onVote: (pick, userId) => loop.vote(pick, userId) }),
   );
-  const ws = new GameWsServer(httpServer, {
-    onIncite: () => loop.incite(),
-    onCalm: () => loop.calm(),
+  ws = new GameWsServer(httpServer, {
+    onHello: (userId) => {
+      knownUsers.add(userId);
+      pushState(userId);
+    },
+    onIncite: (targetId, rumorAboutId, userId) => {
+      knownUsers.add(userId);
+      if (!ps.spend(userId, ps.inciteCostValue)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      loop.inciteTarget(targetId, rumorAboutId);
+      recordAction(userId, 'incite', targetId);
+      pushState(userId);
+    },
+    onSanction: (targetId, userId) => {
+      knownUsers.add(userId);
+      if (tm.world.incident || tm.world.trial) {
+        ws.sendRejected(userId, 'いま別の裁判が進行中');
+        return;
+      }
+      if (!ps.spend(userId, ps.sanctionCost(userId))) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      if (loop.sanction(targetId)) {
+        const cal = tm.world.calendar;
+        const name = tm.world.villagers.get(targetId)?.name ?? targetId;
+        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `⚖ 制裁: ${name} がつるし上げられた`);
+        ws.updateChronicle(chronicle.recent());
+      }
+      recordAction(userId, 'sanction', targetId);
+      pushState(userId);
+    },
+    onCheer: (targetId, userId) => {
+      knownUsers.add(userId);
+      if (!ps.cheer(userId, Date.now())) {
+        ws.sendRejected(userId, '応援はインターバル中');
+        return;
+      }
+      loop.cheer(targetId);
+      recordAction(userId, 'cheer', targetId);
+      pushState(userId);
+    },
     onVote: (pick, userId) => loop.vote(pick, userId),
   });
   ws.setLlmInfo(llmInfo);
@@ -173,8 +237,17 @@ function main(): void {
   });
   loop.start();
 
+  // カルマを 1 秒ごとに自動加算し、数秒おきに接続中ユーザへ状態を間引き push する (§4.4)。
+  let stateTicks = 0;
+  const stateTimer = setInterval(() => {
+    ps.accrue(Date.now());
+    stateTicks += 1;
+    if (stateTicks % 3 === 0) for (const uid of knownUsers) pushState(uid);
+  }, 1000);
+
   // Ctrl-C でループを止めログを flush してから抜ける。
   const shutdown = (): void => {
+    clearInterval(stateTimer);
     loop.stop();
     store.save(tm.world, tm.getBornCount(), tm.getIncidentCount()); // 終了時は確実に最新を書き出す
     sessionLog.close();

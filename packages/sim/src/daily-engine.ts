@@ -64,17 +64,24 @@ export class DailyEngine {
   private readonly triggerAfter: number;
   /** 自由行動の通算回数 (事件化判定の基準)。 */
   private actionCount = 0;
-  /** プレイヤーの扇動: 次に周囲がいる自由行動で必ず事件化する。 */
+  /** プレイヤーの扇動: 次に周囲がいる自由行動で必ず事件化する (対象不問)。 */
   private forced = false;
+  /** プレイヤーの対象指定扇動: この id の自由行動で (周囲がいれば) 必ず事件化する (§4.2)。 */
+  private forcedTargetId: string | null = null;
 
   constructor(opts: DailyEngineOptions = {}) {
     this.rng = opts.rng ?? Math.random;
     this.triggerAfter = opts.triggerAfter ?? 6;
   }
 
-  /** プレイヤーの扇動 (§12.4)。次の自由行動で事件化を促す。 */
+  /** プレイヤーの扇動 (§12.4)。次の自由行動で事件化を促す (対象不問)。 */
   forceNext(): void {
     this.forced = true;
+  }
+
+  /** プレイヤーの対象指定扇動 (§4.2)。指定 id の次の自由行動で事件化を促す。 */
+  forceFor(id: string): void {
+    this.forcedTargetId = id;
   }
 
   /** 起の 1 行動を決める。directive があれば差配を narration、無ければ自由行動。 */
@@ -91,8 +98,13 @@ export class DailyEngine {
     // イベント由来パラメータ (殺人を見た等) が高い個体ほど閾値が下がり、事件を起こしやすい。
     const exposure = villager.eventParams[REACTION_EXPOSURE] ?? 0;
     const threshold = Math.max(1, this.triggerAfter - exposure);
-    const trigger = hasNeighbor && (this.forced || this.actionCount >= threshold);
-    if (trigger) this.forced = false;
+    // 対象指定扇動: この個体が指名されていれば即事件化を促す。
+    const targeted = this.forcedTargetId === villager.id;
+    const trigger = hasNeighbor && (this.forced || targeted || this.actionCount >= threshold);
+    if (trigger) {
+      this.forced = false;
+      if (targeted) this.forcedTargetId = null;
+    }
     return {
       move,
       action: `${villager.name} は ${env.place} をうろついた`,

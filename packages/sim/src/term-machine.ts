@@ -2,7 +2,7 @@
 // 1 日 = 1 ターム = 12 セグメント。時間制御 (segmentRealMs のペース) は server が所有し、
 // 本クラスは純粋な遷移ロジックを提供する。
 
-import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign } from './types/index.js';
+import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign, InfoItem } from './types/index.js';
 import type { Brain, ActionDecision } from './brain.js';
 import { aliveVillagers, awakeVillagers, environmentView, clampPos, bumpEventParam } from './world.js';
 import { DailyEngine, REACTION_EXPOSURE, type DailyEngineOptions } from './daily-engine.js';
@@ -46,7 +46,7 @@ export interface TermMachineOptions {
   maxPopulation?: number;
   /**
    * 事件が裁判に至らず「和解」する基礎確率 (0..1, 1 ステップごとに判定)。既定 0 (無効)。
-   * 沈静化 (nudgeCalm) で上がり、扇動 (nudgeIncite) で下がる。
+   * 住民は放置すると自然に和解へ向かう (沈静化操作は §4.1 で撤去)。扇動 (nudgeIncite) で下がる。
    */
   reconcileChance?: number;
   /** 事件中に第三者を巻き込む「二次被害」の確率 (0..1)。既定 0 (無効)。 */
@@ -155,11 +155,6 @@ export class TermMachine {
     return this.incidentCount;
   }
 
-  /** プレイヤーの沈静化: この事件が和解しやすくなる。 */
-  nudgeCalm(): void {
-    this.reconcileBias = Math.min(0.5, this.reconcileBias + 0.12);
-  }
-
   /** プレイヤーの扇動: この事件が和解しにくくなる (= 裁判に持ち込みやすい)。 */
   nudgeIncite(): void {
     this.reconcileBias = Math.max(-0.5, this.reconcileBias - 0.12);
@@ -168,6 +163,89 @@ export class TermMachine {
   /** プレイヤーの扇動: 次の自由行動で事件化を促す (§12.4、日常エンジンへ委譲)。 */
   forceNext(): void {
     this.daily.forceNext();
+  }
+
+  // --- プレイヤー操作 (§4: 扇動/応援/制裁) ------------------------------------
+
+  /** 偽情報 InfoItem の通し番号 (扇動の噂 id 用)。 */
+  private rumorCount = 0;
+
+  /**
+   * 対象指定の扇動 (§4.2)。対象に偽情報を吹き込み、次の自由行動で事件化を促す。
+   * rumorAboutId があれば「○○がお前の悪口を言っていた」、無ければ漠然とした不穏な噂。
+   * 対象が生存しなければ false。
+   */
+  inciteTarget(targetId: VillagerId, rumorAboutId?: VillagerId): boolean {
+    const target = this.world.villagers.get(targetId);
+    if (!target || !target.alive) return false;
+    this.rumorCount += 1;
+    const rumorName = rumorAboutId ? this.world.villagers.get(rumorAboutId)?.name : undefined;
+    const text = rumorName
+      ? `「${rumorName}」がお前の悪口を言っていた`
+      : '街で不穏な噂を聞いた';
+    const item: InfoItem = {
+      id: `rumor_${this.world.term}_${this.rumorCount}`,
+      text,
+      source: 'player',
+      termAcquired: this.world.term,
+    };
+    target.information.push(item);
+    this.daily.forceFor(targetId);
+    this.nudgeIncite();
+    return true;
+  }
+
+  /**
+   * 応援 (§4.5)。対象の dominant 軸の trait を +0.1 (0..1 クランプ) する。
+   * 応援した軸と名前を返す。対象が生存しなければ null。
+   */
+  cheer(targetId: VillagerId): { axis: PersonalityAxis; villagerName: string } | null {
+    const target = this.world.villagers.get(targetId);
+    if (!target || !target.alive) return null;
+    const axis = dominantAxis(target.persona.traits);
+    target.persona.traits[axis] = clamp01(target.persona.traits[axis] + 0.1);
+    return { axis, villagerName: target.name };
+  }
+
+  /**
+   * 制裁 (§4.3)。対象を即時つるし上げ裁判にかける。対象が生存しかつ進行中の
+   * 事件/裁判が無いときのみ true。合成事件 (origin:'sanction') + 固定被告の裁判を開く。
+   */
+  sanction(targetId: VillagerId): boolean {
+    const target = this.world.villagers.get(targetId);
+    if (!target || !target.alive) return false;
+    if (this.world.incident || this.world.trial) return false;
+    const incident: Incident = {
+      id: this.newIncidentId(),
+      perpetrator: targetId,
+      involved: [],
+      description: `制裁: ${target.name} がつるし上げられた`,
+      damage: 0,
+      steps: [],
+      resolved: true,
+      origin: 'sanction',
+    };
+    this.world.incident = incident;
+    this.world.trial = this.openTrialFixed(incident, targetId);
+    this.world.phase = 'ten';
+    return true;
+  }
+
+  /** 固定被告の裁判を開く (§4.3 制裁: foolish 段階を飛ばして fate から始める)。 */
+  private openTrialFixed(incident: Incident, defendantId: VillagerId): TrialState {
+    this.userVotes.clear();
+    return {
+      incidentId: incident.id,
+      judge: { kind: 'nekomori' },
+      candidates: [defendantId],
+      stage: 'fate',
+      pendingGroups: this.groupAxes(),
+      foolishVotes: {},
+      defendant: defendantId,
+      fateVotes: { kill: 0, spare: 0 },
+      votes: [],
+      verdict: null,
+    };
   }
 
   // --- 月次事件のライフサイクル (§12.3) ----------------------------------------

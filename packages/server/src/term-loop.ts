@@ -34,17 +34,24 @@ export class TermLoop {
     this.timer = null;
   }
 
-  /** プレイヤーの扇動: 次に起きている どうぶつ が必ず事件を起こす + 和解しにくくする。 */
-  incite(): void {
-    this.tm.forceNext();
-    this.tm.nudgeIncite();
+  /** プレイヤーの扇動 (§4.2): 対象に偽情報を吹き込み事件化を促す。生存しなければ false。 */
+  inciteTarget(targetId: string, rumorAboutId?: string): boolean {
+    return this.tm.inciteTarget(targetId, rumorAboutId);
   }
 
-  /** プレイヤーの沈静化: 進行中の事件の被害を和らげ + 和解しやすくする。 */
-  calm(): void {
-    const inc = this.tm.world.incident;
-    if (inc) inc.damage = Math.max(0, inc.damage - 3);
-    this.tm.nudgeCalm();
+  /** プレイヤーの応援 (§4.5): 対象の気質を後押しする。応援した軸/名前、生存しなければ null。 */
+  cheer(targetId: string): { axis: string; villagerName: string } | null {
+    return this.tm.cheer(targetId);
+  }
+
+  /**
+   * プレイヤーの制裁 (§4.3): 対象を即時つるし上げ裁判にかける。成功すれば true。
+   * 裁判が開く (phase=ten) ので糾弾セリフ生成のため onTrialOpen を呼ぶ。
+   */
+  sanction(targetId: string): boolean {
+    const ok = this.tm.sanction(targetId);
+    if (ok && this.tm.world.phase === 'ten') this.h.onTrialOpen?.(this.tm.world);
+    return ok;
   }
 
   /** プレイヤーの裁判投票を加える (userId ごとに 1 席、重み合算)。 */
