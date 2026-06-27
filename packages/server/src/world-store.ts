@@ -17,6 +17,7 @@ import { dataDir } from './load-data.js';
 export interface RestoredWorld {
   world: World;
   bornCount: number;
+  incidentCount: number;
 }
 
 export class WorldStore {
@@ -42,23 +43,28 @@ export class WorldStore {
       console.warn(`[pagus] world.json の版が非互換 (v${snap.version}) のため破棄して新規開始`);
       return null;
     }
-    return { world: fromWire(snap.world), bornCount: snap.bornCount ?? 0 };
+    return {
+      world: fromWire(snap.world),
+      bornCount: snap.bornCount ?? 0,
+      incidentCount: snap.incidentCount ?? 0,
+    };
   }
 
   /** 前回保存から minIntervalMs 以上経っていれば保存する (tick からの呼び出し用)。 */
-  maybeSave(world: World, bornCount: number): void {
+  maybeSave(world: World, bornCount: number, incidentCount: number): void {
     const now = Date.now();
     if (now - this.lastSaveMs < this.minIntervalMs) return;
-    this.save(world, bornCount);
+    this.save(world, bornCount, incidentCount);
   }
 
   /** 即時保存する (shutdown / 節目)。 */
-  save(world: World, bornCount: number): void {
+  save(world: World, bornCount: number, incidentCount: number): void {
     const snap: WorldSnapshot = {
       version: WORLD_SNAPSHOT_VERSION,
       savedAt: new Date().toISOString(),
       world: toWire(world),
       bornCount,
+      incidentCount,
     };
     try {
       mkdirSync(dirname(this.path), { recursive: true });

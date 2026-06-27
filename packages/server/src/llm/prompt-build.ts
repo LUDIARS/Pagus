@@ -24,7 +24,10 @@ import type {
   EducationContext,
   WorldEvalContext,
   HolidayContext,
+  MonthlyScheduleContext,
+  IncidentDesignContext,
   Villager,
+  VillageRule,
   Personality,
 } from '@pagus/sim';
 
@@ -52,6 +55,17 @@ export function routeTier(parts: PromptParts): Tier {
 
 function traitsLine(p: Personality): string {
   return PERSONALITY_AXES.map((ax) => `${PERSONALITY_LABELS[ax]}=${p[ax].toFixed(2)}`).join(' ');
+}
+
+/** 住民を 1 行で (id 付き)。スケジュール/デザインの一覧で使う。 */
+function villagerLine(v: Villager): string {
+  return `- ${v.id}: ${v.name} (${v.species}) | ${traitsLine(v.persona.traits)}`;
+}
+
+/** 村のしきたり一覧 (事件の火種)。 */
+function rulesBlock(rules: VillageRule[]): string {
+  if (rules.length === 0) return '(なし)';
+  return rules.map((r) => `- ${r.text}`).join('\n');
 }
 
 function villagerBrief(v: Villager): string {
@@ -245,6 +259,69 @@ export function buildWorldPrompt(ctx: WorldEvalContext): PromptParts {
     `関与者: ${ctx.involved.map((v) => v.name).join(', ') || 'なし'}\n` +
     `暦: ${ctx.calendar.year}年${ctx.calendar.month}月${ctx.calendar.dayOfMonth}日 (${ctx.calendar.season})\n` +
     'この日の村への影響を JSON で返せ。';
+  return partsFromSegments('world', [
+    { stability: 'fixed', role: 'system', text: sys },
+    { stability: 'volatile', role: 'user', text: user },
+  ]);
+}
+
+// --- 月次事件: 月初の発生日スケジュール (§12.3.1) ----------------------------
+
+export function buildSchedulePrompt(ctx: MonthlyScheduleContext): PromptParts {
+  const virtueList = VIRTUES.map((v) => `${v}(${VIRTUE_LABELS[v]})`).join(', ');
+  const sys =
+    'あなたは村全体を見る「世界エンジン」。その月に起きる大事件の発生日と大まかなテーマの種を 1 つ決める。\n' +
+    '出力スキーマ: {"dayOfMonth": その月の何日に起こすか(整数), "themeSeed": "事件の大まかな種(短い日本語)"}\n' +
+    `徳目: ${virtueList}。村の評判・住民・しきたりを踏まえ、波乱が映える発生日を選べ。` +
+    JSON_ONLY;
+  const cal = ctx.calendar;
+  const repLine = VIRTUES.map((v) => `${VIRTUE_LABELS[v]}=${ctx.reputation[v].toFixed(2)}`).join(' ');
+  const names = ctx.villagers.slice(0, 12).map((v) => `${v.name}(${v.species})`).join(', ');
+  const user =
+    `暦: ${cal.year}年${cal.month}月 (${cal.season}, 日数=${cal.daysInMonth})\n` +
+    `村の評判: ${repLine}\n` +
+    `住民 (${ctx.villagers.length}体): ${names || 'なし'}\n` +
+    `村のしきたり:\n${rulesBlock(ctx.villageRules)}\n` +
+    'この月の事件の発生日とテーマの種を JSON で返せ。';
+  return partsFromSegments('world', [
+    { stability: 'fixed', role: 'system', text: sys },
+    { stability: 'volatile', role: 'user', text: user },
+  ]);
+}
+
+// --- 月次事件: 前日の詳細デザイン + 事件用キャラ生成 (§12.3.2) ----------------
+
+export function buildDesignPrompt(ctx: IncidentDesignContext): PromptParts {
+  const virtueList = VIRTUES.map((v) => `${v}(${VIRTUE_LABELS[v]})`).join(', ');
+  const axisList = PERSONALITY_AXES.map((a) => `${a}(${PERSONALITY_LABELS[a]})`).join(', ');
+  const sys =
+    'あなたは村全体を見る「世界エンジン」。前日の村の様子から、明日起きる事件を詳細にデザインする。\n' +
+    '必要なら事件用の新規キャラ (露出狂・殺人犯など) を生成して村に投入できる。\n' +
+    '出力スキーマ: {"description": "事件の筋書き(日本語)", ' +
+    '"newCharacters": [{"name": "名", "species": "種", "role": "役回り(加害者/被害者など)", ' +
+    '"perpetrator": true|false, "activity": "diurnal|nocturnal|crepuscular|always"(任意), ' +
+    '"traits": {"<軸>": 0..1}(任意), "values": ["信条"](任意), "speechStyle": "口調"(任意), "body": "姿"(任意)}], ' +
+    '"involvedIds": ["巻き込む既存住民id", ...], ' +
+    '"perpetratorId": "既存住民が加害者ならそのid / 新規キャラが加害者なら null", ' +
+    '"scapegoat": true|false(賢い犯人が罪を擦り付けて居座るか), ' +
+    '"framedTargetId": "陥れる既存住民id / 無ければ null"}\n' +
+    `徳目: ${virtueList}。性格軸: ${axisList}。traits は 0..1。\n` +
+    'perpetratorId と framedTargetId は既存住民の id か null。involvedIds は既存住民の id のみ。' +
+    JSON_ONLY;
+  const cal = ctx.calendar;
+  const repLine = VIRTUES.map((v) => `${VIRTUE_LABELS[v]}=${ctx.reputation[v].toFixed(2)}`).join(' ');
+  const culprits =
+    ctx.survivingCulprits.length > 0
+      ? ctx.survivingCulprits.map((v) => `- ${v.id}: ${v.name} (${v.species})`).join('\n')
+      : '(なし)';
+  const user =
+    `暦: ${cal.year}年${cal.month}月${cal.dayOfMonth}日 (${cal.season})\n` +
+    `テーマの種: ${ctx.themeSeed}\n` +
+    `村の評判: ${repLine}\n` +
+    `既存住民:\n${ctx.villagers.map(villagerLine).join('\n') || '(なし)'}\n` +
+    `村のしきたり:\n${rulesBlock(ctx.villageRules)}\n` +
+    `居座る過去の事件犯 (連続犯の継続入力):\n${culprits}\n` +
+    '明日の事件の詳細デザインを JSON で返せ。';
   return partsFromSegments('world', [
     { stability: 'fixed', role: 'system', text: sys },
     { stability: 'volatile', role: 'user', text: user },

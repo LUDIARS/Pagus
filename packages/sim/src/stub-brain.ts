@@ -2,8 +2,17 @@
 // LLM を一切呼ばず、固定ロジックで起承転結を一巡させられる。
 
 import type { Brain, ActionContext, ActionDecision, EmotionContext, IncidentContext, IncidentStep, FoolishVoteContext, FateVoteContext, EducationContext } from './brain.js';
-import type { WorldBrain, WorldEvalContext, DayEvaluation, HolidayContext, HolidayEvent } from './world-brain.js';
-import type { EmotionState, Reform, VillagerId } from './types/index.js';
+import type {
+  WorldBrain,
+  WorldEvalContext,
+  DayEvaluation,
+  HolidayContext,
+  HolidayEvent,
+  MonthlyScheduleContext,
+  MonthlySchedule,
+  IncidentDesignContext,
+} from './world-brain.js';
+import type { EmotionState, Reform, VillagerId, IncidentDesign } from './types/index.js';
 
 export interface StubBrainOptions {
   /** decideAction がこの回数に達し、かつ周囲に村人がいれば事件を発火する。 */
@@ -130,6 +139,26 @@ export class StubWorldBrain implements WorldBrain {
     return {
       reputationDelta: { vitality: 0.06, benevolence: 0.03 },
       narrative: `${ctx.holiday}を迎え、${cheer}たちが集って村は賑わった`,
+    };
+  }
+
+  /** 月初: 発生日を月の半ば (15日 or 月末) に固定する (決定的, §12.3.1)。 */
+  async scheduleMonthlyIncident(ctx: MonthlyScheduleContext): Promise<MonthlySchedule> {
+    return { dayOfMonth: Math.min(15, ctx.calendar.daysInMonth), themeSeed: 'いさかい' };
+  }
+
+  /** 前日: 余所者 (狐) を加害者に立て、先頭の既存住民 1 体を巻き込む (決定的, §12.3.2)。 */
+  async designIncident(ctx: IncidentDesignContext): Promise<IncidentDesign> {
+    const existing = ctx.villagers.find((v) => v.origin !== 'incident') ?? ctx.villagers[0];
+    return {
+      description: `${ctx.themeSeed}が持ち上がった`,
+      newCharacters: [
+        { name: '余所者', species: '狐', role: '加害者', perpetrator: true },
+      ],
+      involvedIds: existing ? [existing.id] : [],
+      perpetratorId: null,
+      scapegoat: false,
+      framedTargetId: null,
     };
   }
 }

@@ -2,7 +2,7 @@
 // 1 日 = 1 ターム = 12 セグメント。時間制御 (segmentRealMs のペース) は server が所有し、
 // 本クラスは純粋な遷移ロジックを提供する。
 
-import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern } from './types/index.js';
+import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign } from './types/index.js';
 import type { Brain, ActionDecision } from './brain.js';
 import { aliveVillagers, awakeVillagers, environmentView, clampPos, bumpEventParam } from './world.js';
 import { DailyEngine, REACTION_EXPOSURE, type DailyEngineOptions } from './daily-engine.js';
@@ -10,7 +10,7 @@ import { season, daysInMonth, holidayName } from './calendar.js';
 import { groupByDominant, dominantAxis, PERSONALITY_AXES, PERSONALITY_LABELS, type PersonalityAxis } from './personality.js';
 import { personalityFromVirtue, VIRTUES } from './virtue.js';
 import { createVillager } from './villager-factory.js';
-import type { WorldBrain, DayEvaluation, WorldEvalContext, HolidayEvent } from './world-brain.js';
+import type { WorldBrain, DayEvaluation, WorldEvalContext, HolidayEvent, MonthlySchedule } from './world-brain.js';
 import type { EventDirector } from './event-director.js';
 
 export type IdGen = () => string;
@@ -59,6 +59,8 @@ export interface TermMachineOptions {
   birthChance?: number;
   /** スナップショット復元時の出生通し番号 (born_N が衝突しないよう引き継ぐ)。既定 0。 */
   bornCount?: number;
+  /** スナップショット復元時の事件用キャラ通し番号 (incident_N が衝突しないよう引き継ぐ)。既定 0。 */
+  incidentCount?: number;
 }
 
 /** 日末の生活イベント (結婚/出産)。server がログ表示する。 */
@@ -115,6 +117,8 @@ export class TermMachine {
   private userVotes = new Map<string, { stage: TrialState['stage']; pick: string }>();
   /** 出生どうぶつの通し番号 (seed の v_* と衝突しない born_N を振る)。 */
   private bornCount: number;
+  /** 事件用キャラの通し番号 (incident_N を振る, §12.3.3)。 */
+  private incidentCount: number;
   /** その日の裁判結末。applyReform が incident/trial を null にする前に ketsuStep で捕捉する。 */
   private dayOutcome: { incident: Incident; verdict: Verdict; defendantId: VillagerId } | null = null;
 
@@ -138,11 +142,17 @@ export class TermMachine {
     this.marriageChance = opts.marriageChance ?? 0;
     this.birthChance = opts.birthChance ?? 0;
     this.bornCount = opts.bornCount ?? 0;
+    this.incidentCount = opts.incidentCount ?? 0;
   }
 
   /** スナップショット保存用: 出生通し番号 (born_N が再起動後も衝突しないよう保持する)。 */
   getBornCount(): number {
     return this.bornCount;
+  }
+
+  /** スナップショット保存用: 事件用キャラ通し番号 (incident_N が再起動後も衝突しないよう保持する)。 */
+  getIncidentCount(): number {
+    return this.incidentCount;
   }
 
   /** プレイヤーの沈静化: この事件が和解しやすくなる。 */
@@ -158,6 +168,129 @@ export class TermMachine {
   /** プレイヤーの扇動: 次の自由行動で事件化を促す (§12.4、日常エンジンへ委譲)。 */
   forceNext(): void {
     this.daily.forceNext();
+  }
+
+  // --- 月次事件のライフサイクル (§12.3) ----------------------------------------
+
+  /**
+   * 月初: その月の事件発生日を世界側 LLM が 1 つ決める (§12.3.1)。worldBrain が無ければ null。
+   * dayOfMonth は [1, daysInMonth] にクランプし scheduledIncident を設定する。
+   */
+  async scheduleMonthlyIncident(): Promise<MonthlySchedule | null> {
+    if (!this.worldBrain) return null;
+    const cal = this.world.calendar;
+    const m = await this.worldBrain.scheduleMonthlyIncident({
+      calendar: cal,
+      reputation: this.world.reputation,
+      villagers: aliveVillagers(this.world),
+      villageRules: this.world.villageRules,
+    });
+    const dayOfMonth = Math.min(cal.daysInMonth, Math.max(1, Math.round(m.dayOfMonth)));
+    this.world.scheduledIncident = {
+      dayOfMonth,
+      themeSeed: m.themeSeed,
+      designed: false,
+      fired: false,
+      design: null,
+    };
+    return { dayOfMonth, themeSeed: m.themeSeed };
+  }
+
+  /**
+   * 事件前日: 世界側 LLM が事件を詳細デザインし、事件用キャラを生成して村に投入する (§12.3.2/3)。
+   * scheduledIncident が無い/デザイン済み/worldBrain 無しなら null。
+   * 加害者が解決できなければ throw (無言フォールバック禁止)。
+   */
+  async designScheduledIncident(): Promise<{ design: IncidentDesign; spawned: Villager[] } | null> {
+    const sched = this.world.scheduledIncident;
+    if (!sched || sched.designed || !this.worldBrain) return null;
+
+    // 連続犯の継続入力: 居座る過去の事件用キャラ。
+    const survivingCulprits = aliveVillagers(this.world).filter((v) => v.origin === 'incident');
+    const design = await this.worldBrain.designIncident({
+      calendar: this.world.calendar,
+      reputation: this.world.reputation,
+      villagers: aliveVillagers(this.world),
+      villageRules: this.world.villageRules,
+      themeSeed: sched.themeSeed,
+      survivingCulprits,
+    });
+
+    // 事件用キャラを spawn して村に追加する。
+    const spawned: Villager[] = [];
+    for (const spec of design.newCharacters) {
+      this.incidentCount += 1;
+      const seed: Parameters<typeof createVillager>[0] = {
+        id: `incident_${this.incidentCount}`,
+        name: spec.name,
+        position: {
+          x: Math.floor(this.rng() * this.world.config.gridWidth),
+          y: Math.floor(this.rng() * this.world.config.gridHeight),
+        },
+        species: spec.species,
+        origin: 'incident',
+      };
+      if (spec.activity !== undefined) seed.activity = spec.activity;
+      if (spec.traits !== undefined) seed.traits = spec.traits;
+      if (spec.values !== undefined) seed.values = spec.values;
+      if (spec.speechStyle !== undefined) seed.speechStyle = spec.speechStyle;
+      if (spec.body !== undefined) seed.body = spec.body;
+      const v = createVillager(seed);
+      this.world.villagers.set(v.id, v);
+      spawned.push(v);
+    }
+
+    // 加害者を解決: 既存 id があればそれ、無ければ spawned のうち perpetrator:true の最初の 1 体。
+    let perpetratorId: VillagerId | null = design.perpetratorId;
+    if (perpetratorId === null) {
+      const perpIndex = design.newCharacters.findIndex((c) => c.perpetrator);
+      const perp = perpIndex >= 0 ? spawned[perpIndex] : undefined;
+      if (!perp) throw new Error('designIncident: 加害者を解決できません (perpetratorId も加害キャラも無し)');
+      perpetratorId = perp.id;
+    }
+
+    // 巻き込む既存住民 + 加害者でない spawned victim を involved に含める。
+    const involvedIds = [...design.involvedIds];
+    for (const v of spawned) {
+      if (v.id !== perpetratorId) involvedIds.push(v.id);
+    }
+
+    const finalDesign: IncidentDesign = {
+      description: design.description,
+      newCharacters: design.newCharacters,
+      involvedIds,
+      perpetratorId,
+      scapegoat: design.scapegoat,
+      framedTargetId: design.framedTargetId,
+    };
+    sched.design = finalDesign;
+    sched.designed = true;
+    return { design: finalDesign, spawned };
+  }
+
+  /**
+   * 発生日: スケジュール済み事件を発火する (§12.3)。デザイン済みかつ未発火、
+   * 当日かつ phase が kisho/idle で進行中の事件が無いときのみ true を返して承へ。
+   */
+  fireScheduledIncident(): boolean {
+    const sched = this.world.scheduledIncident;
+    if (!sched || !sched.designed || sched.fired || !sched.design) return false;
+    if (this.world.calendar.dayOfMonth !== sched.dayOfMonth) return false;
+    if (this.world.phase !== 'kisho' && this.world.phase !== 'idle') return false;
+    if (this.world.incident) return false;
+
+    const design = sched.design;
+    if (design.perpetratorId === null) {
+      throw new Error('fireScheduledIncident: 加害者が未解決のデザインです');
+    }
+    this.world.incident = this.startIncident(
+      design.perpetratorId,
+      { description: design.description, involved: design.involvedIds },
+      { origin: 'designed', framedTargetId: design.scapegoat ? design.framedTargetId : null },
+    );
+    this.world.phase = 'sho';
+    sched.fired = true;
+    return true;
   }
 
   /** その日 (ターム) を開始する。idle → 起。 */
@@ -253,6 +386,7 @@ export class TermMachine {
   private startIncident(
     perpetrator: VillagerId,
     seed: { description: string; involved: string[] },
+    opts: { origin?: 'organic' | 'designed'; framedTargetId?: VillagerId | null } = {},
   ): Incident {
     this.reconcileBias = 0; // 事件ごとに和解バイアスをリセット。
     const involved = seed.involved.filter((id) => id !== perpetrator);
@@ -265,7 +399,7 @@ export class TermMachine {
         bumpEventParam(v, REACTION_EXPOSURE, 1);
       }
     }
-    return {
+    const incident: Incident = {
       id: this.newIncidentId(),
       perpetrator,
       involved,
@@ -273,7 +407,11 @@ export class TermMachine {
       damage: 0,
       steps: [],
       resolved: false,
+      origin: opts.origin ?? 'organic',
     };
+    // exactOptionalPropertyTypes: framedTargetId は値があるときだけキーを足す。
+    if (opts.framedTargetId != null) incident.framedTargetId = opts.framedTargetId;
+    return incident;
   }
 
   // --- 承: 事件 (GANs) 1 ステップ ---
@@ -439,6 +577,14 @@ export class TermMachine {
             trial.foolishVotes[target] = (trial.foolishVotes[target] ?? 0) + w;
             trial.votes.push({ voter: 'madman', weight: w, pick: target });
           }
+        }
+        // 連続犯: 真犯人 (事件用キャラ) が陥れる対象が候補にいれば重い擦り付け票を加える (§12.3.3)。
+        // 無実の既存住民が被告に選ばれやすくなり、真犯人は alive のまま居座る。
+        const framed = incident.framedTargetId;
+        if (framed && trial.candidates.includes(framed)) {
+          const w = Math.round(3 + this.world.reputation.malice * 4);
+          trial.foolishVotes[framed] = (trial.foolishVotes[framed] ?? 0) + w;
+          trial.votes.push({ voter: 'culprit', weight: w, pick: framed });
         }
         trial.defendant = this.argmaxCandidate(trial);
         trial.stage = 'fate';

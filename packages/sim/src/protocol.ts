@@ -49,11 +49,12 @@ export function fromWire(wire: WireWorld): World {
 }
 
 /** 現スナップショット形式のバージョン。型が壊れる変更時に増やし、古い snapshot を破棄する。 */
-export const WORLD_SNAPSHOT_VERSION = 2;
+export const WORLD_SNAPSHOT_VERSION = 3;
 
 /**
  * 永続化する world スナップショット。WireWorld (JSON 化可能な world) に加え、
- * 再起動後も出生 id (born_N) が衝突しないよう TermMachine の通し番号を保持する。
+ * 再起動後も出生 id (born_N) / 事件用キャラ id (incident_N) が衝突しないよう
+ * TermMachine の通し番号を保持する。
  */
 export interface WorldSnapshot {
   version: number;
@@ -62,6 +63,8 @@ export interface WorldSnapshot {
   world: WireWorld;
   /** TermMachine.bornCount (出生どうぶつの通し番号)。 */
   bornCount: number;
+  /** TermMachine.incidentCount (事件用キャラの通し番号, §12.3.3)。 */
+  incidentCount: number;
 }
 
 /** 裁判の糾弾セリフ (server が生成/再利用して配る)。 */

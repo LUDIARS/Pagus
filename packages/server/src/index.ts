@@ -103,6 +103,7 @@ function main(): void {
     marriageChance: numEnv('PAGUS_MARRIAGE', 0.12), // 日末の結婚確率
     birthChance: numEnv('PAGUS_BIRTH', 0.1), // 日末の出産確率
     bornCount: restored?.bornCount ?? 0, // 出生 id の通し番号を引き継ぐ
+    incidentCount: restored?.incidentCount ?? 0, // 事件用キャラ id の通し番号を引き継ぐ
   });
 
   const port = numEnv('PAGUS_WS_PORT', 4310);
@@ -141,7 +142,7 @@ function main(): void {
     onSnapshot: (w) => {
       ws.broadcastSnapshot(w);
       sessionLog.snapshot(w);
-      store.maybeSave(w, tm.getBornCount()); // 揮発状態 (出生/改変/評判) を間引いて永続化
+      store.maybeSave(w, tm.getBornCount(), tm.getIncidentCount()); // 揮発状態 (出生/改変/評判) を間引いて永続化
     },
     onLog: (phase, text) => {
       ws.broadcastLog(phase, text);
@@ -175,7 +176,7 @@ function main(): void {
   // Ctrl-C でループを止めログを flush してから抜ける。
   const shutdown = (): void => {
     loop.stop();
-    store.save(tm.world, tm.getBornCount()); // 終了時は確実に最新を書き出す
+    store.save(tm.world, tm.getBornCount(), tm.getIncidentCount()); // 終了時は確実に最新を書き出す
     sessionLog.close();
     process.exit(0);
   };
