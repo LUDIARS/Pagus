@@ -65,12 +65,12 @@ export class VillageStatus {
       }
     }
     if (t.fateVotes.kill > 0 || t.fateVotes.spare > 0) {
-      this.root.appendChild(row('　殺す', `${t.fateVotes.kill}`));
-      this.root.appendChild(row('　活かす', `${t.fateVotes.spare}`));
+      this.root.appendChild(row('　死刑', `${t.fateVotes.kill}`));
+      this.root.appendChild(row('　教育', `${t.fateVotes.spare}`));
     }
     if (t.verdict) {
       this.root.appendChild(
-        p('verdict', `判決: ${t.verdict === 'death' ? '追放（死刑）' : '強制教育'}`),
+        p('verdict', `判決: ${t.verdict === 'death' ? '死刑（追放）' : '教育（改変）'}`),
       );
     }
   }

@@ -102,6 +102,40 @@ export interface PlayerState {
   canCheerInMs: number;
 }
 
+/** LLM コストログの 1 件 (§7, 直近分を配信)。 */
+export interface CostEntry {
+  /** 用途 (parts.kind: 'emotion' | 'action' | 'incident' | 'world' など)。 */
+  kind: string;
+  /** モデル id 文字列 (単価判定の元)。 */
+  model: string;
+  inTokens: number;
+  outTokens: number;
+  /** 概算コスト (USD)。 */
+  costUsd: number;
+  /** 記録時刻 (epoch ms)。 */
+  at: number;
+}
+
+/** 用途 (kind) ごとのコスト集計 (§7)。 */
+export interface CostKindSummary {
+  calls: number;
+  usd: number;
+  inTokens: number;
+  outTokens: number;
+}
+
+/** LLM コストログの集計 (§7, sysStatus で配信)。 */
+export interface CostSummary {
+  /** 累計概算コスト (USD)。 */
+  totalUsd: number;
+  /** 総 LLM 呼び出し回数。 */
+  calls: number;
+  /** kind ごとの集計。 */
+  byKind: Record<string, CostKindSummary>;
+  /** 直近の呼び出し (新しい順, 最大 30 件)。 */
+  recent: CostEntry[];
+}
+
 /** 稼働中の LLM 構成 (UI 表示用)。 */
 export interface LlmInfo {
   mode: 'stub' | 'llm';
@@ -123,7 +157,20 @@ export type ServerMessage =
   | { t: 'chronicle'; entries: ChronicleEntry[] } // 村の歴史
   | { t: 'playerState'; karma: number; virtue: number; sanctionCost: number; canCheerInMs: number } // その接続ユーザの状態
   | { t: 'commandRejected'; reason: string } // カルマ不足/インターバル中など
-  | { t: 'playerActions'; entries: PlayerActionEntry[] }; // 人間の行動記録 (§8, broadcast)
+  | { t: 'playerActions'; entries: PlayerActionEntry[] } // 人間の行動記録 (§8, broadcast)
+  | {
+      t: 'sysStatus'; // 状態パネル (§7): 稼働時間・ゲーム内日付・LLM コスト
+      /** server 起動時刻 (epoch ms)。稼働時間 = now - startedAt。 */
+      startedAt: number;
+      /** ゲーム内の年 (calendar.year)。 */
+      gameYear: number;
+      /** ゲーム内の日付 (例 "6月12日")。 */
+      gameDate: string;
+      /** 経過ターム (= 総日数)。 */
+      term: number;
+      /** LLM コストログ集計。 */
+      cost: CostSummary;
+    };
 
 /** client → server。 */
 export type ClientMessage =

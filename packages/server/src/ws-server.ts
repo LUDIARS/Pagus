@@ -17,6 +17,9 @@ import {
 } from '@pagus/sim';
 import type { PlayerStateSnapshot } from './player-state.js';
 
+/** 状態パネル (§7) の sysStatus メッセージ形。 */
+type SysStatusMessage = Extract<ServerMessage, { t: 'sysStatus' }>;
+
 export interface WsHandlers {
   onHello(userId: string): void;
   onIncite(targetId: string, rumorAboutId: string | undefined, userId: string): void;
@@ -31,6 +34,8 @@ export class GameWsServer {
   private llmInfo: LlmInfo | null = null;
   private chronicle: ChronicleEntry[] = [];
   private playerActions: PlayerActionEntry[] = [];
+  /** 状態パネル (§7) の最新値。接続時に現値を送る。 */
+  private sysStatus: SysStatusMessage | null = null;
   /** 接続 → その接続を名乗った userId。per-connection 配信の宛先解決に使う。 */
   private readonly connUser = new Map<WebSocket, string>();
 
@@ -59,6 +64,7 @@ export class GameWsServer {
       ws.send(JSON.stringify({ t: 'chronicle', entries: this.chronicle } satisfies ServerMessage));
     }
     ws.send(JSON.stringify({ t: 'playerActions', entries: this.playerActions } satisfies ServerMessage));
+    if (this.sysStatus) ws.send(JSON.stringify(this.sysStatus));
     this.broadcastPlayers();
     ws.on('close', () => {
       this.connUser.delete(ws);
@@ -121,6 +127,13 @@ export class GameWsServer {
   sendRejected(userId: string, reason: string): void {
     const msg: ServerMessage = { t: 'commandRejected', reason };
     this.sendToUser(userId, JSON.stringify(msg));
+  }
+
+  /** 状態パネル (§7) を更新し、全クライアントへ配る。接続時にも現値を送る。 */
+  broadcastSysStatus(s: Omit<SysStatusMessage, 't'>): void {
+    const msg: SysStatusMessage = { t: 'sysStatus', ...s };
+    this.sysStatus = msg;
+    this.fanout(JSON.stringify(msg));
   }
 
   /** 人間の行動記録を更新し、全クライアントへ配る (§8)。 */
