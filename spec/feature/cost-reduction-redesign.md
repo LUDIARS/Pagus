@@ -1,8 +1,10 @@
 # コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する
 
-> 2026-06-27 起草。ユーザ口述設計を正本化。SPEC.md §12 の実装索引。
+> 2026-06-27 起草 / **2026-06-28 実装完了 (PR #16–#19)**。ユーザ口述設計を正本化。SPEC.md §12 の実装索引。
 > **本リデザインは PR #1〜#8 が実装した「毎セグメント LLM で全住民を思考させる」中核を置き換える。**
 > 数値 (カルマ消費量・蓄積レート・イベント発火確率) は当て推量で、観戦して env で調整する前提。
+>
+> **実装マップ**: §2 日常エンジン=`packages/sim/src/daily-engine.ts` / §3 事件ライフサイクル=`term-machine.ts` の `scheduleMonthlyIncident`/`designScheduledIncident`/`fireScheduledIncident` + `world-brain.ts` / §4 操作=`term-machine.ts` の `inciteTarget`/`sanction`/`cheer` + `server/player-state.ts` / §6 イベント由来パラメータ=`Villager.eventParams` + `bumpEventParam` / §7 状態=`server/llm/cost-log.ts` + `sysStatus` / §8 村の歴史=`client/chronicle-view.ts` / §8.1 村のルール=`sim/village-rules.ts`。
 
 ## 0. 狙い — なぜ変えるか
 
