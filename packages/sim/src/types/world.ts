@@ -33,6 +33,26 @@ export interface Calendar {
   season: Season;
 }
 
+/**
+ * その月の事件スケジュール (§12.3)。月初に発生日を決め (designed=false)、
+ * 前日に世界側 LLM が詳細デザイン + 事件用キャラ生成して designed=true にする。
+ */
+export interface ScheduledIncident {
+  /** 事件が起きる日 (1..daysInMonth)。 */
+  dayOfMonth: number;
+  /** 月初に LLM が与える大まかなテーマの種。前日の詳細デザインの入力。 */
+  themeSeed: string;
+  /** 前日の詳細デザインが済んだか。 */
+  designed: boolean;
+}
+
+/** 村のしきたり (§12.8.1)。適当に用意され、事件の火種になる。 */
+export interface VillageRule {
+  id: string;
+  /** しきたりの文 (例: 「夜に口笛を吹いてはならない」)。 */
+  text: string;
+}
+
 export interface WorldConfig {
   gridWidth: number;
   gridHeight: number;
@@ -57,4 +77,8 @@ export interface World {
   incident: Incident | null;
   /** 進行中の裁判 (なければ null)。 */
   trial: TrialState | null;
+  /** その月の事件スケジュール (§12.3)。未設定なら null。 */
+  scheduledIncident: ScheduledIncident | null;
+  /** 村のしきたり (§12.8.1)。事件の火種。 */
+  villageRules: VillageRule[];
 }

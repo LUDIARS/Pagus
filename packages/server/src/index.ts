@@ -1,9 +1,9 @@
 // Pagus server エントリ。data からワールドを起こし、TermLoop と WS を配線する。
 // 思考は PAGUS_BRAIN で切替: 'stub'(既定/決定的) | 'llm'(実 LLM = claude/codex CLI)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, type WorldBrain, type LlmInfo } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, type Brain, type WorldBrain, type LlmInfo } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
-import { TermLoop, type LoopBrain } from './term-loop.js';
+import { TermLoop } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
 import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND } from './llm/index.js';
 import { createServer } from 'node:http';
@@ -39,7 +39,7 @@ function numEnv(name: string, fallback: number): number {
  * 'llm' は claude/codex CLI 駆動。両者で同一 BackendRegistry を共有する。
  * 不正値は無言フォールバックせず即エラー (RULE_CODE §7.1)。
  */
-function selectBrains(): { brain: LoopBrain; worldBrain: WorldBrain; registry: BackendRegistry | null } {
+function selectBrains(): { brain: Brain; worldBrain: WorldBrain; registry: BackendRegistry | null } {
   const mode = process.env.PAGUS_BRAIN ?? 'stub';
   if (mode === 'stub') {
     return {
@@ -95,6 +95,7 @@ function main(): void {
   const director = new EventDirector({ maxRepsPerSegment: numEnv('PAGUS_REPS', 3) });
   const tm = new TermMachine(world, brain, {
     director,
+    dailyTriggerAfter: numEnv('PAGUS_TRIGGER_AFTER', 6), // 日常エンジンが自由行動を事件化する閾値 (§12.2)
     worldBrain,
     reconcileChance: numEnv('PAGUS_RECONCILE', 0.15), // 事件が和解で収まる基礎確率
     secondaryChance: numEnv('PAGUS_SECONDARY', 0.18), // 二次被害の確率
@@ -136,7 +137,7 @@ function main(): void {
   ws.setLlmInfo(llmInfo);
   ws.updateChronicle(chronicle.recent()); // 既存の歴史を初期配信対象に。
 
-  loop = new TermLoop(tm, brain, pace, incidentStepMs, {
+  loop = new TermLoop(tm, pace, incidentStepMs, {
     onSnapshot: (w) => {
       ws.broadcastSnapshot(w);
       sessionLog.snapshot(w);

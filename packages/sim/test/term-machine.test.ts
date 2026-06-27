@@ -18,7 +18,9 @@ function twoAnimalWorld(month = 6): World {
 describe('TermMachine 起承転結 (セグメント駆動)', () => {
   it('起 → 承 → 転 → 結 → 改変 → 起へ復帰 を一巡できる', async () => {
     const world = twoAnimalWorld();
-    const tm = new TermMachine(world, new StubBrain({ triggerAfter: 1, damagePerStep: 4 }));
+    // 日常エンジン (LLM 非依存) が 1 行動目で事件化するよう dailyTriggerAfter:1。
+    // 承の被害量は StubBrain.advanceIncident (damagePerStep) が決める。
+    const tm = new TermMachine(world, new StubBrain({ damagePerStep: 4 }), { dailyTriggerAfter: 1 });
 
     tm.startDay();
     expect(world.phase).toBe('kisho');
