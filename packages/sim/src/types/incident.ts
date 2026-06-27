@@ -14,6 +14,10 @@ export interface Incident {
   /** GANs 進行の視点ログ (加害者/被害者を別コンテキストで)。 */
   steps: IncidentStepRecord[];
   resolved: boolean;
+  /** 発火経路 (§12.3)。自然発火=organic / 月次デザイン=designed。既定 organic。 */
+  origin?: 'organic' | 'designed';
+  /** 連続犯で陥れる対象 (scapegoat 時)。真犯人が罪を擦り付ける既存住民 id。 */
+  framedTargetId?: VillagerId | null;
 }
 
 export type IncidentPerspective = 'perpetrator' | 'victim';

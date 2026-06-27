@@ -2,14 +2,30 @@
 // その日の裁判結果から村全体を評価する。重い局面なので strong tier (opus/gpt-5.5) 固定。
 // parse 失敗は 1 回リトライ→なお失敗なら throw (無言フォールバック禁止)。
 
-import type { WorldBrain, WorldEvalContext, DayEvaluation, HolidayContext, HolidayEvent } from '@pagus/sim';
+import type {
+  WorldBrain,
+  WorldEvalContext,
+  DayEvaluation,
+  HolidayContext,
+  HolidayEvent,
+  MonthlyScheduleContext,
+  MonthlySchedule,
+  IncidentDesignContext,
+  IncidentDesign,
+} from '@pagus/sim';
 
 import type { LlmClient } from './llm-client.js';
 import { CliLlmClient } from './cli-llm-client.js';
 import { BackendRegistry } from './backend-registry.js';
 import type { Backend } from './backend-registry.js';
-import { buildWorldPrompt, buildHolidayPrompt } from './prompt-build.js';
-import { extractJson, coerceDayEvaluation, coerceHolidayEvent } from './json-coerce.js';
+import { buildWorldPrompt, buildHolidayPrompt, buildSchedulePrompt, buildDesignPrompt } from './prompt-build.js';
+import {
+  extractJson,
+  coerceDayEvaluation,
+  coerceHolidayEvent,
+  coerceMonthlySchedule,
+  coerceIncidentDesign,
+} from './json-coerce.js';
 
 export interface LlmWorldBrainOptions {
   createClient?: (backend: Backend) => LlmClient;
@@ -74,6 +90,49 @@ export class LlmWorldBrain implements WorldBrain {
       }
     }
     throw new Error(`祝日イベントの parse に失敗 (backend=${backend.id}): ${(lastErr as Error).message}`);
+  }
+
+  async scheduleMonthlyIncident(ctx: MonthlyScheduleContext): Promise<MonthlySchedule> {
+    const parts = buildSchedulePrompt(ctx);
+    // 月初の発生日決定は重い局面 → strong tier。年月を決定的キーに。
+    const backend = this.registry.strong(`schedule:${ctx.calendar.year}:${ctx.calendar.month}`);
+    const client = this.clientFor(backend);
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { text } = await client.invoke({
+        system: parts.system,
+        prompt: parts.prompt,
+        model: backend.model,
+      });
+      try {
+        return coerceMonthlySchedule(extractJson(text));
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw new Error(`月次スケジュールの parse に失敗 (backend=${backend.id}): ${(lastErr as Error).message}`);
+  }
+
+  async designIncident(ctx: IncidentDesignContext): Promise<IncidentDesign> {
+    const parts = buildDesignPrompt(ctx);
+    // 事件の詳細デザインは重い局面 → strong tier。年月日を決定的キーに。
+    const cal = ctx.calendar;
+    const backend = this.registry.strong(`design:${cal.year}:${cal.month}:${cal.dayOfMonth}`);
+    const client = this.clientFor(backend);
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { text } = await client.invoke({
+        system: parts.system,
+        prompt: parts.prompt,
+        model: backend.model,
+      });
+      try {
+        return coerceIncidentDesign(extractJson(text));
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw new Error(`事件デザインの parse に失敗 (backend=${backend.id}): ${(lastErr as Error).message}`);
   }
 
   private clientFor(backend: Backend): LlmClient {

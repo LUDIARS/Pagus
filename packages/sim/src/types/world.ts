@@ -1,7 +1,8 @@
-import type { Villager, VillagerId } from './villager.js';
+import type { Villager, VillagerId, ActivityPattern } from './villager.js';
 import type { Incident } from './incident.js';
 import type { TrialState } from './trial.js';
 import type { VirtueVector } from '../virtue.js';
+import type { PersonalityAxis } from '../personality.js';
 
 /** ターム内の進行フェーズ (起承転結 + 後処理)。 */
 export type Phase =
@@ -34,6 +35,43 @@ export interface Calendar {
 }
 
 /**
+ * 事件用キャラ (§12.3.3) の生成仕様。前日の詳細デザインで世界側 LLM が出す。
+ * 通常の Villager スキーマに乗る形へ villager-factory が変換する (origin='incident')。
+ */
+export interface IncidentCharacterSpec {
+  name: string;
+  species: string;
+  activity?: ActivityPattern;
+  traits?: Partial<Record<PersonalityAxis, number>>;
+  values?: string[];
+  speechStyle?: string;
+  body?: string;
+  /** ログ用の役回り (例 '加害者'/'被害者'/'露出狂')。 */
+  role: string;
+  /** このキャラが加害者か。 */
+  perpetrator: boolean;
+}
+
+/**
+ * 事件の詳細デザイン (§12.3.2)。前日に世界側 LLM が確定する。
+ * 新規キャラ生成・既存住民の巻き込み・連続犯 (scapegoat) の擦り付け対象を含む。
+ */
+export interface IncidentDesign {
+  /** 事件の筋書き (自然言語)。 */
+  description: string;
+  /** 新規生成する事件用キャラ (0..n)。 */
+  newCharacters: IncidentCharacterSpec[];
+  /** 巻き込む既存住民の id。 */
+  involvedIds: VillagerId[];
+  /** 既存住民が加害者ならその id / 新規キャラが加害者なら null。 */
+  perpetratorId: VillagerId | null;
+  /** 連続犯: 真犯人が罪を擦り付けて居座るか。 */
+  scapegoat: boolean;
+  /** 陥れる既存住民 id (scapegoat 時。無ければ null)。 */
+  framedTargetId: VillagerId | null;
+}
+
+/**
  * その月の事件スケジュール (§12.3)。月初に発生日を決め (designed=false)、
  * 前日に世界側 LLM が詳細デザイン + 事件用キャラ生成して designed=true にする。
  */
@@ -44,6 +82,10 @@ export interface ScheduledIncident {
   themeSeed: string;
   /** 前日の詳細デザインが済んだか。 */
   designed: boolean;
+  /** 発生日に発火済みか。 */
+  fired: boolean;
+  /** designed=true 後に確定する詳細デザイン (未デザインなら null)。 */
+  design: IncidentDesign | null;
 }
 
 /** 村のしきたり (§12.8.1)。適当に用意され、事件の火種になる。 */

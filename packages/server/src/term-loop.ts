@@ -52,6 +52,14 @@ export class TermLoop {
     this.tm.addUserVote(pick, userId);
   }
 
+  /** 事件前日の詳細デザイン + 事件用キャラ生成を実行し、予兆をログに出す (§12.3.2)。 */
+  private async designScheduled(): Promise<void> {
+    const result = await this.tm.designScheduledIncident();
+    if (!result) return;
+    const names = result.spawned.map((s) => s.name).join('・') || '(新規キャラなし)';
+    this.h.onLog('kisho', `⚡(予兆) ${names} が現れた — ${result.design.description}`);
+  }
+
   private nextDelay(): number {
     const w = this.tm.world;
     if (w.phase === 'kisho' || w.phase === 'idle') {
@@ -78,6 +86,12 @@ export class TermLoop {
         this.h.onLog('kisho', `── ${cal.month}月${cal.dayOfMonth}日 (${cal.season}) はじまり ──`);
         break;
       case 'kisho': {
+        // 月次事件 (§12.3) は組織的 kishoTick より先に発火させる。発火したら承へ。
+        if (this.tm.fireScheduledIncident()) {
+          this.h.onLog('sho', `⚡ 事件: ${w.incident?.description ?? ''}`);
+          this.h.onSnapshot(w);
+          return;
+        }
         const r = await this.tm.kishoTick();
         for (const a of r.actions) this.h.onLog('kisho', a.action);
         if (r.incidentStarted) {
@@ -118,6 +132,19 @@ export class TermLoop {
         const r = this.tm.advanceDay();
         const extra = `${r.monthRolled ? ' / 月がかわった' : ''}${r.holiday ? ` (${r.holiday})` : ''}`;
         this.h.onLog('kisho', `日が暮れた${extra}`);
+        // 月初: その月の事件発生日を決める (§12.3.1)。発生日が初日なら前日が無いので即デザイン。
+        if (r.monthRolled) {
+          const m = await this.tm.scheduleMonthlyIncident();
+          if (m) {
+            this.h.onLog('kisho', `📅 今月の事件予定: ${m.dayOfMonth}日`);
+            if (m.dayOfMonth <= 1) await this.designScheduled();
+          }
+        }
+        // 事件前日: 詳細デザイン + 事件用キャラ生成 (§12.3.2)。
+        const sched = this.tm.world.scheduledIncident;
+        if (sched && !sched.designed && this.tm.world.calendar.dayOfMonth === sched.dayOfMonth - 1) {
+          await this.designScheduled();
+        }
         // 祝日にあたる日は (AI) が祝祭イベントを発火する (§4.7)。
         if (r.holiday) {
           const hev = await this.tm.fireHolidayEvent(r.holiday);

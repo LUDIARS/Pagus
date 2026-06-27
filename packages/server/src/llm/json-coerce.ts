@@ -17,7 +17,13 @@ import type {
   Personality,
   Virtue,
   VirtueVector,
+  MonthlySchedule,
+  IncidentDesign,
+  IncidentCharacterSpec,
+  ActivityPattern,
 } from '@pagus/sim';
+
+const ACTIVITY_SET = new Set<ActivityPattern>(['diurnal', 'nocturnal', 'crepuscular', 'always']);
 
 const AXIS_SET = new Set<string>(PERSONALITY_AXES);
 const VIRTUE_SET = new Set<string>(VIRTUES);
@@ -216,5 +222,59 @@ export function coerceDayEvaluation(u: unknown): DayEvaluation {
     villagerDeltas,
     spawn: Math.max(0, Math.round(asNumber(o.spawn, 'spawn'))),
     narrative: asString(o.narrative, 'narrative'),
+  };
+}
+
+// --- 月次事件 (§12.3) -------------------------------------------------------
+
+/** null/未定義/空/非文字列は null、非空文字列はそのまま (id 系の許容変換)。 */
+function asNullableId(u: unknown): VillagerId | null {
+  return typeof u === 'string' && u.length > 0 ? u : null;
+}
+
+/** 文字列配列を抽出 (非文字列を捨てる)。 */
+function asStringArray(u: unknown): string[] {
+  return Array.isArray(u) ? u.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
+}
+
+export function coerceMonthlySchedule(u: unknown): MonthlySchedule {
+  const o = asObj(u);
+  return {
+    dayOfMonth: Math.round(asNumber(o.dayOfMonth, 'dayOfMonth')),
+    themeSeed: asString(o.themeSeed, 'themeSeed'),
+  };
+}
+
+/** 事件用キャラ 1 体の仕様を検証する。 */
+function coerceIncidentCharacter(u: unknown): IncidentCharacterSpec {
+  const o = asObj(u);
+  const spec: IncidentCharacterSpec = {
+    name: asString(o.name, 'newCharacters[].name'),
+    species: asString(o.species, 'newCharacters[].species'),
+    role: asString(o.role, 'newCharacters[].role'),
+    perpetrator: o.perpetrator === true,
+  };
+  // 任意項目は値があるときだけキーを足す (exactOptionalPropertyTypes)。
+  if (typeof o.activity === 'string' && ACTIVITY_SET.has(o.activity as ActivityPattern)) {
+    spec.activity = o.activity as ActivityPattern;
+  }
+  if (o.traits !== undefined && o.traits !== null) spec.traits = coercePersonalityDelta(o.traits);
+  if (Array.isArray(o.values)) spec.values = asStringArray(o.values);
+  if (typeof o.speechStyle === 'string' && o.speechStyle.length > 0) spec.speechStyle = o.speechStyle;
+  if (typeof o.body === 'string' && o.body.length > 0) spec.body = o.body;
+  return spec;
+}
+
+export function coerceIncidentDesign(u: unknown): IncidentDesign {
+  const o = asObj(u);
+  const charsRaw = Array.isArray(o.newCharacters) ? o.newCharacters : [];
+  const newCharacters = charsRaw.map(coerceIncidentCharacter);
+  return {
+    description: asString(o.description, 'description'),
+    newCharacters,
+    involvedIds: asStringArray(o.involvedIds),
+    perpetratorId: asNullableId(o.perpetratorId),
+    scapegoat: o.scapegoat === true,
+    framedTargetId: asNullableId(o.framedTargetId),
   };
 }

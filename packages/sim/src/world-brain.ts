@@ -1,7 +1,7 @@
 // 世界側 LLM。Brain (個体の思考) とは別に、その日の裁判結果から村全体を評価する。
 // 出力: 村の徳目評判 delta / 関与どうぶつの性格 delta / 新規出生数。
 
-import type { Villager, VillagerId, Incident, Calendar, Verdict } from './types/index.js';
+import type { Villager, VillagerId, Incident, Calendar, Verdict, VillageRule, IncidentDesign } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 import type { Personality } from './personality.js';
 
@@ -43,8 +43,40 @@ export interface HolidayEvent {
   reputationDelta: Partial<VirtueVector>;
 }
 
+// --- 月次事件のスケジューリング / デザイン (§12.3) ---------------------------
+
+/** 月初の発生日決定の文脈 (§12.3.1)。 */
+export interface MonthlyScheduleContext {
+  calendar: Calendar;
+  reputation: VirtueVector;
+  villagers: Villager[];
+  villageRules: VillageRule[];
+}
+
+/** 月初に決まる事件の発生日と大まかなテーマの種。 */
+export interface MonthlySchedule {
+  dayOfMonth: number;
+  themeSeed: string;
+}
+
+/** 前日の詳細デザインの文脈 (§12.3.2)。 */
+export interface IncidentDesignContext {
+  calendar: Calendar;
+  reputation: VirtueVector;
+  villagers: Villager[];
+  villageRules: VillageRule[];
+  /** 月初に与えられたテーマの種。 */
+  themeSeed: string;
+  /** 居座る過去の事件用キャラ (連続犯の継続入力, §12.3.3)。 */
+  survivingCulprits: Villager[];
+}
+
 export interface WorldBrain {
   evaluateDay(ctx: WorldEvalContext): Promise<DayEvaluation>;
   /** 祝日にあたる日のイベントを生成する (§4.7)。 */
   holidayEvent(ctx: HolidayContext): Promise<HolidayEvent>;
+  /** 月初にその月の事件発生日を決める (§12.3.1)。 */
+  scheduleMonthlyIncident(ctx: MonthlyScheduleContext): Promise<MonthlySchedule>;
+  /** 事件前日に詳細デザイン + 事件用キャラ仕様を作る (§12.3.2)。 */
+  designIncident(ctx: IncidentDesignContext): Promise<IncidentDesign>;
 }
