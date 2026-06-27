@@ -43,6 +43,22 @@
   - ※ §3.1 の「環境=プログラム / 感情=AI / 情報=蓄積」三分のうち、**感情の決定主体を AI→プログラムに変更**する (本リデザインの破壊的変更点)。
 - **村のパラメータは日々変異しうる**: 住民の気質6軸・村の徳目6軸は、日常イベントの集計でアルゴリズム的に毎日少し動く (LLM 不使用)。
 
+### 2.1 ブラックボックスエンジン = ふるまいの法則 (BehaviorRule) — Haiku がアトランダムに増やす (v1.1)
+
+> 2026-06-28 追加。§2 の「感情=プログラム降格」を、固定アルゴリズムではなく**データ駆動のルール群 (ブラックボックス)** で実現し、内部ルールを徐々に複雑化させる。
+
+- **感情・行動は `BehaviorRule[]` の決定的評価**で決まる (日常 tick は LLM 非依存のまま)。ルールは安全な閉じた DSL:
+  - **条件 (when, AND)**: `traitAbove/traitBelow`(気質軸) / `emotionAbove`(感情軸) / `eventParamAbove`(§6 タグ) / `place` / `timeOfDay` / `hasNeighbor` / `species` / `actionCategory`(harass|good|chat|wander)。
+  - **効果 (then)**: `emotionDelta`(感情軸を揺らす) / `triggerWeight`(事件化しやすさを加減) / `actionFlavor`(行動文の差し替え)。
+  - `BehaviorRule = { id, source: 'base'|'haiku', description, when[], then[] }`。`world.behaviorRules` に永続化。
+- **base ルール**は現行の感情変異 (harass→怒り↑ / good→喜び↑ 等) を再現し、退行ゼロを保つ。
+- **Haiku がアトランダムにルールを増やす**: 日末に低確率 (`PAGUS_RULEGEN_CHANCE`) で `RuleSmith` がルールを 1 つ生成して追加する。
+  - **llm モード = Haiku** が JSON スキーマでルールを起案 → coerce で安全な DSL に検証 → 追加 (cheap・低頻度なのでコスト方針と両立、コストログに計上)。
+  - **stub モード = 決定的テンプレ smith** (LLM 不使用) で観戦/テストでもルールが増える。
+  - 生成ルールは閉じた DSL に閉じ込めるため任意コード実行はしない (条件/効果は enum + switch 評価)。
+  - 上限 `PAGUS_RULES_MAX` を超えたら古い haiku ルールを間引く。生成ルールは「ふるまいの法則」として履歴/状態に出す。
+- これにより、村の挙動は LLM を毎 tick 呼ばずとも**ルールの蓄積で創発的に複雑化**していく (「感情=AI」の代替)。
+
 ## 3. 事件 (Incident) のライフサイクル
 
 ### 3.1 月初: 発生日時のスケジューリング (LLM 1 回)
