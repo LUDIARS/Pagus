@@ -9,6 +9,8 @@ import { VillageStatus } from './village-status.js';
 import { LogOverlay } from './log-overlay.js';
 import { LlmPanel } from './llm-panel.js';
 import { ChronicleView } from './chronicle-view.js';
+import { StatusPanel } from './status-panel.js';
+import { PlayerControls, type ActionType } from './player-controls.js';
 import { connect, type Conn } from './ws-client.js';
 import { getUserId, enablePush } from './push-client.js';
 
@@ -37,29 +39,27 @@ async function main(): Promise<void> {
   const vstatus = new VillageStatus(el('vstatus'));
   const llmPanel = new LlmPanel(el('llm-head'), el('llm-body'));
   const chronicle = new ChronicleView(el('chronicle'), el('chronicle-body'), el('hist-btn'), el('chronicle-close'));
+  const statusPanel = new StatusPanel(el('status-head'), el('status-body'));
 
   const userId = getUserId();
   let conn: Conn;
-  // 最新スナップショット (扇動の対象決定に使う)。
-  let lastWorld: { villagers: Array<{ id: string; alive: boolean }>; trial: { defendant: string | null } | null } | null = null;
   const trial = new TrialPanel(el('trial'), (pick) => conn.send({ t: 'vote', pick, userId }));
 
-  // 扇動の暫定対象: フォーカス中の被告 or 先頭の生存どうぶつ (本 UI は Phase D)。
-  const pickInciteTarget = (): string | null => {
-    if (!lastWorld) return null;
-    const def = lastWorld.trial?.defendant;
-    if (def) return def;
-    return lastWorld.villagers.find((v) => v.alive)?.id ?? null;
+  // 操作パネル (§4): 対象を選んで 扇動 / 制裁 / 応援 を送る。
+  const sendAction = (type: ActionType, targetId: string): void => {
+    if (type === 'incite') conn.send({ t: 'incite', targetId, userId });
+    else if (type === 'sanction') conn.send({ t: 'sanction', targetId, userId });
+    else conn.send({ t: 'cheer', targetId, userId });
   };
+  const controls = new PlayerControls(el('controls'), { onAction: sendAction });
 
   const verdict = el('verdict');
-  // 有罪/無罪ボタンは「殺す/活かす」を決める fate 段階でのみ出す (foolish=被告選びは右パネル)。
+  // 死刑/教育ボタンは「殺す/活かす」を決める fate 段階でのみ出す (foolish=被告選びは右パネル)。
   const showVerdict = (world: { phase: string; trial: { stage: string } | null }): boolean =>
     world.phase === 'ten' && world.trial?.stage === 'fate';
 
   conn = connect(WS_URL, {
     onSnapshot: (world) => {
-      lastWorld = world;
       stage.update(world);
       radar.update(world.reputation);
       hud.updateCalendar(world);
@@ -67,6 +67,8 @@ async function main(): Promise<void> {
       incident.update(world);
       vstatus.update(world);
       llmPanel.setNames(world);
+      chronicle.setWorld(world);
+      controls.setWorld(world);
       verdict.classList.toggle('show', showVerdict(world));
     },
     onLog: (phase, text) => log.add(phase, text),
@@ -79,20 +81,14 @@ async function main(): Promise<void> {
     onTrialLines: (incidentId, lines) => stage.setTrialLines(incidentId, lines),
     onLlm: (info) => llmPanel.setInfo(info),
     onChronicle: (entries) => chronicle.setEntries(entries),
-    // Phase C: 受信のみ (本格 UI は Phase D)。握り潰さず最小ログ。
-    onPlayerState: (state) => console.debug('[pagus] playerState', state),
-    onCommandRejected: (reason) => console.warn('[pagus] コマンド却下:', reason),
-    onPlayerActions: (entries) => console.debug('[pagus] playerActions', entries.length),
+    onSysStatus: (s) => statusPanel.setStatus(s),
+    onPlayerState: (state) => controls.setState(state),
+    onCommandRejected: (reason) => showToast(`⚠ ${reason}`),
+    onPlayerActions: (entries) => chronicle.setActions(entries),
   });
 
-  // 扇動: 暫定対象 (被告 or 先頭の生存どうぶつ) を扇動する (本 UI は Phase D)。
-  el('incite').addEventListener('click', () => {
-    const targetId = pickInciteTarget();
-    if (targetId) conn.send({ t: 'incite', targetId, userId });
-  });
-
-  // 裁判の票は中央の有罪/無罪に一本化 (沈静化は廃止 §4.1)。
-  //   有罪 = 殺す(kill) 投票、無罪 = 活かす(spare) 投票。
+  // 裁判の票は中央の 死刑/教育 に一本化 (沈静化は廃止 §4.1)。
+  //   死刑 = 殺す(kill) 投票、教育 = 活かす(spare→教育) 投票。
   //   同時にプレイヤーの罵倒/擁護を吹き出しで表示。投票し直しは server 側で前票を差し替え。
   el('v-guilty').addEventListener('click', () => {
     conn.send({ t: 'vote', pick: 'kill', userId });
@@ -119,6 +115,17 @@ async function main(): Promise<void> {
   });
 
   setupDrawers();
+}
+
+/** コマンド却下などを画面下部に数秒だけ出すトースト。 */
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+function showToast(text: string): void {
+  const t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = text;
+  t.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
 }
 
 /** モバイル: 左右パネルをドロワーとして開閉する。 */

@@ -6,6 +6,7 @@ export * from './virtue.js';
 export * from './events.js';
 export * from './calendar.js';
 export * from './world.js';
+export * from './village-rules.js';
 export * from './villager-factory.js';
 export * from './daily-engine.js';
 export * from './event-director.js';

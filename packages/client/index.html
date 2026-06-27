@@ -21,7 +21,6 @@
       #status { font-size: 12px; color: #7f8aa3; margin-left: auto; }
       button { background: #1e2533; color: #cdd6e4; border: 1px solid #38405a; border-radius: 6px; padding: 7px 14px; cursor: pointer; }
       button:hover { background: #283044; }
-      #incite { border-color: #eb5757; }
 
       /* 3 カラム: 左=当事者 / 中央=ステージ+ログ / 右=村ステータス。 */
       #main { display: flex; gap: 12px; padding: 12px; flex: 1 1 auto; min-height: 0; }
@@ -97,6 +96,45 @@
       #llm-body .mono { font-family: ui-monospace, monospace; font-size: 11px; padding: 1px 0; }
       #llm-body .muted { color: #6b7689; font-size: 10px; }
 
+      /* 左上の状態パネル (§7)。LLM パネルと対になる位置。 */
+      #status-panel { position: fixed; top: 56px; left: 12px; z-index: 40; width: 220px;
+        background: rgba(14,18,27,0.92); border: 1px solid #2a3346; border-radius: 8px; font-size: 12px; }
+      #status-head { padding: 6px 10px; cursor: pointer; user-select: none; color: #9be3ff; font-weight: bold; }
+      #status-head:hover { background: #1a2230; }
+      #status-body { padding: 0 10px 8px; max-height: 50vh; overflow-y: auto; }
+      #status-body .sub { margin-top: 6px; color: #8b96ad; border-top: 1px solid #1b2231; padding-top: 4px; }
+      #status-body .muted { color: #6b7689; font-size: 11px; }
+      #status-body .kv { font-size: 12px; }
+
+      /* 操作パネル (§4): 対象選択 + 扇動/制裁/応援。 */
+      #controls { background: #11151b; border: 1px solid #2a3346; border-radius: 8px; padding: 10px; }
+      #controls h3 { color: #f2c94c; }
+      .ctl-state { margin-bottom: 6px; }
+      .target-select { width: 100%; margin: 4px 0 8px; background: #0e121b; color: #cdd6e4;
+        border: 1px solid #38405a; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+      .ctl-btns { display: flex; gap: 6px; }
+      .ctl-btns button { flex: 1; padding: 8px 4px; font-size: 13px; }
+      #btn-incite { border-color: #eb5757; }
+      #btn-sanction { border-color: #f2994a; }
+      #btn-cheer { border-color: #6fcf97; }
+
+      /* コマンド却下トースト。 */
+      #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+        z-index: 80; background: rgba(40,16,16,0.95); color: #ffb3b3; border: 1px solid #eb5757;
+        border-radius: 8px; padding: 10px 18px; font-size: 14px; opacity: 0; pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.2s ease; }
+      #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+      /* 村の歴史タブ。 */
+      .hist-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; position: sticky; top: 0;
+        background: #11151f; padding-bottom: 6px; border-bottom: 1px solid #222; }
+      .hist-tab { font-size: 12px; padding: 4px 10px; }
+      .hist-tab.active { background: #283044; border-color: #56ccf2; color: #9be3ff; }
+      .hist-villager { padding: 5px 8px; border-bottom: 1px solid #1b2231; }
+      .hist-villager.gone { opacity: 0.5; }
+      .hist-villager-name { font-size: 13px; font-weight: bold; }
+      .hist-villager-meta { font-size: 11px; color: #8b96ad; }
+
       /* 裁判の有罪/無罪ボタン (中央上寄り、裁判中のみ表示)。 */
       #verdict { display: none; position: absolute; top: 12%; left: 0; right: 0; justify-content: center; gap: 40px; pointer-events: none; }
       #verdict.show { display: flex; }
@@ -145,7 +183,6 @@
     <div id="topbar">
       <button id="btn-left" class="drawer-toggle">🔥 当事者</button>
       <span id="hud">接続待ち…</span>
-      <button id="incite">扇動</button>
       <button id="hist-btn">📜 歴史</button>
       <button id="push-btn">🔔 通知</button>
       <button id="btn-right" class="drawer-toggle">📊 村</button>
@@ -161,18 +198,24 @@
       <div id="llm-head">🧠 LLM ▸</div>
       <div id="llm-body"></div>
     </div>
+    <div id="status-panel">
+      <div id="status-head">📊 状態 ▸</div>
+      <div id="status-body"></div>
+    </div>
+    <div id="toast"></div>
     <div id="main">
       <div id="left" class="col"></div>
       <div id="center">
         <div id="stage"></div>
         <div id="verdict">
-          <button id="v-guilty" class="verdict-btn guilty"><span class="vb-ja">有罪</span><span class="vb-en">GUILTY</span></button>
-          <button id="v-innocent" class="verdict-btn innocent"><span class="vb-ja">無罪</span><span class="vb-en">NOT GUILTY</span></button>
+          <button id="v-guilty" class="verdict-btn guilty"><span class="vb-ja">死刑</span><span class="vb-en">DEATH</span></button>
+          <button id="v-innocent" class="verdict-btn innocent"><span class="vb-ja">教育</span><span class="vb-en">EDUCATE</span></button>
         </div>
         <div id="log"></div>
       </div>
       <div id="right" class="col">
         <canvas id="radar" width="316" height="250"></canvas>
+        <div id="controls"></div>
         <div id="trial"></div>
         <div id="vstatus"></div>
       </div>

@@ -1,12 +1,12 @@
 // Pagus server エントリ。data からワールドを起こし、TermLoop と WS を配線する。
 // 思考は PAGUS_BRAIN で切替: 'stub'(既定/決定的) | 'llm'(実 LLM = claude/codex CLI)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
 import { TermLoop } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
 import { PlayerState } from './player-state.js';
-import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND } from './llm/index.js';
+import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, CostLog, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND, type CostSink } from './llm/index.js';
 import { createServer } from 'node:http';
 import { SessionLog } from './session-log.js';
 import { TrialNarrator } from './trial-narrator.js';
@@ -40,9 +40,14 @@ function numEnv(name: string, fallback: number): number {
  * 'llm' は claude/codex CLI 駆動。両者で同一 BackendRegistry を共有する。
  * 不正値は無言フォールバックせず即エラー (RULE_CODE §7.1)。
  */
-function selectBrains(): { brain: Brain; worldBrain: WorldBrain; registry: BackendRegistry | null } {
+function selectBrains(costSink: CostSink): {
+  brain: Brain;
+  worldBrain: WorldBrain;
+  registry: BackendRegistry | null;
+} {
   const mode = process.env.PAGUS_BRAIN ?? 'stub';
   if (mode === 'stub') {
+    // stub モードは LLM を呼ばないのでコスト計上なし。
     return {
       brain: new StubBrain({ triggerAfter: numEnv('PAGUS_TRIGGER_AFTER', 6), damagePerStep: 4 }),
       worldBrain: new StubWorldBrain(),
@@ -56,7 +61,11 @@ function selectBrains(): { brain: Brain; worldBrain: WorldBrain; registry: Backe
     const cast = disableCodex ? DEFAULT_CAST : [...DEFAULT_CAST, GPT_BACKEND];
     const strong = disableCodex ? DEFAULT_STRONG : [...DEFAULT_STRONG, GPT_BACKEND];
     const registry = new BackendRegistry({ cast, strong });
-    return { brain: new LlmBrain(registry), worldBrain: new LlmWorldBrain(registry), registry };
+    return {
+      brain: new LlmBrain(registry, { costSink }),
+      worldBrain: new LlmWorldBrain(registry, { costSink }),
+      registry,
+    };
   }
   throw new Error(`環境変数 PAGUS_BRAIN は 'stub' | 'llm' のいずれか: ${mode}`);
 }
@@ -73,6 +82,7 @@ function buildLlmInfo(registry: BackendRegistry | null, villagers: { id: string 
 }
 
 function main(): void {
+  const startedAt = Date.now(); // 状態パネル (§7) の稼働開始時刻
   const config = loadConfig();
 
   // world スナップショット (data/runtime/world.json) があれば復元。PAGUS_FRESH=1 で無視して新規開始。
@@ -85,13 +95,20 @@ function main(): void {
     world = restored.world;
     console.log(`[pagus] world.json を復元 (${world.calendar.month}月${world.calendar.dayOfMonth}日 / ${world.villagers.size} どうぶつ)`);
   } else {
-    // ゲーム内月のテーマは実カレンダーに連動 (新規開始時のみ)。
+    // ゲーム内月のテーマは実カレンダーに連動 (新規開始時のみ)。村のルール (§8.1) を 4 件入れる。
     const now = new Date();
-    world = createWorld(loadSeed(), config, { year: now.getFullYear(), month: now.getMonth() + 1 });
+    world = createWorld(
+      loadSeed(),
+      config,
+      { year: now.getFullYear(), month: now.getMonth() + 1 },
+      pickVillageRules(Math.random, 4),
+    );
   }
   const villagers = [...world.villagers.values()];
 
-  const { brain, worldBrain, registry } = selectBrains();
+  // LLM コストログ (§7)。llm モードのみ計上 (stub は costSink を呼ばない)。
+  const costLog = new CostLog();
+  const { brain, worldBrain, registry } = selectBrains((e) => costLog.record(e));
   const llmInfo = buildLlmInfo(registry, villagers);
   const director = new EventDirector({ maxRepsPerSegment: numEnv('PAGUS_REPS', 3) });
   const tm = new TermMachine(world, brain, {
@@ -237,6 +254,21 @@ function main(): void {
   });
   loop.start();
 
+  // 状態パネル (§7): 稼働時間・ゲーム内日付・LLM コストを配信する。
+  // stub モードでも uptime/年/日付は出す (cost は空集計)。
+  const broadcastSysStatus = (): void => {
+    const cal = tm.world.calendar;
+    ws.broadcastSysStatus({
+      startedAt,
+      gameYear: cal.year,
+      gameDate: `${cal.month}月${cal.dayOfMonth}日`,
+      term: tm.world.term,
+      cost: costLog.summary(),
+    });
+  };
+  broadcastSysStatus(); // 初回 (接続前の現値を ws にも保持させる)
+  const sysTimer = setInterval(broadcastSysStatus, 5000);
+
   // カルマを 1 秒ごとに自動加算し、数秒おきに接続中ユーザへ状態を間引き push する (§4.4)。
   let stateTicks = 0;
   const stateTimer = setInterval(() => {
@@ -248,6 +280,7 @@ function main(): void {
   // Ctrl-C でループを止めログを flush してから抜ける。
   const shutdown = (): void => {
     clearInterval(stateTimer);
+    clearInterval(sysTimer);
     loop.stop();
     store.save(tm.world, tm.getBornCount(), tm.getIncidentCount()); // 終了時は確実に最新を書き出す
     sessionLog.close();

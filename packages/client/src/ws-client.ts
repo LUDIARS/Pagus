@@ -1,6 +1,15 @@
 // WS 接続。server からの snapshot/log を受け、扇動/沈静化コマンドを送る。自動再接続。
 
-import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry } from '@pagus/sim';
+import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary } from '@pagus/sim';
+
+/** 状態パネル (§7) の受信ペイロード。 */
+export interface SysStatus {
+  startedAt: number;
+  gameYear: number;
+  gameDate: string;
+  term: number;
+  cost: CostSummary;
+}
 
 export interface WsHandlers {
   onSnapshot(world: WireWorld): void;
@@ -16,6 +25,8 @@ export interface WsHandlers {
   onCommandRejected?(reason: string): void;
   /** 人間の行動記録 (§8)。 */
   onPlayerActions?(entries: PlayerActionEntry[]): void;
+  /** 状態パネル (§7): 稼働時間・ゲーム内日付・LLM コスト。 */
+  onSysStatus?(s: SysStatus): void;
 }
 
 export interface Conn {
@@ -50,6 +61,15 @@ export function connect(url: string, h: WsHandlers): Conn {
         h.onPlayerState?.({ karma: msg.karma, virtue: msg.virtue, sanctionCost: msg.sanctionCost, canCheerInMs: msg.canCheerInMs });
       } else if (msg.t === 'commandRejected') h.onCommandRejected?.(msg.reason);
       else if (msg.t === 'playerActions') h.onPlayerActions?.(msg.entries);
+      else if (msg.t === 'sysStatus') {
+        h.onSysStatus?.({
+          startedAt: msg.startedAt,
+          gameYear: msg.gameYear,
+          gameDate: msg.gameDate,
+          term: msg.term,
+          cost: msg.cost,
+        });
+      }
     };
   };
   open();

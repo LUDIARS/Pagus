@@ -14,11 +14,14 @@ import type {
   IncidentDesign,
 } from '@pagus/sim';
 
+import { estimateTokens } from '@ludiars/llm-gateway';
+
 import type { LlmClient } from './llm-client.js';
 import { CliLlmClient } from './cli-llm-client.js';
 import { BackendRegistry } from './backend-registry.js';
 import type { Backend } from './backend-registry.js';
-import { buildWorldPrompt, buildHolidayPrompt, buildSchedulePrompt, buildDesignPrompt } from './prompt-build.js';
+import type { CostSink } from './cost-log.js';
+import { buildWorldPrompt, buildHolidayPrompt, buildSchedulePrompt, buildDesignPrompt, type PromptParts } from './prompt-build.js';
 import {
   extractJson,
   coerceDayEvaluation,
@@ -30,15 +33,19 @@ import {
 export interface LlmWorldBrainOptions {
   createClient?: (backend: Backend) => LlmClient;
   timeoutMs?: number;
+  /** LLM 呼び出しごとのコスト計上フック (§7)。未指定なら計上しない。 */
+  costSink?: CostSink;
 }
 
 export class LlmWorldBrain implements WorldBrain {
   private readonly registry: BackendRegistry;
   private readonly createClient: (backend: Backend) => LlmClient;
   private readonly clients = new Map<string, LlmClient>();
+  private readonly costSink: CostSink | undefined;
 
   constructor(registry: BackendRegistry, opts: LlmWorldBrainOptions = {}) {
     this.registry = registry;
+    this.costSink = opts.costSink;
     const timeoutMs = opts.timeoutMs;
     this.createClient =
       opts.createClient ??
@@ -62,6 +69,7 @@ export class LlmWorldBrain implements WorldBrain {
         prompt: parts.prompt,
         model: backend.model,
       });
+      this.reportCost(parts, backend, text);
       try {
         return coerceDayEvaluation(extractJson(text));
       } catch (e) {
@@ -83,6 +91,7 @@ export class LlmWorldBrain implements WorldBrain {
         prompt: parts.prompt,
         model: backend.model,
       });
+      this.reportCost(parts, backend, text);
       try {
         return coerceHolidayEvent(extractJson(text));
       } catch (e) {
@@ -104,6 +113,7 @@ export class LlmWorldBrain implements WorldBrain {
         prompt: parts.prompt,
         model: backend.model,
       });
+      this.reportCost(parts, backend, text);
       try {
         return coerceMonthlySchedule(extractJson(text));
       } catch (e) {
@@ -126,6 +136,7 @@ export class LlmWorldBrain implements WorldBrain {
         prompt: parts.prompt,
         model: backend.model,
       });
+      this.reportCost(parts, backend, text);
       try {
         return coerceIncidentDesign(extractJson(text));
       } catch (e) {
@@ -142,5 +153,16 @@ export class LlmWorldBrain implements WorldBrain {
       this.clients.set(backend.id, c);
     }
     return c;
+  }
+
+  /** 成功した invoke のコストを計上する (§7)。 */
+  private reportCost(parts: PromptParts, backend: Backend, text: string): void {
+    this.costSink?.({
+      kind: parts.kind,
+      provider: backend.provider,
+      model: backend.model,
+      inTokens: estimateTokens(parts.system) + estimateTokens(parts.prompt),
+      outTokens: estimateTokens(text),
+    });
   }
 }

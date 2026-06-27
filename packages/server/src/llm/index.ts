@@ -11,3 +11,4 @@ export {
 } from './backend-registry.js';
 export { LlmBrain, type LlmBrainOptions } from './llm-brain.js';
 export { LlmWorldBrain, type LlmWorldBrainOptions } from './llm-world-brain.js';
+export { CostLog, type CostSink, type CostRecordInput } from './cost-log.js';

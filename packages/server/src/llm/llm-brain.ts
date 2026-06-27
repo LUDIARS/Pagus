@@ -20,10 +20,13 @@ import type {
   Reform,
 } from '@pagus/sim';
 
+import { estimateTokens } from '@ludiars/llm-gateway';
+
 import type { LlmClient } from './llm-client.js';
 import { CliLlmClient } from './cli-llm-client.js';
 import { BackendRegistry } from './backend-registry.js';
 import type { Backend } from './backend-registry.js';
+import type { CostSink } from './cost-log.js';
 import {
   buildEmotionPrompt,
   buildActionPrompt,
@@ -49,17 +52,21 @@ export interface LlmBrainOptions {
   createClient?: (backend: Backend) => LlmClient;
   /** invoke タイムアウト ms。 */
   timeoutMs?: number;
+  /** LLM 呼び出しごとのコスト計上フック (§7)。未指定なら計上しない。 */
+  costSink?: CostSink;
 }
 
 export class LlmBrain implements Brain {
   private readonly registry: BackendRegistry;
   private readonly createClient: (backend: Backend) => LlmClient;
   private readonly clients = new Map<string, LlmClient>();
+  private readonly costSink: CostSink | undefined;
   /** プレイヤー扇動: 次の自由行動で事件化を促す。 */
   private incitePending = false;
 
   constructor(registry: BackendRegistry, opts: LlmBrainOptions = {}) {
     this.registry = registry;
+    this.costSink = opts.costSink;
     const timeoutMs = opts.timeoutMs;
     this.createClient =
       opts.createClient ??
@@ -150,6 +157,14 @@ export class LlmBrain implements Brain {
         system: parts.system,
         prompt: parts.prompt,
         model: backend.model,
+      });
+      // 成功した invoke ごとにコスト計上 (parse 成否に関わらず CLI 呼び出しは発生済)。
+      this.costSink?.({
+        kind: parts.kind,
+        provider: backend.provider,
+        model: backend.model,
+        inTokens: estimateTokens(parts.system) + estimateTokens(parts.prompt),
+        outTokens: estimateTokens(text),
       });
       try {
         return validate(extractJson(text));
