@@ -40,7 +40,17 @@ async function main(): Promise<void> {
 
   const userId = getUserId();
   let conn: Conn;
+  // 最新スナップショット (扇動の対象決定に使う)。
+  let lastWorld: { villagers: Array<{ id: string; alive: boolean }>; trial: { defendant: string | null } | null } | null = null;
   const trial = new TrialPanel(el('trial'), (pick) => conn.send({ t: 'vote', pick, userId }));
+
+  // 扇動の暫定対象: フォーカス中の被告 or 先頭の生存どうぶつ (本 UI は Phase D)。
+  const pickInciteTarget = (): string | null => {
+    if (!lastWorld) return null;
+    const def = lastWorld.trial?.defendant;
+    if (def) return def;
+    return lastWorld.villagers.find((v) => v.alive)?.id ?? null;
+  };
 
   const verdict = el('verdict');
   // 有罪/無罪ボタンは「殺す/活かす」を決める fate 段階でのみ出す (foolish=被告選びは右パネル)。
@@ -49,6 +59,7 @@ async function main(): Promise<void> {
 
   conn = connect(WS_URL, {
     onSnapshot: (world) => {
+      lastWorld = world;
       stage.update(world);
       radar.update(world.reputation);
       hud.updateCalendar(world);
@@ -59,27 +70,36 @@ async function main(): Promise<void> {
       verdict.classList.toggle('show', showVerdict(world));
     },
     onLog: (phase, text) => log.add(phase, text),
-    onStatus: (status) => hud.setStatus(status),
+    onStatus: (status) => {
+      hud.setStatus(status);
+      // 接続確立時にユーザを名乗る (per-user カルマ push 用)。
+      if (status.startsWith('●') && status.includes('接続')) conn.send({ t: 'hello', userId });
+    },
     onPlayers: (count) => vstatus.setPlayers(count),
     onTrialLines: (incidentId, lines) => stage.setTrialLines(incidentId, lines),
     onLlm: (info) => llmPanel.setInfo(info),
     onChronicle: (entries) => chronicle.setEntries(entries),
+    // Phase C: 受信のみ (本格 UI は Phase D)。握り潰さず最小ログ。
+    onPlayerState: (state) => console.debug('[pagus] playerState', state),
+    onCommandRejected: (reason) => console.warn('[pagus] コマンド却下:', reason),
+    onPlayerActions: (entries) => console.debug('[pagus] playerActions', entries.length),
   });
 
-  el('incite').addEventListener('click', () => conn.send({ t: 'incite' }));
-  el('calm').addEventListener('click', () => conn.send({ t: 'calm' }));
+  // 扇動: 暫定対象 (被告 or 先頭の生存どうぶつ) を扇動する (本 UI は Phase D)。
+  el('incite').addEventListener('click', () => {
+    const targetId = pickInciteTarget();
+    if (targetId) conn.send({ t: 'incite', targetId, userId });
+  });
 
-  // 裁判の票は中央の有罪/無罪に一本化。
-  //   有罪 = 殺す(kill) 投票 + 扇動、無罪 = 活かす(spare) 投票 + 沈静化。
+  // 裁判の票は中央の有罪/無罪に一本化 (沈静化は廃止 §4.1)。
+  //   有罪 = 殺す(kill) 投票、無罪 = 活かす(spare) 投票。
   //   同時にプレイヤーの罵倒/擁護を吹き出しで表示。投票し直しは server 側で前票を差し替え。
   el('v-guilty').addEventListener('click', () => {
     conn.send({ t: 'vote', pick: 'kill', userId });
-    conn.send({ t: 'incite' });
     stage.playerVerdict('guilty');
   });
   el('v-innocent').addEventListener('click', () => {
     conn.send({ t: 'vote', pick: 'spare', userId });
-    conn.send({ t: 'calm' });
     stage.playerVerdict('innocent');
   });
 
