@@ -11,6 +11,8 @@ import { LlmPanel } from './llm-panel.js';
 import { ChronicleView } from './chronicle-view.js';
 import { StatusPanel } from './status-panel.js';
 import { PlayerControls, type ActionType } from './player-controls.js';
+import { BetPanel } from './bet-panel.js';
+import { LeaderboardPanel } from './leaderboard-panel.js';
 import { connect, type Conn } from './ws-client.js';
 import { getUserId, enablePush } from './push-client.js';
 
@@ -48,6 +50,10 @@ async function main(): Promise<void> {
   const userId = getUserId();
   let conn: Conn;
   const trial = new TrialPanel(el('trial'), (pick) => conn.send({ t: 'vote', pick, userId }));
+  // 裁判ベット (§3): 運命段階で死刑/教育に賭ける。
+  const betPanel = new BetPanel(el('bet'), (pick, amount) => conn.send({ t: 'bet', pick, amount, userId }));
+  // スコアボード (§4): 称号・陣営・綱引き。陣営選択を送る。
+  const leaderboard = new LeaderboardPanel(el('leaderboard'), userId, (side) => conn.send({ t: 'faction', side, userId }));
 
   // 操作パネル (§4): 対象を選んで 扇動 / 制裁 / 応援 を送る。
   // 扇動は noun (悪口の主 rumorAboutId) を任意で伴う (§4.2)。未選択なら省略。
@@ -79,6 +85,7 @@ async function main(): Promise<void> {
       llmPanel.setNames(world);
       chronicle.setWorld(world);
       controls.setWorld(world);
+      betPanel.update(world);
       verdict.classList.toggle('show', showVerdict(world));
     },
     onLog: (phase, text) => log.add(phase, text),
@@ -95,6 +102,8 @@ async function main(): Promise<void> {
     onPlayerState: (state) => controls.setState(state),
     onCommandRejected: (reason) => showToast(`⚠ ${reason}`),
     onPlayerActions: (entries) => chronicle.setActions(entries),
+    onBetState: (s) => betPanel.setBetState(s),
+    onLeaderboard: (s) => leaderboard.setLeaderboard(s),
   });
 
   // 裁判の票は中央の 死刑/教育 に一本化 (沈静化は廃止 §4.1)。

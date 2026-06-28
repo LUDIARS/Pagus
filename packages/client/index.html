@@ -119,6 +119,38 @@
       #btn-cheer { border-color: #6fcf97; }
       .btn-champion { width: 100%; margin-top: 4px; border-color: #f2c94c; color: #f2e0a0; }
 
+      /* 裁判ベット UI (§3)。 */
+      #bet { background: #161018; border: 1px solid #5a3a4a; border-radius: 8px; padding: 10px; display: none; }
+      #bet h3 { color: #e98ad0; margin: 0 0 6px; }
+      .bet-pool, .bet-your { margin-bottom: 4px; }
+      .bet-amount-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+      .bet-amount { flex: 1; background: #0e121b; color: #cdd6e4; border: 1px solid #38405a; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+      .bet-btns { display: flex; gap: 6px; }
+      .bet-btns button { flex: 1; padding: 8px 4px; font-size: 13px; }
+      .bet-death { border-color: #eb5757; }
+      .bet-educate { border-color: #56ccf2; }
+
+      /* スコアボード UI (§4)。 */
+      #leaderboard { background: #0e121b; border: 1px solid #2a3346; border-radius: 8px; padding: 10px; }
+      #leaderboard h3 { color: #f2c94c; margin: 0 0 6px; }
+      .faction-tug { margin-bottom: 8px; }
+      .tug-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: #1b2231; border: 1px solid #2a3346; }
+      .tug-bar > i { display: block; height: 100%; }
+      .tug-guide { background: #6fcf97; }
+      .tug-incite { background: #eb5757; }
+      .tug-legend { font-size: 12px; color: #b9c2d6; margin-top: 3px; text-align: center; }
+      .faction-btns { display: flex; gap: 6px; margin-bottom: 8px; }
+      .faction-btns button { flex: 1; padding: 7px 4px; font-size: 12px; }
+      .faction-guide { border-color: #6fcf97; }
+      .faction-incite { border-color: #eb5757; }
+      .lb-list { display: flex; flex-direction: column; gap: 4px; }
+      .lb-row { padding: 5px 8px; border: 1px solid #1b2231; border-radius: 6px; background: #11151f; }
+      .lb-row.lb-me { border-color: #f2c94c; background: #1a1810; }
+      .lb-top { display: flex; justify-content: space-between; align-items: baseline; }
+      .lb-name { font-size: 13px; font-weight: bold; }
+      .lb-tags { font-size: 11px; color: #9be3ff; }
+      .lb-meta { font-size: 11px; color: #8b96ad; margin-top: 2px; }
+
       /* しきたり改定 UI (§2)。 */
       .rule-add-box { display: flex; gap: 6px; margin-bottom: 10px; }
       .rule-add-input { flex: 1; background: #0e121b; color: #cdd6e4; border: 1px solid #38405a;
@@ -226,7 +258,9 @@
         <canvas id="radar" width="316" height="250"></canvas>
         <div id="controls"></div>
         <div id="trial"></div>
+        <div id="bet"></div>
         <div id="vstatus"></div>
+        <div id="leaderboard"></div>
       </div>
       <div id="backdrop"></div>
     </div>

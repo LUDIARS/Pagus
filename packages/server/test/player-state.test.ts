@@ -116,3 +116,69 @@ describe('PlayerState 推し指名 (§1 champion)', () => {
     expect(ps2.get('x').karma).toBe(0);
   });
 });
+
+describe('PlayerState 称号 (§4.2 titles)', () => {
+  it('称号は項目ごとの最大保持者に与え、0 件には付与しない', () => {
+    const ps = new PlayerState();
+    ps.bumpStat('a', 'incites', 3);
+    ps.bumpStat('b', 'incites', 1);
+    ps.bumpStat('b', 'sanctions', 5);
+    const titles = ps.titles();
+    expect(titles.get('a')).toBe('破壊神'); // incites 最多
+    expect(titles.get('b')).toBe('審判者'); // sanctions 最多 (incites では a に負ける)
+  });
+
+  it('主称号は自分が保持する称号のうち件数最大の 1 つ', () => {
+    const ps = new PlayerState();
+    ps.bumpStat('u', 'incites', 3); // 破壊神 (3)
+    ps.bumpStat('u', 'cheers', 5); // 聖人 (5)
+    // 両方の最大保持者だが、件数最大の 聖人 を主称号に。
+    expect(ps.titles().get('u')).toBe('聖人');
+  });
+
+  it('最大保持者の同点は userId 昇順で先勝ち', () => {
+    const ps = new PlayerState();
+    ps.bumpStat('z', 'betsWon', 2);
+    ps.bumpStat('a', 'betsWon', 2);
+    const titles = ps.titles();
+    expect(titles.get('a')).toBe('博徒'); // 同点 → 昇順で a
+    expect(titles.get('z')).toBeNull();
+  });
+
+  it('実績ゼロのユーザは称号なし (null)', () => {
+    const ps = new PlayerState();
+    ps.get('idle');
+    expect(ps.titles().get('idle')).toBeNull();
+  });
+});
+
+describe('PlayerState 二大陣営 (§4.3 faction)', () => {
+  it('明示選択した陣営を返す', () => {
+    const ps = new PlayerState();
+    ps.setFaction('u', 'incite');
+    expect(ps.factionOf('u')).toBe('incite');
+    ps.setFaction('u', 'guide');
+    expect(ps.factionOf('u')).toBe('guide');
+  });
+
+  it('未選択は行動から推定: cheers+rulesAdded >= incites+sanctions なら guide', () => {
+    const ps = new PlayerState();
+    // 善導寄り。
+    ps.bumpStat('g', 'cheers', 2);
+    ps.bumpStat('g', 'rulesAdded', 1);
+    expect(ps.factionOf('g')).toBe('guide');
+    // 扇動寄り。
+    ps.bumpStat('i', 'incites', 3);
+    ps.bumpStat('i', 'sanctions', 1);
+    expect(ps.factionOf('i')).toBe('incite');
+    // 同数 (0=0) は guide 寄り (>=)。
+    expect(ps.factionOf('neutral')).toBe('guide');
+  });
+
+  it('明示選択は推定より優先される', () => {
+    const ps = new PlayerState();
+    ps.bumpStat('u', 'incites', 5); // 推定なら incite
+    ps.setFaction('u', 'guide'); // 明示で guide
+    expect(ps.factionOf('u')).toBe('guide');
+  });
+});

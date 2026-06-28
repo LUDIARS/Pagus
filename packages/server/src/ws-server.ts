@@ -14,6 +14,8 @@ import {
   type LlmInfo,
   type ChronicleEntry,
   type PlayerActionEntry,
+  type LeaderboardEntry,
+  type Faction,
 } from '@pagus/sim';
 import type { PlayerStateSnapshot } from './player-state.js';
 
@@ -29,6 +31,8 @@ export interface WsHandlers {
   onChampion(targetId: string, userId: string): void;
   onAddRule(text: string, userId: string): void;
   onRemoveRule(ruleId: string, userId: string): void;
+  onBet(pick: 'death' | 'educate', amount: number, userId: string): void;
+  onFaction(side: Faction, userId: string): void;
 }
 
 export class GameWsServer {
@@ -37,6 +41,8 @@ export class GameWsServer {
   private llmInfo: LlmInfo | null = null;
   private chronicle: ChronicleEntry[] = [];
   private playerActions: PlayerActionEntry[] = [];
+  /** リーダーボード (§4.3) の最新値。接続時に現値を送る。 */
+  private leaderboard: Extract<ServerMessage, { t: 'leaderboard' }> | null = null;
   /** 状態パネル (§7) の最新値。接続時に現値を送る。 */
   private sysStatus: SysStatusMessage | null = null;
   /** 接続 → その接続を名乗った userId。per-connection 配信の宛先解決に使う。 */
@@ -68,6 +74,7 @@ export class GameWsServer {
     }
     ws.send(JSON.stringify({ t: 'playerActions', entries: this.playerActions } satisfies ServerMessage));
     if (this.sysStatus) ws.send(JSON.stringify(this.sysStatus));
+    if (this.leaderboard) ws.send(JSON.stringify(this.leaderboard));
     this.broadcastPlayers();
     ws.on('close', () => {
       this.connUser.delete(ws);
@@ -114,6 +121,12 @@ export class GameWsServer {
     } else if (msg.t === 'removeRule') {
       this.bind(ws, msg.userId);
       this.h.onRemoveRule(msg.ruleId, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'bet') {
+      this.bind(ws, msg.userId);
+      this.h.onBet(msg.pick, msg.amount, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'faction') {
+      this.bind(ws, msg.userId);
+      this.h.onFaction(msg.side, this.resolveUser(ws, msg.userId));
     }
   }
 
@@ -148,6 +161,24 @@ export class GameWsServer {
           championName,
         };
     this.sendToUser(userId, JSON.stringify(msg));
+  }
+
+  /** 裁判ベットのプール状態を特定 userId の全接続へ送る (§3, yourBet が個別なので per-connection)。 */
+  sendBetState(
+    userId: string,
+    incidentId: string,
+    pool: { death: number; educate: number },
+    yourBet: { pick: 'death' | 'educate'; amount: number } | null,
+  ): void {
+    const msg: ServerMessage = { t: 'betState', incidentId, pool, yourBet };
+    this.sendToUser(userId, JSON.stringify(msg));
+  }
+
+  /** リーダーボード (§4.3) を更新し全クライアントへ配る。接続時にも現値を送る。 */
+  broadcastLeaderboard(players: LeaderboardEntry[], factions: { guide: number; incite: number }): void {
+    const msg: Extract<ServerMessage, { t: 'leaderboard' }> = { t: 'leaderboard', players, factions };
+    this.leaderboard = msg;
+    this.fanout(JSON.stringify(msg));
   }
 
   /** 特定 userId の全接続へ commandRejected を送る。 */

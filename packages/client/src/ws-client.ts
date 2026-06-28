@@ -1,6 +1,19 @@
 // WS 接続。server からの snapshot/log を受け、扇動/沈静化コマンドを送る。自動再接続。
 
-import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary } from '@pagus/sim';
+import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry } from '@pagus/sim';
+
+/** 裁判ベットのプール状態 (§3 betState 受信ペイロード)。 */
+export interface BetStateView {
+  incidentId: string;
+  pool: { death: number; educate: number };
+  yourBet: { pick: 'death' | 'educate'; amount: number } | null;
+}
+
+/** リーダーボード (§4.3 leaderboard 受信ペイロード)。 */
+export interface LeaderboardView {
+  players: LeaderboardEntry[];
+  factions: { guide: number; incite: number };
+}
 
 /** 状態パネル (§7) の受信ペイロード。 */
 export interface SysStatus {
@@ -27,6 +40,10 @@ export interface WsHandlers {
   onPlayerActions?(entries: PlayerActionEntry[]): void;
   /** 状態パネル (§7): 稼働時間・ゲーム内日付・LLM コスト。 */
   onSysStatus?(s: SysStatus): void;
+  /** 裁判ベットのプール状態 (§3)。 */
+  onBetState?(s: BetStateView): void;
+  /** 称号・陣営のリーダーボード (§4.3)。 */
+  onLeaderboard?(s: LeaderboardView): void;
 }
 
 export interface Conn {
@@ -76,6 +93,10 @@ export function connect(url: string, h: WsHandlers): Conn {
           term: msg.term,
           cost: msg.cost,
         });
+      } else if (msg.t === 'betState') {
+        h.onBetState?.({ incidentId: msg.incidentId, pool: msg.pool, yourBet: msg.yourBet });
+      } else if (msg.t === 'leaderboard') {
+        h.onLeaderboard?.({ players: msg.players, factions: msg.factions });
       }
     };
   };
