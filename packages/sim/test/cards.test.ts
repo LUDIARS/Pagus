@@ -134,6 +134,26 @@ describe('覚醒 (§v1.3-A ⑲ awaken)', () => {
   });
 });
 
+describe('復活 (§v1.3-B ⑤ revive 闇市)', () => {
+  it('退場済み (alive=false) のどうぶつを 1 体 alive へ戻す', () => {
+    const w = world();
+    const tm = new TermMachine(w, new StubBrain());
+    const a = w.villagers.get('a')!;
+    a.alive = false;
+    expect(aliveVillagers(w).map((v) => v.id)).toEqual(['b']);
+    expect(tm.revive('a')).toBe(true);
+    expect(a.alive).toBe(true);
+    expect(aliveVillagers(w).map((v) => v.id).sort()).toEqual(['a', 'b']);
+  });
+
+  it('生存中 / 不在の対象は false', () => {
+    const w = world();
+    const tm = new TermMachine(w, new StubBrain());
+    expect(tm.revive('a')).toBe(false); // 既に生存
+    expect(tm.revive('missing')).toBe(false); // 不在
+  });
+});
+
 describe('偽予言 (§v1.3-A ⑳ falseProphecy)', () => {
   it('生存住民全員に偽 InfoItem を撒き REACTION_EXPOSURE を底上げし、注入数を返す', () => {
     const w = world();

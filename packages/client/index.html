@@ -113,6 +113,13 @@
       /* カードパネル (§v1.3-A)。 */
       #cards { background: #131019; border: 1px solid #4a3a5a; border-radius: 8px; padding: 10px; }
       #cards h3 { color: #c79bf2; }
+
+      /* 経済パネル (§v1.3-B)。 */
+      #economy { background: #101813; border: 1px solid #3a5a45; border-radius: 8px; padding: 10px; }
+      #economy h3 { color: #8fe0b0; }
+      .eco-btn { width: 100%; margin: 4px 0 2px; border-color: #4f9f6f; color: #d0f2e0; }
+      .eco-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+      .eco-auction { margin: 4px 0 6px; padding: 6px 8px; background: #0e1410; border: 1px solid #2a3a30; border-radius: 6px; }
       .card-btn { width: 100%; margin: 4px 0 2px; border-color: #8a6fcf; color: #e0d0f2; }
       .card-btn:disabled { opacity: 0.4; cursor: not-allowed; }
       .ctl-state { margin-bottom: 6px; }
@@ -264,6 +271,7 @@
         <canvas id="radar" width="316" height="250"></canvas>
         <div id="controls"></div>
         <div id="cards"></div>
+        <div id="economy"></div>
         <div id="trial"></div>
         <div id="bet"></div>
         <div id="vstatus"></div>

@@ -12,6 +12,7 @@ import { ChronicleView } from './chronicle-view.js';
 import { StatusPanel } from './status-panel.js';
 import { PlayerControls, type ActionType } from './player-controls.js';
 import { CardPanel } from './card-panel.js';
+import { EconomyPanel } from './economy-panel.js';
 import { BetPanel } from './bet-panel.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
 import { connect, type Conn } from './ws-client.js';
@@ -75,6 +76,16 @@ async function main(): Promise<void> {
     onCard: (card, args) => conn.send({ t: 'card', card, userId, ...args }),
   });
 
+  // 経済パネル (§v1.3-B): 送金 / 銀行 / 保険 / 闇市 / オークション。
+  const economy = new EconomyPanel(el('economy'), {
+    onTransfer: (toUserId, amount) => conn.send({ t: 'transfer', toUserId, amount, userId }),
+    onDeposit: (amount) => conn.send({ t: 'deposit', amount, userId }),
+    onWithdraw: (amount) => conn.send({ t: 'withdraw', amount, userId }),
+    onInsure: (targetId, premium) => conn.send({ t: 'insure', targetId, premium, userId }),
+    onBuyMarket: (item, args) => conn.send({ t: 'buyMarket', item, userId, ...args }),
+    onBid: (lotId, amount) => conn.send({ t: 'bid', lotId, amount, userId }),
+  });
+
   const verdict = el('verdict');
   // 死刑/教育ボタンは「殺す/活かす」を決める fate 段階でのみ出す (foolish=被告選びは右パネル)。
   const showVerdict = (world: { phase: string; trial: { stage: string } | null }): boolean =>
@@ -92,6 +103,7 @@ async function main(): Promise<void> {
       chronicle.setWorld(world);
       controls.setWorld(world);
       cards.setWorld(world);
+      economy.setWorld(world);
       betPanel.update(world);
       verdict.classList.toggle('show', showVerdict(world));
     },
@@ -109,11 +121,13 @@ async function main(): Promise<void> {
     onPlayerState: (state) => {
       controls.setState(state);
       cards.setKarma(state.karma);
+      economy.setState(state.karma, state.savings);
     },
     onCommandRejected: (reason) => showToast(`⚠ ${reason}`),
     onPlayerActions: (entries) => chronicle.setActions(entries),
     onBetState: (s) => betPanel.setBetState(s),
     onLeaderboard: (s) => leaderboard.setLeaderboard(s),
+    onAuction: (lots) => economy.setAuction(lots),
   });
 
   // 裁判の票は中央の 死刑/教育 に一本化 (沈静化は廃止 §4.1)。

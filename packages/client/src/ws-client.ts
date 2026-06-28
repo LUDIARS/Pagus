@@ -1,6 +1,6 @@
 // WS 接続。server からの snapshot/log を受け、扇動/沈静化コマンドを送る。自動再接続。
 
-import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry } from '@pagus/sim';
+import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView } from '@pagus/sim';
 
 /** 裁判ベットのプール状態 (§3 betState 受信ペイロード)。 */
 export interface BetStateView {
@@ -32,8 +32,8 @@ export interface WsHandlers {
   onTrialLines(incidentId: string, lines: TrialLine[]): void;
   onLlm(info: LlmInfo): void;
   onChronicle(entries: ChronicleEntry[]): void;
-  /** その接続ユーザのカルマ/善性状態 (§4.4)。推し (§1) を含む。 */
-  onPlayerState?(state: { karma: number; virtue: number; sanctionCost: number; canCheerInMs: number; championId: string | null; championName?: string }): void;
+  /** その接続ユーザのカルマ/善性状態 (§4.4)。推し (§1)・預金 (§v1.3-B ④) を含む。 */
+  onPlayerState?(state: { karma: number; virtue: number; sanctionCost: number; canCheerInMs: number; championId: string | null; championName?: string; savings: number }): void;
   /** コマンド却下 (カルマ不足/インターバル中など)。 */
   onCommandRejected?(reason: string): void;
   /** 人間の行動記録 (§8)。 */
@@ -44,6 +44,8 @@ export interface WsHandlers {
   onBetState?(s: BetStateView): void;
   /** 称号・陣営のリーダーボード (§4.3)。 */
   onLeaderboard?(s: LeaderboardView): void;
+  /** オークションのロット状態 (§v1.3-B ②)。 */
+  onAuction?(lots: AuctionLotView[]): void;
 }
 
 export interface Conn {
@@ -82,8 +84,10 @@ export function connect(url: string, h: WsHandlers): Conn {
           canCheerInMs: msg.canCheerInMs,
           championId: msg.championId ?? null,
           ...(msg.championName !== undefined ? { championName: msg.championName } : {}),
+          savings: msg.savings,
         });
-      } else if (msg.t === 'commandRejected') h.onCommandRejected?.(msg.reason);
+      } else if (msg.t === 'auction') h.onAuction?.(msg.lots);
+      else if (msg.t === 'commandRejected') h.onCommandRejected?.(msg.reason);
       else if (msg.t === 'playerActions') h.onPlayerActions?.(msg.entries);
       else if (msg.t === 'sysStatus') {
         h.onSysStatus?.({

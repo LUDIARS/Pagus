@@ -125,6 +125,22 @@ export interface PlayerState {
   sanctionCost: number;
   /** 次に応援できるまでの残りミリ秒 (0 = いま可能)。 */
   canCheerInMs: number;
+  /** 銀行預金 (§v1.3-B ④)。日末に利子が付き、spend 対象外。 */
+  savings: number;
+}
+
+/** オークション (§v1.3-B ②) の 1 ロットの配信形。 */
+export interface AuctionLotView {
+  /** ロット id (現アクティブロットの種別)。 */
+  id: string;
+  /** ロットの表示名 (効果の説明)。 */
+  title: string;
+  /** 現在の最高入札額。未入札は 0。 */
+  highBid: number;
+  /** 現在の最高入札者 userId。未入札は null。 */
+  highUserId: string | null;
+  /** 締切までの残りミリ秒。 */
+  endsInMs: number;
 }
 
 /** 実績カウンタ (§4.1)。称号・陣営推定の素材。既定は全 0。 */
@@ -221,7 +237,10 @@ export type ServerMessage =
       championId?: string | null;
       /** 推しの名前 (index が world から補完)。未指名/不在なら省略。 */
       championName?: string;
+      /** 銀行預金 (§v1.3-B ④)。 */
+      savings: number;
     }
+  | { t: 'auction'; lots: AuctionLotView[] } // オークションのロット状態 (§v1.3-B ②, broadcast)
   | { t: 'commandRejected'; reason: string } // カルマ不足/インターバル中など
   | {
       t: 'betState'; // 裁判ベットのプール状態 (§3, per-connection: yourBet が個別)
@@ -255,6 +274,9 @@ export type ServerMessage =
 /** カードパック (§v1.3-A) の 5 種。 */
 export type CardName = 'disaster' | 'spiritAway' | 'swap' | 'awaken' | 'falseProphecy';
 
+/** 闇市 (§v1.3-B ⑤) で買える品目。revive=死者復活 / card_*=カードパックの効果を割引購入。 */
+export type MarketItem = 'revive' | 'card_disaster' | 'card_swap' | 'card_awaken' | 'card_prophecy';
+
 /** client → server。 */
 export type ClientMessage =
   | { t: 'hello'; userId: string } // 接続とユーザを紐付け (per-user カルマ push 用)
@@ -269,4 +291,11 @@ export type ClientMessage =
   | { t: 'faction'; side: 'guide' | 'incite'; userId?: string } // 二大陣営を明示選択 (§4.3)
   // カードパック (§v1.3-A): カルマで切る一発介入。card 別に必要な引数だけ伴う。
   // disaster=kind / spiritAway=targetId / swap=targetId(a)+targetId2(b) / awaken=targetId / falseProphecy=text?
-  | { t: 'card'; card: CardName; targetId?: string; targetId2?: string; kind?: string; text?: string; userId?: string };
+  | { t: 'card'; card: CardName; targetId?: string; targetId2?: string; kind?: string; text?: string; userId?: string }
+  // 経済パック (§v1.3-B): カルマ経済。
+  | { t: 'transfer'; toUserId: string; amount: number; userId?: string } // 自分→他者へカルマ送金 (§v1.3-B ①)
+  | { t: 'deposit'; amount: number; userId?: string } // 銀行へ預入 (§v1.3-B ④)
+  | { t: 'withdraw'; amount: number; userId?: string } // 銀行から引出 (§v1.3-B ④)
+  | { t: 'insure'; targetId: string; premium: number; userId?: string } // 推し保険を掛ける (§v1.3-B ③)
+  | { t: 'buyMarket'; item: MarketItem; targetId?: string; targetId2?: string; kind?: string; userId?: string } // 闇市で購入 (§v1.3-B ⑤)
+  | { t: 'bid'; lotId: string; amount: number; userId?: string }; // オークション入札 (§v1.3-B ②)
