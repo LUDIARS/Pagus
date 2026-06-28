@@ -135,6 +135,8 @@ export interface PlayerState {
   canCheerInMs: number;
   /** 銀行預金 (§v1.3-B ④)。日末に利子が付き、spend 対象外。 */
   savings: number;
+  /** 累計課金額 (§v1.3-F 課金モック)。topup でカルマと共に増える。 */
+  spent: number;
 }
 
 /** オークション (§v1.3-B ②) の 1 ロットの配信形。 */
@@ -207,6 +209,8 @@ export interface LeaderboardEntry {
   karma: number;
   virtue: number;
   stats: PlayerStats;
+  /** 累計課金額 (§v1.3-F 課金モック)。状態一覧に ¥ 表記で出す。 */
+  spent: number;
 }
 
 /** LLM コストログの 1 件 (§7, 直近分を配信)。 */
@@ -274,7 +278,10 @@ export type ServerMessage =
       championName?: string;
       /** 銀行預金 (§v1.3-B ④)。 */
       savings: number;
+      /** 累計課金額 (§v1.3-F 課金モック)。 */
+      spent: number;
     }
+  | { t: 'loggedOut'; reason: string } // 別端末ログインで現セッションが追い出された (§v1.3-F)
   | { t: 'auction'; lots: AuctionLotView[] } // オークションのロット状態 (§v1.3-B ②, broadcast)
   | { t: 'commandRejected'; reason: string } // カルマ不足/インターバル中など
   | {
@@ -326,6 +333,8 @@ export type MarketItem = 'revive' | 'card_disaster' | 'card_swap' | 'card_awaken
 /** client → server。 */
 export type ClientMessage =
   | { t: 'hello'; userId: string } // 接続とユーザを紐付け (per-user カルマ push 用)
+  | { t: 'login'; code: string } // 別端末のユーザーコード (=userId UUIDv4) で現接続を束ね直す (§v1.3-F)
+  | { t: 'topup'; amount: number; userId?: string } // 課金モック (§v1.3-F): 固定パックでカルマ+課金額を増やす
   | { t: 'incite'; targetId: string; rumorAboutId?: string; userId?: string } // 対象に偽情報を吹き込み事件化を促す (§4.2)
   | { t: 'sanction'; targetId: string; userId?: string } // 対象を即時つるし上げ裁判にかける (§4.3)
   | { t: 'cheer'; targetId: string; userId?: string } // 対象の気質を後押しする (§4.5)

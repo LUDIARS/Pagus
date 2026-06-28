@@ -199,6 +199,26 @@
       .hist-rule-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
       .rule-remove-btn { white-space: nowrap; border-color: #eb5757; color: #ffb3b3; font-size: 11px; padding: 3px 8px; }
 
+      /* アカウントパネル (§v1.3-F): 課金モック / ユーザーコード / 別端末ログイン。 */
+      #account { background: #14110e; border: 1px solid #5a4a2a; border-radius: 8px; padding: 10px; }
+      #account h3 { color: #f2d08a; margin: 0 0 6px; }
+      .topup-btns { display: flex; gap: 6px; margin: 4px 0 2px; }
+      .topup-btn { flex: 1; padding: 8px 4px; font-size: 13px; border-color: #c0a04f; color: #f2e6c0; }
+      .acct-code-row { display: flex; gap: 6px; margin: 4px 0 2px; }
+      .acct-code, .acct-login { flex: 1; min-width: 0; background: #0e121b; color: #cdd6e4;
+        border: 1px solid #38405a; border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+      .acct-code { font-family: ui-monospace, monospace; }
+      .acct-copy, .acct-login-btn { white-space: nowrap; border-color: #c0a04f; color: #f2e6c0; font-size: 12px; }
+      .acct-login-btn { border-color: #9be3ff; color: #cdeeff; }
+
+      /* 別端末ログインで追い出された時の恒久オーバーレイ (§v1.3-F)。 */
+      #logged-out { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.78);
+        display: flex; align-items: center; justify-content: center; }
+      .logged-out-box { background: #11151f; border: 1px solid #5a3a2a; border-radius: 12px;
+        padding: 24px 32px; text-align: center; max-width: 90vw; }
+      .logged-out-title { font-size: 18px; font-weight: bold; color: #f2c94c; margin-bottom: 8px; }
+      .logged-out-msg { font-size: 14px; color: #cdd6e4; }
+
       /* コマンド却下トースト。 */
       #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
         z-index: 80; background: rgba(40,16,16,0.95); color: #ffb3b3; border: 1px solid #eb5757;
@@ -305,6 +325,7 @@
         <div id="bet"></div>
         <div id="vstatus"></div>
         <div id="leaderboard"></div>
+        <div id="account"></div>
       </div>
       <div id="backdrop"></div>
     </div>

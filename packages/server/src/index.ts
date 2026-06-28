@@ -181,6 +181,20 @@ function main(): void {
   const ps = new PlayerState();
   const knownUsers = new Set<string>();
 
+  // 課金モック (§v1.3-F): 許可する固定パック値。PAGUS_TOPUP_PACKS 既定 "100,500,1000"。
+  // 不正値 (非正/非整数) は無言フォールバックせず即エラー (RULE_CODE §7.1)。
+  const TOPUP_PACKS = new Set<number>(
+    (process.env.PAGUS_TOPUP_PACKS ?? '100,500,1000')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .map((s) => {
+        const n = Number(s);
+        if (!Number.isInteger(n) || n <= 0) throw new Error(`環境変数 PAGUS_TOPUP_PACKS の値が正の整数ではありません: ${s}`);
+        return n;
+      }),
+  );
+
   // 裁判ベット (§3): 現裁判 (incidentId) ごとのプール。
   const betPool = new BetPool();
   const BET_MIN = numEnv('PAGUS_BET_MIN', 1);
@@ -399,6 +413,28 @@ function main(): void {
       pushBetState(userId); // 進行中の裁判があればベット状態も
       scheduleSysStatus(); // 接続時に最新の状態を反映 (§2.3 イベント駆動)
       scheduleLeaderboard(); // 新規ユーザを反映 (§4.3)
+    },
+    // 課金モック (§v1.3-F): 許可パックのみ受理し、カルマ + 累計課金額を増やす。
+    onTopup: (amount, userId) => {
+      knownUsers.add(userId);
+      if (!TOPUP_PACKS.has(amount)) {
+        ws.sendRejected(userId, '不正な課金パック');
+        return;
+      }
+      ps.topup(userId, amount);
+      const cal = tm.world.calendar;
+      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `💴 課金: ¥${amount} ぶんのカルマが供給された`, 'other');
+      ws.updateChronicle(chronicle.recent());
+      pushState(userId);
+      scheduleLeaderboard(); // 課金額 (spent) を一覧へ反映
+    },
+    // 別端末ログイン (§v1.3-F): ws-server が code を userId に束ね直し旧接続を蹴った後の配線。
+    onLogin: (userId) => {
+      knownUsers.add(userId);
+      pushState(userId);
+      pushBetState(userId);
+      scheduleSysStatus();
+      scheduleLeaderboard();
     },
     onIncite: (targetId, rumorAboutId, userId) => {
       knownUsers.add(userId);

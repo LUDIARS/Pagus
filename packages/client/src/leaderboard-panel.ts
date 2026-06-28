@@ -106,7 +106,7 @@ export class LeaderboardPanel {
       const meta = document.createElement('div');
       meta.className = 'lb-meta';
       meta.textContent =
-        `💠${p.karma.toFixed(0)} 😇${p.virtue.toFixed(2)} ` +
+        `💠${p.karma.toFixed(0)} 😇${p.virtue.toFixed(2)} 💴¥${p.spent} ` +
         `🔥${p.stats.incites} ⚖${p.stats.sanctions} 🌸${p.stats.cheers} 📜${p.stats.rulesAdded} 🎲${p.stats.betsWon}`;
       row.appendChild(meta);
       this.listBox.appendChild(row);
