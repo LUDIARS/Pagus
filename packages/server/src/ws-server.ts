@@ -17,6 +17,8 @@ import {
   type LeaderboardEntry,
   type Faction,
   type CardName,
+  type MarketItem,
+  type AuctionLotView,
 } from '@pagus/sim';
 import type { PlayerStateSnapshot } from './player-state.js';
 
@@ -26,6 +28,13 @@ export interface CardArgs {
   targetId2?: string;
   kind?: string;
   text?: string;
+}
+
+/** 闇市購入 (§v1.3-B ⑤) の引数 (item 別に必要分だけ伴う)。 */
+export interface MarketArgs {
+  targetId?: string;
+  targetId2?: string;
+  kind?: string;
 }
 
 /** 状態パネル (§7) の sysStatus メッセージ形。 */
@@ -43,6 +52,12 @@ export interface WsHandlers {
   onBet(pick: 'death' | 'educate', amount: number, userId: string): void;
   onFaction(side: Faction, userId: string): void;
   onCard(card: CardName, args: CardArgs, userId: string): void;
+  onTransfer(toUserId: string, amount: number, userId: string): void;
+  onDeposit(amount: number, userId: string): void;
+  onWithdraw(amount: number, userId: string): void;
+  onInsure(targetId: string, premium: number, userId: string): void;
+  onBuyMarket(item: MarketItem, args: MarketArgs, userId: string): void;
+  onBid(lotId: string, amount: number, userId: string): void;
 }
 
 export class GameWsServer {
@@ -55,6 +70,8 @@ export class GameWsServer {
   private leaderboard: Extract<ServerMessage, { t: 'leaderboard' }> | null = null;
   /** 状態パネル (§7) の最新値。接続時に現値を送る。 */
   private sysStatus: SysStatusMessage | null = null;
+  /** オークション (§v1.3-B ②) の最新ロット状態。接続時に現値を送る。 */
+  private auction: Extract<ServerMessage, { t: 'auction' }> | null = null;
   /** 接続 → その接続を名乗った userId。per-connection 配信の宛先解決に使う。 */
   private readonly connUser = new Map<WebSocket, string>();
 
@@ -85,6 +102,7 @@ export class GameWsServer {
     ws.send(JSON.stringify({ t: 'playerActions', entries: this.playerActions } satisfies ServerMessage));
     if (this.sysStatus) ws.send(JSON.stringify(this.sysStatus));
     if (this.leaderboard) ws.send(JSON.stringify(this.leaderboard));
+    if (this.auction) ws.send(JSON.stringify(this.auction));
     this.broadcastPlayers();
     ws.on('close', () => {
       this.connUser.delete(ws);
@@ -146,6 +164,29 @@ export class GameWsServer {
       if (msg.kind !== undefined) args.kind = msg.kind;
       if (msg.text !== undefined) args.text = msg.text;
       this.h.onCard(msg.card, args, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'transfer') {
+      this.bind(ws, msg.userId);
+      this.h.onTransfer(msg.toUserId, msg.amount, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'deposit') {
+      this.bind(ws, msg.userId);
+      this.h.onDeposit(msg.amount, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'withdraw') {
+      this.bind(ws, msg.userId);
+      this.h.onWithdraw(msg.amount, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'insure') {
+      this.bind(ws, msg.userId);
+      this.h.onInsure(msg.targetId, msg.premium, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'buyMarket') {
+      this.bind(ws, msg.userId);
+      // exactOptionalPropertyTypes: 値があるキーだけ詰める。
+      const args: MarketArgs = {};
+      if (msg.targetId !== undefined) args.targetId = msg.targetId;
+      if (msg.targetId2 !== undefined) args.targetId2 = msg.targetId2;
+      if (msg.kind !== undefined) args.kind = msg.kind;
+      this.h.onBuyMarket(msg.item, args, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'bid') {
+      this.bind(ws, msg.userId);
+      this.h.onBid(msg.lotId, msg.amount, this.resolveUser(ws, msg.userId));
     }
   }
 
@@ -169,6 +210,7 @@ export class GameWsServer {
           sanctionCost: state.sanctionCost,
           canCheerInMs: state.canCheerInMs,
           championId: state.championId,
+          savings: state.savings,
         }
       : {
           t: 'playerState',
@@ -178,8 +220,16 @@ export class GameWsServer {
           canCheerInMs: state.canCheerInMs,
           championId: state.championId,
           championName,
+          savings: state.savings,
         };
     this.sendToUser(userId, JSON.stringify(msg));
+  }
+
+  /** オークションのロット状態 (§v1.3-B ②) を更新し全クライアントへ配る。接続時にも現値を送る。 */
+  broadcastAuction(lots: AuctionLotView[]): void {
+    const msg: Extract<ServerMessage, { t: 'auction' }> = { t: 'auction', lots };
+    this.auction = msg;
+    this.fanout(JSON.stringify(msg));
   }
 
   /** 裁判ベットのプール状態を特定 userId の全接続へ送る (§3, yourBet が個別なので per-connection)。 */

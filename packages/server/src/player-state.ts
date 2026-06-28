@@ -25,6 +25,15 @@ interface PlayerEntry {
   stats: PlayerStats;
   /** 明示選択した陣営 (§4.3)。未選択は null = 行動から推定。 */
   faction: Faction | null;
+  /** 銀行預金 (§v1.3-B ④)。日末に利子が付き、spend (操作の支払) 対象外。 */
+  savings: number;
+}
+
+/** 推し保険の 1 契約 (§v1.3-B ③)。userId+villagerId をキーに保持。 */
+interface InsuranceContract {
+  premium: number;
+  /** この term を超えたら失効 (日末に掃除)。 */
+  expireTerm: number;
 }
 
 /** 称号の定義 (§4.2): 実績カウンタ → 称号名。最大保持者に与える。 */
@@ -40,6 +49,13 @@ function emptyStats(): PlayerStats {
   return { incites: 0, sanctions: 0, cheers: 0, rulesAdded: 0, betsWon: 0, championDeaths: 0 };
 }
 
+/** 保険清算 1 件 (§v1.3-B ③): どの userId にいくら払い戻すか。 */
+export interface InsurancePayout {
+  userId: string;
+  villagerId: string;
+  payout: number;
+}
+
 /** snapshot/配信に使う 1 ユーザの状態。 */
 export interface PlayerStateSnapshot {
   karma: number;
@@ -48,6 +64,8 @@ export interface PlayerStateSnapshot {
   canCheerInMs: number;
   /** 推し (champion) の villager id。未指名は null (§1)。 */
   championId: string | null;
+  /** 銀行預金 (§v1.3-B ④)。 */
+  savings: number;
 }
 
 export class PlayerState {
@@ -67,6 +85,14 @@ export class PlayerState {
   private readonly cheerVirtue = numEnv('PAGUS_CHEER_VIRTUE', 0.05); // 応援1回の善性上昇
   private readonly championKarmaMult = numEnv('PAGUS_CHAMPION_KARMA_MULT', 1.5); // 推し生存中のカルマ加速倍率 (§1)
   private readonly championDeathPenalty = numEnv('PAGUS_CHAMPION_DEATH_PENALTY', 20); // 推しの死のカルマ罰 (§1)
+  private readonly transferFeePct = numEnv('PAGUS_TRANSFER_FEE_PCT', 0); // 送金手数料 (%) (§v1.3-B ①)
+
+  /** 推し保険の契約 (§v1.3-B ③): `${userId}:${villagerId}` → 契約。 */
+  private readonly insurances = new Map<string, InsuranceContract>();
+  /** 次の制裁が無料になるユーザ (§v1.3-B ② オークション sanction_free)。 */
+  private readonly sanctionFreeUsers = new Set<string>();
+  /** 次のカードのクールダウンを無視できるユーザ (§v1.3-B ② オークション card_grant)。 */
+  private readonly cardGrantUsers = new Set<string>();
 
   /** 扇動の固定コスト。 */
   get inciteCostValue(): number {
@@ -77,7 +103,7 @@ export class PlayerState {
   get(userId: string): PlayerEntry {
     let e = this.players.get(userId);
     if (!e) {
-      e = { karma: 0, virtue: 0, lastCheerMs: 0, championId: null, stats: emptyStats(), faction: null };
+      e = { karma: 0, virtue: 0, lastCheerMs: 0, championId: null, stats: emptyStats(), faction: null, savings: 0 };
       this.players.set(userId, e);
     }
     return e;
@@ -179,6 +205,115 @@ export class PlayerState {
     e.karma = Math.max(0, e.karma + amount);
   }
 
+  /** 善性を加算する (§v1.3-B ② オークション virtue_boost)。0..1 にクランプ。 */
+  addVirtue(userId: string, amount: number): void {
+    const e = this.get(userId);
+    e.virtue = Math.min(1, Math.max(0, e.virtue + amount));
+  }
+
+  // --- 経済パック (§v1.3-B) -----------------------------------------------------
+
+  /**
+   * 送金 (§v1.3-B ①)。from→to へ amount カルマを移す。
+   * from≠to / amount は正の整数 / from の残高内、を満たさなければ false (無言フォールバック禁止)。
+   * 手数料 transferFeePct(%) は焼却 (受取額 = amount × (1 - pct/100), 端数切り捨て)。
+   */
+  transfer(from: string, to: string, amount: number): boolean {
+    if (from === to) return false;
+    if (!Number.isInteger(amount) || amount <= 0) return false;
+    const sender = this.get(from);
+    if (sender.karma < amount) return false;
+    const received = Math.floor(amount * (1 - this.transferFeePct / 100));
+    sender.karma -= amount;
+    this.get(to).karma += received;
+    return true;
+  }
+
+  /** 銀行へ預入 (§v1.3-B ④)。amount は正の整数かつカルマ残高内。預金は spend 対象外。 */
+  deposit(userId: string, amount: number): boolean {
+    if (!Number.isInteger(amount) || amount <= 0) return false;
+    const e = this.get(userId);
+    if (e.karma < amount) return false;
+    e.karma -= amount;
+    e.savings += amount;
+    return true;
+  }
+
+  /** 銀行から引出 (§v1.3-B ④)。amount は正の整数かつ預金残高内。 */
+  withdraw(userId: string, amount: number): boolean {
+    if (!Number.isInteger(amount) || amount <= 0) return false;
+    const e = this.get(userId);
+    if (e.savings < amount) return false;
+    e.savings -= amount;
+    e.karma += amount;
+    return true;
+  }
+
+  /** 全ユーザの預金に利子を付ける (§v1.3-B ④, 日末)。savings ×= (1 + rate)。 */
+  applyInterest(rate: number): void {
+    for (const e of this.players.values()) {
+      if (e.savings > 0) e.savings *= 1 + rate;
+    }
+  }
+
+  /** その userId の預金 (§v1.3-B ④)。 */
+  savings(userId: string): number {
+    return this.get(userId).savings;
+  }
+
+  /**
+   * 推し保険を掛ける (§v1.3-B ③)。userId が villagerId に premium を掛け、expireTerm まで有効。
+   * 既契約があれば上書き (premium と期限を更新)。amount 検証は呼び出し側 (spend 前)。
+   */
+  insure(userId: string, villagerId: string, premium: number, expireTerm: number): void {
+    this.insurances.set(`${userId}:${villagerId}`, { premium, expireTerm });
+  }
+
+  /**
+   * villagerId の死亡で保険を清算する (§v1.3-B ③)。その villager に掛けられた全契約を払戻し
+   * (払戻 = premium × mult を addKarma) 契約を解除する。払戻一覧を返す (chronicle 用)。
+   */
+  settleInsuranceForDeath(villagerId: string, mult: number): InsurancePayout[] {
+    const out: InsurancePayout[] = [];
+    const suffix = `:${villagerId}`;
+    for (const [key, contract] of this.insurances) {
+      if (!key.endsWith(suffix)) continue;
+      const userId = key.slice(0, key.length - suffix.length);
+      const payout = Math.floor(contract.premium * mult);
+      this.addKarma(userId, payout);
+      out.push({ userId, villagerId, payout });
+      this.insurances.delete(key);
+    }
+    return out;
+  }
+
+  /** 失効した保険契約を掃除する (§v1.3-B ③, 日末)。expireTerm < term を除去。 */
+  pruneExpiredInsurance(term: number): void {
+    for (const [key, contract] of this.insurances) {
+      if (contract.expireTerm < term) this.insurances.delete(key);
+    }
+  }
+
+  /** 次の制裁を無料にするフラグを付与する (§v1.3-B ② sanction_free)。 */
+  grantSanctionFree(userId: string): void {
+    this.sanctionFreeUsers.add(userId);
+  }
+
+  /** 制裁無料フラグがあれば消費して true (1 回限り, §v1.3-B ②)。 */
+  consumeSanctionFree(userId: string): boolean {
+    return this.sanctionFreeUsers.delete(userId);
+  }
+
+  /** 次のカードのクールダウンを無視するフラグを付与する (§v1.3-B ② card_grant)。 */
+  grantCardFree(userId: string): void {
+    this.cardGrantUsers.add(userId);
+  }
+
+  /** カード無料フラグがあれば消費して true (1 回限り, §v1.3-B ②)。 */
+  consumeCardFree(userId: string): boolean {
+    return this.cardGrantUsers.delete(userId);
+  }
+
   /** 実績カウンタを増やす (§4.1)。 */
   bumpStat(userId: string, key: keyof PlayerStats, by = 1): void {
     this.get(userId).stats[key] += by;
@@ -265,6 +400,7 @@ export class PlayerState {
       sanctionCost: this.sanctionCost(userId),
       canCheerInMs: this.canCheerInMs(userId, now),
       championId: e.championId,
+      savings: e.savings,
     };
   }
 }

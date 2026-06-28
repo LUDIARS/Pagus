@@ -1,12 +1,13 @@
 // Pagus server エントリ。data からワールドを起こし、TermLoop と WS を配線する。
 // 思考は PAGUS_BRAIN で切替: 'stub'(既定/決定的) | 'llm'(実 LLM = claude/codex CLI)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
 import { TermLoop } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
 import { PlayerState } from './player-state.js';
 import { BetPool } from './bet-pool.js';
+import { AuctionManager } from './auction.js';
 import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, CostLog, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND, type CostSink } from './llm/index.js';
 import { createServer } from 'node:http';
 import { SessionLog } from './session-log.js';
@@ -198,6 +199,26 @@ function main(): void {
   // 天災カードルールの通し番号 (id 衝突回避)。
   let cardRuleCount = 0;
 
+  // 経済パック (§v1.3-B) の env。
+  const BANK_INTEREST = numEnv('PAGUS_BANK_INTEREST', 0.02); // 銀行預金の日末利子 (④)
+  const INSURE_DAYS = numEnv('PAGUS_INSURE_DAYS', 5); // 推し保険の有効日数 (③)
+  const INSURE_MULT = numEnv('PAGUS_INSURE_MULT', 3); // 保険の払戻倍率 (③)
+  const REVIVE_COST = numEnv('PAGUS_REVIVE_COST', 80); // 闇市の復活コスト (⑤)
+  const AUCTION_PERIOD_MS = numEnv('PAGUS_AUCTION_PERIOD_MS', 120000); // オークション締切間隔 (②)
+  const MARKET_PREMIUM = numEnv('PAGUS_MARKET_PREMIUM', 1.5); // 闇市カードのプレミアム倍率 (⑤)
+  // 闇市の card_* → カードパック (A) の種別。
+  const MARKET_CARD: Partial<Record<MarketItem, CardName>> = {
+    card_disaster: 'disaster',
+    card_swap: 'swap',
+    card_awaken: 'awaken',
+    card_prophecy: 'falseProphecy',
+  };
+  // 復活候補: 最近退場した villager id (新しいものを末尾に積む, 上限20)。
+  const RECENT_DEAD_CAP = 20;
+  const recentDeadIds: string[] = [];
+  // 利子付与/保険掃除を回した最後のターム (日末検知用)。初回 snapshot で seed。
+  let lastEconomyTerm = tm.world.term;
+
   // しきたり改定 (§2) のコスト/上限。
   const RULE_ADD_COST = numEnv('PAGUS_RULE_ADD_COST', 15);
   const RULE_REMOVE_COST = numEnv('PAGUS_RULE_REMOVE_COST', 25);
@@ -211,6 +232,7 @@ function main(): void {
 
   let loop: TermLoop;
   let ws: GameWsServer;
+  let auction: AuctionManager;
 
   /** その userId の現状態を本人の全接続へ push (推し名は world から補完, §1)。 */
   const pushState = (userId: string): void => {
@@ -305,9 +327,22 @@ function main(): void {
     const cal = w.calendar;
     for (const id of prevAliveIds) {
       if (currentAlive.has(id)) continue; // まだ生きている
+      const name = w.villagers.get(id)?.name ?? id;
+      // 復活候補 (§v1.3-B ⑤): 最近退場した id を積む (重複は末尾へ寄せ直す)。
+      const dupe = recentDeadIds.indexOf(id);
+      if (dupe >= 0) recentDeadIds.splice(dupe, 1);
+      recentDeadIds.push(id);
+      if (recentDeadIds.length > RECENT_DEAD_CAP) recentDeadIds.shift();
+      // 推し保険の清算 (§v1.3-B ③): この villager に掛けた全契約へ premium×MULT を払戻し解除。
+      const payouts = ps.settleInsuranceForDeath(id, INSURE_MULT);
+      for (const p of payouts) {
+        pushState(p.userId);
+        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `🛡 保険金: ${name} の死で ${p.payout} カルマが払い戻された`, 'other');
+        changed = true;
+      }
+      if (payouts.length > 0) scheduleLeaderboard();
       const mourners = ps.usersWithChampion(id);
       if (mourners.length === 0) continue; // 推しのいない死は弔いなし
-      const name = w.villagers.get(id)?.name ?? id;
       for (const uid of mourners) {
         ps.onChampionDeath(uid);
         ps.bumpStat(uid, 'championDeaths'); // 推しの死 (§4.1)
@@ -365,7 +400,9 @@ function main(): void {
         ws.sendRejected(userId, 'いま別の裁判が進行中');
         return;
       }
-      if (!ps.spend(userId, ps.sanctionCost(userId))) {
+      // オークション落札の制裁無料券 (§v1.3-B ②) があれば消費して無料化。
+      const sanctionFree = ps.consumeSanctionFree(userId);
+      if (!sanctionFree && !ps.spend(userId, ps.sanctionCost(userId))) {
         ws.sendRejected(userId, 'カルマが足りない');
         return;
       }
@@ -507,8 +544,11 @@ function main(): void {
       }
       const now = Date.now();
       if (!ps.canUseCard(userId, now)) {
-        ws.sendRejected(userId, 'カードはクールダウン中');
-        return;
+        // オークション落札の「カード招待状」(§v1.3-B ②) があればクールダウンを 1 回無視。
+        if (!ps.consumeCardFree(userId)) {
+          ws.sendRejected(userId, 'カードはクールダウン中');
+          return;
+        }
       }
       const cal = w.calendar;
       const date = `${cal.month}月${cal.dayOfMonth}日`;
@@ -591,12 +631,223 @@ function main(): void {
       ws.broadcastSnapshot(w);
       pushState(userId);
     },
+    // --- 経済パック (§v1.3-B) ---------------------------------------------------
+    onTransfer: (toUserId, amount, userId) => {
+      knownUsers.add(userId);
+      if (!toUserId || toUserId.length === 0 || toUserId === userId) {
+        ws.sendRejected(userId, '送金先が不正 (自分以外を指定)');
+        return;
+      }
+      if (!Number.isInteger(amount) || amount <= 0) {
+        ws.sendRejected(userId, '送金額は正の整数');
+        return;
+      }
+      if (!ps.transfer(userId, toUserId, amount)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      knownUsers.add(toUserId);
+      pushState(userId);
+      pushState(toUserId);
+      scheduleLeaderboard();
+    },
+    onDeposit: (amount, userId) => {
+      knownUsers.add(userId);
+      if (!Number.isInteger(amount) || amount <= 0) {
+        ws.sendRejected(userId, '預入額は正の整数');
+        return;
+      }
+      if (!ps.deposit(userId, amount)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      pushState(userId);
+    },
+    onWithdraw: (amount, userId) => {
+      knownUsers.add(userId);
+      if (!Number.isInteger(amount) || amount <= 0) {
+        ws.sendRejected(userId, '引出額は正の整数');
+        return;
+      }
+      if (!ps.withdraw(userId, amount)) {
+        ws.sendRejected(userId, '預金が足りない');
+        return;
+      }
+      pushState(userId);
+    },
+    onInsure: (targetId, premium, userId) => {
+      knownUsers.add(userId);
+      const target = targetId ? tm.world.villagers.get(targetId) : undefined;
+      if (!targetId || !target || !target.alive) {
+        ws.sendRejected(userId, '保険の対象が不正 (生存どうぶつのみ)');
+        return;
+      }
+      if (!Number.isInteger(premium) || premium <= 0) {
+        ws.sendRejected(userId, '保険料は正の整数');
+        return;
+      }
+      if (!ps.spend(userId, premium)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      ps.insure(userId, targetId, premium, tm.world.term + INSURE_DAYS);
+      const cal = tm.world.calendar;
+      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `🛡 保険: ${target.name} に ${premium} カルマ (${INSURE_DAYS}日)`, 'other');
+      ws.updateChronicle(chronicle.recent());
+      pushState(userId);
+    },
+    onBid: (lotId, amount, userId) => {
+      knownUsers.add(userId);
+      const res = auction.bid(lotId, userId, amount, Date.now());
+      if (!res.ok) {
+        ws.sendRejected(userId, res.reason);
+        return;
+      }
+      // 入札時はカルマを徴収しない (落札時のみ)。ロット状態は onChange で broadcast 済。
+    },
+    onBuyMarket: (item, args, userId) => {
+      knownUsers.add(userId);
+      const w = tm.world;
+      const cal = w.calendar;
+      const date = `${cal.month}月${cal.dayOfMonth}日`;
+      if (item === 'revive') {
+        // 復活候補を新しい順に探す (alive=false で消えていない直近の死者)。
+        let reviveId: string | null = null;
+        for (let i = recentDeadIds.length - 1; i >= 0; i -= 1) {
+          const id = recentDeadIds[i];
+          const v = id ? w.villagers.get(id) : undefined;
+          if (id && v && !v.alive) {
+            reviveId = id;
+            break;
+          }
+        }
+        if (!reviveId) {
+          ws.sendRejected(userId, '復活できる死者がいない');
+          return;
+        }
+        if (!ps.spend(userId, REVIVE_COST)) {
+          ws.sendRejected(userId, 'カルマが足りない');
+          return;
+        }
+        const name = w.villagers.get(reviveId)?.name ?? reviveId;
+        if (!tm.revive(reviveId)) {
+          ps.addKarma(userId, REVIVE_COST); // 想定外の失敗は返金 (握り潰さない)
+          ws.sendRejected(userId, '復活に失敗した');
+          return;
+        }
+        const di = recentDeadIds.indexOf(reviveId);
+        if (di >= 0) recentDeadIds.splice(di, 1);
+        // 復活で次回の死亡検知が誤発火しないよう生存集合に戻す。
+        prevAliveIds.add(reviveId);
+        chronicle.add(date, `🛒 闇市: ${name} が闇の力で蘇った`, 'other');
+        ws.updateChronicle(chronicle.recent());
+        ws.broadcastSnapshot(w);
+        pushState(userId);
+        return;
+      }
+      const card = MARKET_CARD[item];
+      if (!card) {
+        ws.sendRejected(userId, '不明な闇市の品');
+        return;
+      }
+      const cost = Math.ceil(CARD_COSTS[card] * MARKET_PREMIUM); // プレミアム価格 (§v1.3-B ⑤)
+      let text: string;
+      if (card === 'disaster') {
+        const kind = args.kind;
+        if (kind !== 'drought' && kind !== 'storm' && kind !== 'plague') {
+          ws.sendRejected(userId, '天災の種別が不正 (drought/storm/plague)');
+          return;
+        }
+        if (!ps.spend(userId, cost)) {
+          ws.sendRejected(userId, 'カルマが足りない');
+          return;
+        }
+        cardRuleCount += 1;
+        tm.addCardRule(makeDisasterRule(kind as DisasterKind, w.term + DISASTER_DAYS, `market_disaster_${cardRuleCount}`));
+        if (kind === 'plague') for (const v of aliveVillagers(w)) v.stress += 1;
+        const label = kind === 'drought' ? '干ばつ' : kind === 'storm' ? '嵐' : '疫病';
+        text = `🛒 闇市: 天災(${label})を放った`;
+      } else if (card === 'swap') {
+        const aId = args.targetId;
+        const bId = args.targetId2;
+        const a = aId ? w.villagers.get(aId) : undefined;
+        const b = bId ? w.villagers.get(bId) : undefined;
+        if (!aId || !bId || aId === bId || !a || !a.alive || !b || !b.alive) {
+          ws.sendRejected(userId, '入れ替えの対象が不正 (異なる生存どうぶつ2体)');
+          return;
+        }
+        if (!ps.spend(userId, cost)) {
+          ws.sendRejected(userId, 'カルマが足りない');
+          return;
+        }
+        tm.swapVillagers(aId, bId);
+        text = `🛒 闇市: ${a.name} と ${b.name} を入れ替えた`;
+      } else if (card === 'awaken') {
+        const targetId = args.targetId;
+        const target = targetId ? w.villagers.get(targetId) : undefined;
+        if (!targetId || !target || !target.alive) {
+          ws.sendRejected(userId, '覚醒の対象が不正 (生存どうぶつのみ)');
+          return;
+        }
+        if (!ps.spend(userId, cost)) {
+          ws.sendRejected(userId, 'カルマが足りない');
+          return;
+        }
+        tm.awaken(targetId);
+        text = `🛒 闇市: ${target.name} を覚醒させた`;
+      } else {
+        // falseProphecy
+        if (!ps.spend(userId, cost)) {
+          ws.sendRejected(userId, 'カルマが足りない');
+          return;
+        }
+        const n = tm.falseProphecy(undefined);
+        text = `🛒 闇市: 偽予言を ${n}体に撒いた`;
+      }
+      chronicle.add(date, text, 'other');
+      ws.updateChronicle(chronicle.recent());
+      ws.broadcastSnapshot(w);
+      pushState(userId);
+    },
   });
   ws.setLlmInfo(llmInfo);
   ws.updateChronicle(chronicle.recent()); // 既存の歴史を初期配信対象に。
 
+  // オークション (§v1.3-B ②): 固定ロット3種ローテ。落札時のみカルマ徴収し効果付与する。
+  auction = new AuctionManager(
+    AUCTION_PERIOD_MS,
+    Date.now(),
+    (effect, _lotId, winnerUserId, amount) => {
+      const cal = tm.world.calendar;
+      const date = `${cal.month}月${cal.dayOfMonth}日`;
+      const label = effect === 'sanction_free' ? '制裁無料券' : effect === 'virtue_boost' ? '善性のお守り' : 'カード招待状';
+      // 落札時にのみ徴収 (入札時 hold しない方式)。残高不足なら流す (無言フォールバック禁止 = 記録する)。
+      if (!ps.spend(winnerUserId, amount)) {
+        chronicle.add(date, `🔨 オークション: 落札者のカルマ不足で「${label}」は流れた`, 'other');
+        ws.updateChronicle(chronicle.recent());
+        return;
+      }
+      if (effect === 'sanction_free') ps.grantSanctionFree(winnerUserId);
+      else if (effect === 'virtue_boost') ps.addVirtue(winnerUserId, 0.1);
+      else ps.grantCardFree(winnerUserId);
+      chronicle.add(date, `🔨 オークション: 「${label}」を ${amount} カルマで落札`, 'other');
+      ws.updateChronicle(chronicle.recent());
+      pushState(winnerUserId);
+      scheduleLeaderboard();
+    },
+    () => ws.broadcastAuction(auction.view(Date.now())),
+  );
+  ws.broadcastAuction(auction.view(Date.now())); // 初回 (接続前の現値を ws に保持させる)
+
   loop = new TermLoop(tm, pace, incidentStepMs, {
     onSnapshot: (w) => {
+      // 日末 (term 進行) を検知して銀行利子付与 + 保険の期限切れ掃除 (§v1.3-B ③④)。
+      if (w.term > lastEconomyTerm) {
+        lastEconomyTerm = w.term;
+        ps.applyInterest(BANK_INTEREST);
+        ps.pruneExpiredInsurance(w.term);
+        for (const uid of knownUsers) pushState(uid);
+      }
       const mourned = detectChampionDeaths(w); // 推しの死 → 弔い (world/chronicle を変えうる)
       const settled = detectBetSettlement(w); // ベット決済 (§3, chronicle を変えうる)
       // 運命段階の裁判に入ったら、その incidentId の betState を初回配信 (プールは空)。
@@ -695,10 +946,14 @@ function main(): void {
     if (stateTicks % 3 === 0) for (const uid of knownUsers) pushState(uid);
   }, 1000);
 
+  // オークション (§v1.3-B ②): 1 秒ごとに締切判定。期限到来で落札 → 次ロットへローテ + broadcast。
+  const auctionTimer = setInterval(() => auction.tick(Date.now()), 1000);
+
   // Ctrl-C でループを止めログを flush してから抜ける。
   const shutdown = (): void => {
     clearInterval(stateTimer);
     clearInterval(sysTimer);
+    clearInterval(auctionTimer);
     if (sysPending) clearTimeout(sysPending);
     if (lbPending) clearTimeout(lbPending);
     loop.stop();

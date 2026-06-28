@@ -385,6 +385,19 @@ export class TermMachine {
     return n;
   }
 
+  // --- 経済パック (§v1.3-B 闇市) -------------------------------------------------
+
+  /**
+   * 復活 (§v1.3-B ⑤ 闇市 revive)。退場済み (alive=false) のどうぶつを 1 体 alive へ戻す。
+   * 対象が存在しかつ現に退場している (alive=false) ときのみ true。既に生存/不在なら false。
+   */
+  revive(villagerId: VillagerId): boolean {
+    const v = this.world.villagers.get(villagerId);
+    if (!v || v.alive) return false;
+    v.alive = true;
+    return true;
+  }
+
   // --- 月次事件のライフサイクル (§12.3) ----------------------------------------
 
   /**
