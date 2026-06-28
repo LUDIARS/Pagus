@@ -13,12 +13,31 @@ function numEnv(name: string, fallback: number): number {
   return n;
 }
 
+import type { PlayerStats, Faction, LeaderboardEntry } from '@pagus/sim';
+
 interface PlayerEntry {
   karma: number;
   virtue: number;
   lastCheerMs: number;
   /** 推し (champion) の villager id。未指名は null (§1)。 */
   championId: string | null;
+  /** 実績カウンタ (§4.1)。 */
+  stats: PlayerStats;
+  /** 明示選択した陣営 (§4.3)。未選択は null = 行動から推定。 */
+  faction: Faction | null;
+}
+
+/** 称号の定義 (§4.2): 実績カウンタ → 称号名。最大保持者に与える。 */
+const TITLE_CATEGORIES: { key: keyof PlayerStats; title: string }[] = [
+  { key: 'incites', title: '破壊神' },
+  { key: 'sanctions', title: '審判者' },
+  { key: 'cheers', title: '聖人' },
+  { key: 'rulesAdded', title: '立法者' },
+  { key: 'betsWon', title: '博徒' },
+];
+
+function emptyStats(): PlayerStats {
+  return { incites: 0, sanctions: 0, cheers: 0, rulesAdded: 0, betsWon: 0, championDeaths: 0 };
 }
 
 /** snapshot/配信に使う 1 ユーザの状態。 */
@@ -51,11 +70,11 @@ export class PlayerState {
     return this.inciteCost;
   }
 
-  /** 無ければ {karma:0,virtue:0,lastCheerMs:0,championId:null} で作成して返す。 */
+  /** 無ければ既定値で作成して返す (stats 全0 / faction 未選択)。 */
   get(userId: string): PlayerEntry {
     let e = this.players.get(userId);
     if (!e) {
-      e = { karma: 0, virtue: 0, lastCheerMs: 0, championId: null };
+      e = { karma: 0, virtue: 0, lastCheerMs: 0, championId: null, stats: emptyStats(), faction: null };
       this.players.set(userId, e);
     }
     return e;
@@ -134,6 +153,89 @@ export class PlayerState {
   canCheerInMs(userId: string, now: number): number {
     const e = this.get(userId);
     return Math.max(0, this.cheerInterval - (now - e.lastCheerMs));
+  }
+
+  /** カルマを加算する (ベット払い戻し, §3)。下限0。払い戻しは上限 max を超過してよい。 */
+  addKarma(userId: string, amount: number): void {
+    const e = this.get(userId);
+    e.karma = Math.max(0, e.karma + amount);
+  }
+
+  /** 実績カウンタを増やす (§4.1)。 */
+  bumpStat(userId: string, key: keyof PlayerStats, by = 1): void {
+    this.get(userId).stats[key] += by;
+  }
+
+  /** 実績カウンタの写し (§4.1)。 */
+  getStats(userId: string): PlayerStats {
+    return { ...this.get(userId).stats };
+  }
+
+  /** 陣営を明示選択する (§4.3)。 */
+  setFaction(userId: string, side: Faction): void {
+    this.get(userId).faction = side;
+  }
+
+  /**
+   * 陣営 (§4.3)。明示選択があればそれ、無ければ行動から推定:
+   * cheers+rulesAdded >= incites+sanctions → 善導(guide)、else 扇動(incite)。
+   */
+  factionOf(userId: string): Faction {
+    const e = this.get(userId);
+    if (e.faction !== null) return e.faction;
+    const s = e.stats;
+    return s.cheers + s.rulesAdded >= s.incites + s.sanctions ? 'guide' : 'incite';
+  }
+
+  /** 登録済みの全 userId。 */
+  userIds(): string[] {
+    return [...this.players.keys()];
+  }
+
+  /**
+   * 各ユーザの主称号 (§4.2)。称号は項目ごとの最大保持者 (>0、同点は userId 昇順) に与え、
+   * 各ユーザは自分が保持する称号のうち件数最大のものを 1 つ主称号とする (保持なしは null)。
+   */
+  titles(): Map<string, string | null> {
+    const ids = this.userIds().sort(); // 同点は userId 昇順で先勝ち
+    // 称号 → { 保持者 userId, 件数 }
+    const holder = new Map<string, { user: string; value: number }>();
+    for (const cat of TITLE_CATEGORIES) {
+      let best: { user: string; value: number } | null = null;
+      for (const uid of ids) {
+        const v = this.get(uid).stats[cat.key];
+        if (v <= 0) continue;
+        if (!best || v > best.value) best = { user: uid, value: v }; // 厳密 > なので同点は先 (昇順) 勝ち
+      }
+      if (best) holder.set(cat.title, best);
+    }
+    const out = new Map<string, string | null>();
+    for (const uid of ids) {
+      let chosen: { title: string; value: number } | null = null;
+      for (const cat of TITLE_CATEGORIES) {
+        const h = holder.get(cat.title);
+        if (!h || h.user !== uid) continue;
+        if (!chosen || h.value > chosen.value) chosen = { title: cat.title, value: h.value };
+      }
+      out.set(uid, chosen ? chosen.title : null);
+    }
+    return out;
+  }
+
+  /** リーダーボード行を組む (§4.3)。title/faction/stats を埋める。 */
+  leaderboard(): LeaderboardEntry[] {
+    const titles = this.titles();
+    return this.userIds().map((uid) => {
+      const e = this.get(uid);
+      return {
+        userId: uid,
+        title: titles.get(uid) ?? null,
+        faction: this.factionOf(uid),
+        karma: e.karma,
+        virtue: e.virtue,
+        stats: { ...e.stats },
+      };
+    });
   }
 
   /** 配信用の状態スナップショット。 */

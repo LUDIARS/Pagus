@@ -126,6 +126,37 @@ export interface PlayerState {
   canCheerInMs: number;
 }
 
+/** 実績カウンタ (§4.1)。称号・陣営推定の素材。既定は全 0。 */
+export interface PlayerStats {
+  /** 扇動した回数。 */
+  incites: number;
+  /** 制裁した回数。 */
+  sanctions: number;
+  /** 応援した回数。 */
+  cheers: number;
+  /** しきたりを追加した回数。 */
+  rulesAdded: number;
+  /** 裁判ベットで勝った回数 (§3)。 */
+  betsWon: number;
+  /** 推しが死んだ回数 (§1)。 */
+  championDeaths: number;
+}
+
+/** 二大陣営 (§4.3)。善導 = guide / 扇動 = incite。 */
+export type Faction = 'guide' | 'incite';
+
+/** リーダーボードの 1 行 (§4.3, broadcast)。 */
+export interface LeaderboardEntry {
+  userId: string;
+  /** 主称号 (最大保持者のみ。無ければ null, §4.2)。 */
+  title: string | null;
+  /** 陣営 (明示選択 or 行動推定)。 */
+  faction: Faction;
+  karma: number;
+  virtue: number;
+  stats: PlayerStats;
+}
+
 /** LLM コストログの 1 件 (§7, 直近分を配信)。 */
 export interface CostEntry {
   /** 用途 (parts.kind: 'emotion' | 'action' | 'incident' | 'world' など)。 */
@@ -191,6 +222,20 @@ export type ServerMessage =
       championName?: string;
     }
   | { t: 'commandRejected'; reason: string } // カルマ不足/インターバル中など
+  | {
+      t: 'betState'; // 裁判ベットのプール状態 (§3, per-connection: yourBet が個別)
+      incidentId: string;
+      /** 賭けの総額 (全員共通)。 */
+      pool: { death: number; educate: number };
+      /** その接続ユーザの賭け (未賭けは null)。 */
+      yourBet: { pick: 'death' | 'educate'; amount: number } | null;
+    }
+  | {
+      t: 'leaderboard'; // 称号・陣営のスコアボード (§4, broadcast)
+      players: LeaderboardEntry[];
+      /** 村の徳目綱引き (§4.3): guide=(善良+秩序)×100 / incite=悪辣×100。 */
+      factions: { guide: number; incite: number };
+    }
   | { t: 'playerActions'; entries: PlayerActionEntry[] } // 人間の行動記録 (§8, broadcast)
   | {
       t: 'sysStatus'; // 状態パネル (§7): 稼働時間・ゲーム内日付・LLM コスト
@@ -215,4 +260,6 @@ export type ClientMessage =
   | { t: 'vote'; pick: string; userId?: string } // 裁判への 1 票 (foolish=候補id / fate='kill'|'spare')。userId で接続ユーザを区別 (重み合算)
   | { t: 'champion'; targetId: string; userId?: string } // 推しを 1 体指名 (§1)。再送で差し替え
   | { t: 'addRule'; text: string; userId?: string } // カルマを払って村のしきたりを 1 件追加 (§2)
-  | { t: 'removeRule'; ruleId: string; userId?: string }; // カルマを払って村のしきたりを 1 件廃する (§2)
+  | { t: 'removeRule'; ruleId: string; userId?: string } // カルマを払って村のしきたりを 1 件廃する (§2)
+  | { t: 'bet'; pick: 'death' | 'educate'; amount: number; userId?: string } // 裁判の運命段階で結果に賭ける (§3)
+  | { t: 'faction'; side: 'guide' | 'incite'; userId?: string }; // 二大陣営を明示選択 (§4.3)
