@@ -32,8 +32,10 @@ export interface WsHandlers {
   onTrialLines(incidentId: string, lines: TrialLine[]): void;
   onLlm(info: LlmInfo): void;
   onChronicle(entries: ChronicleEntry[]): void;
-  /** その接続ユーザのカルマ/善性状態 (§4.4)。推し (§1)・預金 (§v1.3-B ④) を含む。 */
-  onPlayerState?(state: { karma: number; virtue: number; sanctionCost: number; canCheerInMs: number; championId: string | null; championName?: string; savings: number }): void;
+  /** その接続ユーザのカルマ/善性状態 (§4.4)。推し (§1)・預金 (§v1.3-B ④)・課金額 (§v1.3-F) を含む。 */
+  onPlayerState?(state: { karma: number; virtue: number; sanctionCost: number; canCheerInMs: number; championId: string | null; championName?: string; savings: number; spent: number }): void;
+  /** 別端末ログインで現セッションが追い出された (§v1.3-F)。 */
+  onLoggedOut?(reason: string): void;
   /** コマンド却下 (カルマ不足/インターバル中など)。 */
   onCommandRejected?(reason: string): void;
   /** 人間の行動記録 (§8)。 */
@@ -68,16 +70,20 @@ export interface WsHandlers {
 
 export interface Conn {
   send(msg: ClientMessage): void;
+  /** 再接続せず接続を畳む (§v1.3-F 別端末ログインで追い出された時など)。 */
+  close(): void;
 }
 
 export function connect(url: string, h: WsHandlers): Conn {
   let ws: WebSocket | null = null;
+  let stopped = false; // true なら再接続しない (close() で立てる)
 
   const open = (): void => {
     ws = new WebSocket(url);
     ws.onopen = () => h.onStatus('● 接続');
     ws.onerror = () => h.onStatus('● エラー');
     ws.onclose = () => {
+      if (stopped) return; // 意図的な close は再接続しない
       h.onStatus('○ 切断 (再接続…)');
       setTimeout(open, 1500);
     };
@@ -103,8 +109,10 @@ export function connect(url: string, h: WsHandlers): Conn {
           championId: msg.championId ?? null,
           ...(msg.championName !== undefined ? { championName: msg.championName } : {}),
           savings: msg.savings,
+          spent: msg.spent,
         });
-      } else if (msg.t === 'auction') h.onAuction?.(msg.lots);
+      } else if (msg.t === 'loggedOut') h.onLoggedOut?.(msg.reason);
+      else if (msg.t === 'auction') h.onAuction?.(msg.lots);
       else if (msg.t === 'commandRejected') h.onCommandRejected?.(msg.reason);
       else if (msg.t === 'playerActions') h.onPlayerActions?.(msg.entries);
       else if (msg.t === 'sysStatus') {
@@ -135,6 +143,10 @@ export function connect(url: string, h: WsHandlers): Conn {
   return {
     send(msg) {
       if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+    },
+    close() {
+      stopped = true;
+      ws?.close();
     },
   };
 }

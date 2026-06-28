@@ -3,7 +3,7 @@
 
 const UID_KEY = 'pagus_uid';
 
-/** この端末の安定したユーザ ID (localStorage 永続)。投票に添える。 */
+/** この端末の安定したユーザ ID (localStorage 永続)。投票に添える。既存値が無ければ UUIDv4 を発行。 */
 export function getUserId(): string {
   let id = localStorage.getItem(UID_KEY);
   if (!id) {
@@ -11,6 +11,11 @@ export function getUserId(): string {
     localStorage.setItem(UID_KEY, id);
   }
   return id;
+}
+
+/** 別端末ログイン (§v1.3-F): userId をユーザーコードへ差し替えて永続化する。 */
+export function setUserId(id: string): void {
+  localStorage.setItem(UID_KEY, id);
 }
 
 /** VAPID 公開鍵 (base64url) を applicationServerKey 用の Uint8Array へ。 */

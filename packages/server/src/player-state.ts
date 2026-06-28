@@ -27,6 +27,8 @@ interface PlayerEntry {
   faction: Faction | null;
   /** 銀行預金 (§v1.3-B ④)。日末に利子が付き、spend (操作の支払) 対象外。 */
   savings: number;
+  /** 累計課金額 (§v1.3-F 課金モック)。topup でカルマと共に増える。 */
+  spent: number;
 }
 
 /** 推し保険の 1 契約 (§v1.3-B ③)。userId+villagerId をキーに保持。 */
@@ -66,6 +68,8 @@ export interface PlayerStateSnapshot {
   championId: string | null;
   /** 銀行預金 (§v1.3-B ④)。 */
   savings: number;
+  /** 累計課金額 (§v1.3-F 課金モック)。 */
+  spent: number;
 }
 
 export class PlayerState {
@@ -103,7 +107,7 @@ export class PlayerState {
   get(userId: string): PlayerEntry {
     let e = this.players.get(userId);
     if (!e) {
-      e = { karma: 0, virtue: 0, lastCheerMs: 0, championId: null, stats: emptyStats(), faction: null, savings: 0 };
+      e = { karma: 0, virtue: 0, lastCheerMs: 0, championId: null, stats: emptyStats(), faction: null, savings: 0, spent: 0 };
       this.players.set(userId, e);
     }
     return e;
@@ -124,9 +128,26 @@ export class PlayerState {
     if (elapsedSec <= 0) return;
     const base = this.rate * elapsedSec;
     for (const [userId, e] of this.players) {
+      // 課金 (topup) で max を超えている分は通常加算で削らない (据置, §v1.3-F)。
+      if (e.karma >= this.max) continue;
       const gain = championAlive?.(userId) ? base * this.championKarmaMult : base;
       e.karma = Math.min(this.max, e.karma + gain);
     }
+  }
+
+  /**
+   * 課金モック (§v1.3-F)。amount ぶんカルマと累計課金額を増やす。検証 (許可パック) は呼び出し側。
+   * 課金分はカルマ上限 max を超えてよい (clamp しない)。
+   */
+  topup(userId: string, amount: number): void {
+    const e = this.get(userId);
+    e.karma += amount;
+    e.spent += amount;
+  }
+
+  /** その userId の累計課金額 (§v1.3-F)。 */
+  spent(userId: string): number {
+    return this.get(userId).spent;
   }
 
   /** 推しを指名/差し替え/解除する (§1)。villagerId=null で解除。 */
@@ -387,6 +408,7 @@ export class PlayerState {
         karma: e.karma,
         virtue: e.virtue,
         stats: { ...e.stats },
+        spent: e.spent,
       };
     });
   }
@@ -401,6 +423,7 @@ export class PlayerState {
       canCheerInMs: this.canCheerInMs(userId, now),
       championId: e.championId,
       savings: e.savings,
+      spent: e.spent,
     };
   }
 }

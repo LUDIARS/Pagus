@@ -17,8 +17,9 @@ import { GovernancePanel } from './governance-panel.js';
 import { SpectaclePanel } from './spectacle-panel.js';
 import { BetPanel } from './bet-panel.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
+import { AccountPanel } from './account-panel.js';
 import { connect, type Conn } from './ws-client.js';
-import { getUserId, enablePush } from './push-client.js';
+import { getUserId, setUserId, enablePush } from './push-client.js';
 
 // 既定は同一オリジンの /ws (Vite が game server 4310 へ proxy)。
 // → ローカルでもトンネル (pagus.vtn-game.com) 越しでも繋がる。VITE_WS_URL で上書き可。
@@ -58,6 +59,17 @@ async function main(): Promise<void> {
   const betPanel = new BetPanel(el('bet'), (pick, amount) => conn.send({ t: 'bet', pick, amount, userId }));
   // スコアボード (§4): 称号・陣営・綱引き。陣営選択を送る。
   const leaderboard = new LeaderboardPanel(el('leaderboard'), userId, (side) => conn.send({ t: 'faction', side, userId }));
+
+  // アカウント (§v1.3-F): 課金モック / ユーザーコード表示 / 別端末ログイン。
+  const account = new AccountPanel(el('account'), userId, {
+    onTopup: (amount) => conn.send({ t: 'topup', amount, userId }),
+    onLogin: (code) => {
+      // ユーザーコードで束ね直す → ローカルの userId を差し替えて全パネルを貼り直す (reload)。
+      conn.send({ t: 'login', code });
+      setUserId(code);
+      setTimeout(() => location.reload(), 400); // login 送信を flush してから貼り直す
+    },
+  });
 
   // 操作パネル (§4): 対象を選んで 扇動 / 制裁 / 応援 を送る。
   // 扇動は noun (悪口の主 rumorAboutId) を任意で伴う (§4.2)。未選択なら省略。
@@ -142,8 +154,13 @@ async function main(): Promise<void> {
       controls.setState(state);
       cards.setKarma(state.karma);
       economy.setState(state.karma, state.savings);
+      account.setSpent(state.spent);
     },
     onCommandRejected: (reason) => showToast(`⚠ ${reason}`),
+    onLoggedOut: (reason) => {
+      conn.close(); // 再接続を止める (握り潰さない)
+      showLoggedOut(reason);
+    },
     onPlayerActions: (entries) => chronicle.setActions(entries),
     onBetState: (s) => betPanel.setBetState(s),
     onLeaderboard: (s) => leaderboard.setLeaderboard(s),
@@ -198,6 +215,23 @@ function showToast(text: string): void {
   t.classList.add('show');
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+/** 別端末ログインで追い出された時の通知 (§v1.3-F)。再接続しないので恒久表示。 */
+function showLoggedOut(reason: string): void {
+  const ov = document.createElement('div');
+  ov.id = 'logged-out';
+  const box = document.createElement('div');
+  box.className = 'logged-out-box';
+  const title = document.createElement('div');
+  title.className = 'logged-out-title';
+  title.textContent = '🔒 ログアウトされました';
+  const msg = document.createElement('div');
+  msg.className = 'logged-out-msg';
+  msg.textContent = reason;
+  box.append(title, msg);
+  ov.appendChild(box);
+  document.body.appendChild(ov);
 }
 
 /** モバイル: 左右パネルをドロワーとして開閉する。 */

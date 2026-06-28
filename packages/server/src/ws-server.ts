@@ -25,6 +25,7 @@ import {
   type SeasonWinner,
 } from '@pagus/sim';
 import type { PlayerStateSnapshot } from './player-state.js';
+import { isValidUserCode, connectionsToLogout } from './user-code.js';
 
 /** カード介入 (§v1.3-A) の引数 (card 別に必要分だけ伴う)。 */
 export interface CardArgs {
@@ -46,6 +47,9 @@ type SysStatusMessage = Extract<ServerMessage, { t: 'sysStatus' }>;
 
 export interface WsHandlers {
   onHello(userId: string): void;
+  // 課金モック / 別端末ログイン (§v1.3-F)。
+  onTopup(amount: number, userId: string): void;
+  onLogin(userId: string): void;
   onIncite(targetId: string, rumorAboutId: string | undefined, userId: string): void;
   onSanction(targetId: string, userId: string): void;
   onCheer(targetId: string, userId: string): void;
@@ -159,10 +163,39 @@ export class GameWsServer {
     if (userId && userId.length > 0) this.connUser.set(ws, userId);
   }
 
+  /**
+   * 別端末ログイン (§v1.3-F)。code(=userId UUIDv4) で現接続を束ね直す。
+   * 同じ userId にバインドされた他接続は loggedOut を送って close する (古いセッションを追い出す)。
+   * 空/不正形式の code は reject (無言フォールバック禁止)。
+   */
+  private loginConn(ws: WebSocket, code: string): void {
+    if (!isValidUserCode(code)) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ t: 'commandRejected', reason: 'ユーザーコードが不正な形式' } satisfies ServerMessage));
+      }
+      return;
+    }
+    // 同じ userId の他接続を追い出す。
+    for (const other of connectionsToLogout(this.connUser, ws, code)) {
+      if (other.readyState === WebSocket.OPEN) {
+        other.send(JSON.stringify({ t: 'loggedOut', reason: '別の端末でログインされました' } satisfies ServerMessage));
+        other.close();
+      }
+      this.connUser.delete(other);
+    }
+    this.connUser.set(ws, code);
+    this.h.onLogin(code); // 最新 playerState 等を新接続へ送る (index 側)
+  }
+
   private handle(ws: WebSocket, msg: ClientMessage): void {
     if (msg.t === 'hello') {
       this.bind(ws, msg.userId);
       this.h.onHello(msg.userId);
+    } else if (msg.t === 'topup') {
+      this.bind(ws, msg.userId);
+      this.h.onTopup(msg.amount, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'login') {
+      this.loginConn(ws, msg.code);
     } else if (msg.t === 'incite') {
       this.bind(ws, msg.userId);
       this.h.onIncite(msg.targetId, msg.rumorAboutId, this.resolveUser(ws, msg.userId));
@@ -273,6 +306,7 @@ export class GameWsServer {
           canCheerInMs: state.canCheerInMs,
           championId: state.championId,
           savings: state.savings,
+          spent: state.spent,
         }
       : {
           t: 'playerState',
@@ -283,6 +317,7 @@ export class GameWsServer {
           championId: state.championId,
           championName,
           savings: state.savings,
+          spent: state.spent,
         };
     this.sendToUser(userId, JSON.stringify(msg));
   }
