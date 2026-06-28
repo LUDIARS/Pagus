@@ -96,9 +96,8 @@
       #llm-body .mono { font-family: ui-monospace, monospace; font-size: 11px; padding: 1px 0; }
       #llm-body .muted { color: #6b7689; font-size: 10px; }
 
-      /* 左上の状態パネル (§7)。LLM パネルと対になる位置。 */
-      #status-panel { position: fixed; top: 56px; left: 12px; z-index: 40; width: 220px;
-        background: rgba(14,18,27,0.92); border: 1px solid #2a3346; border-radius: 8px; font-size: 12px; }
+      /* 状態パネル (§7)。アクションオーバーレイ「情報」タブ内のウィジェット。 */
+      .ao-status { background: rgba(14,18,27,0.6); border: 1px solid #2a3346; border-radius: 8px; font-size: 12px; }
       #status-head { padding: 6px 10px; cursor: pointer; user-select: none; color: #9be3ff; font-weight: bold; }
       #status-head:hover { background: #1a2230; }
       #status-body { padding: 0 10px 8px; max-height: 50vh; overflow-y: auto; }
@@ -254,6 +253,30 @@
       .verdict-btn.innocent { border-color: #56ccf2; color: #9be3ff; box-shadow: 0 0 22px rgba(86,204,242,0.35); }
       .verdict-btn.innocent:hover { box-shadow: 0 0 30px rgba(86,204,242,0.6); }
 
+      /* 統合アクションオーバーレイ (§v1.3-E): 全ユーザ操作を 1 つのタブ式パネルへ集約。 */
+      #action-overlay {
+        position: fixed; top: 52px; right: 12px; bottom: 12px; z-index: 55;
+        width: 384px; max-width: calc(100vw - 24px);
+        display: flex; flex-direction: column;
+        background: #0e121b; border: 1px solid #2a3346; border-radius: 10px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+        transition: transform 0.25s ease;
+      }
+      #action-overlay.closed { transform: translateX(calc(100% + 16px)); pointer-events: none; }
+      /* 常時ヘッダ: カルマ残高 / 善性 / 課金 / 推し / クールダウン。 */
+      #ao-header { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-bottom: 1px solid #222; }
+      .ao-chip { display: flex; gap: 5px; align-items: baseline;
+        background: #141a26; border: 1px solid #2a3346; border-radius: 6px; padding: 4px 9px; font-size: 12px; }
+      .ao-chip-label { color: #8b96ad; }
+      .ao-chip-val { font-weight: bold; color: #e6ebf5; }
+      #ao-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px; border-bottom: 1px solid #222; }
+      .ao-tab-btn { font-size: 12px; padding: 5px 10px; }
+      .ao-tab-btn.active { background: #283044; border-color: #56ccf2; color: #9be3ff; }
+      #ao-content { flex: 1 1 auto; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+      .ao-tab { display: flex; flex-direction: column; gap: 10px; }
+      #ao-backdrop { display: none; }
+      #btn-actions { border-color: #56ccf2; color: #9be3ff; }
+
       /* モバイル: 中央を全画面、左右はスライドインのドロワー。 */
       .drawer-toggle { display: none; }
       #backdrop { display: none; }
@@ -277,6 +300,10 @@
         .verdict-btn { padding: 10px 18px; }
         .vb-ja { font-size: 22px; }
         .vb-en { font-size: 11px; }
+        /* 操作オーバーレイはモバイルで右からのドロワー。 */
+        #action-overlay { top: 52px; right: 0; bottom: 0; width: 92%; max-width: 420px;
+          border-radius: 10px 0 0 10px; z-index: 60; }
+        #ao-backdrop.show { display: block; position: fixed; inset: 52px 0 0 0; background: rgba(0,0,0,0.5); z-index: 56; }
       }
     </style>
   </head>
@@ -286,6 +313,7 @@
       <span id="hud">接続待ち…</span>
       <button id="hist-btn">📜 歴史</button>
       <button id="push-btn">🔔 通知</button>
+      <button id="btn-actions">🎛 操作</button>
       <button id="btn-right" class="drawer-toggle">📊 村</button>
       <span id="status"></span>
     </div>
@@ -298,10 +326,6 @@
     <div id="llm-panel">
       <div id="llm-head">🧠 LLM ▸</div>
       <div id="llm-body"></div>
-    </div>
-    <div id="status-panel">
-      <div id="status-head">📊 状態 ▸</div>
-      <div id="status-body"></div>
     </div>
     <div id="toast"></div>
     <div id="main">
@@ -316,18 +340,42 @@
       </div>
       <div id="right" class="col">
         <canvas id="radar" width="316" height="250"></canvas>
-        <div id="controls"></div>
-        <div id="cards"></div>
-        <div id="economy"></div>
-        <div id="governance"></div>
-        <div id="spectacle"></div>
-        <div id="trial"></div>
-        <div id="bet"></div>
         <div id="vstatus"></div>
-        <div id="leaderboard"></div>
-        <div id="account"></div>
       </div>
       <div id="backdrop"></div>
+    </div>
+    <div id="ao-backdrop"></div>
+    <!-- 統合アクションオーバーレイ (§v1.3-E)。各 id は従来パネルの mount 先を兼ねる。 -->
+    <div id="action-overlay">
+      <div id="ao-header"></div>
+      <div id="ao-tabs"></div>
+      <div id="ao-content">
+        <section class="ao-tab" data-tab="act" data-label="🎯 操作">
+          <div id="controls"></div>
+        </section>
+        <section class="ao-tab" data-tab="card" data-label="🃏 カード">
+          <div id="cards"></div>
+        </section>
+        <section class="ao-tab" data-tab="village" data-label="🏛 村">
+          <div id="governance"></div>
+        </section>
+        <section class="ao-tab" data-tab="trial" data-label="⚖ 裁判">
+          <div id="trial"></div>
+          <div id="bet"></div>
+        </section>
+        <section class="ao-tab" data-tab="econ" data-label="💰 経済">
+          <div id="economy"></div>
+          <div id="account"></div>
+        </section>
+        <section class="ao-tab" data-tab="info" data-label="📊 情報">
+          <div class="ao-status">
+            <div id="status-head">📊 状態 ▸</div>
+            <div id="status-body"></div>
+          </div>
+          <div id="leaderboard"></div>
+          <div id="spectacle"></div>
+        </section>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

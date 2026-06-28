@@ -18,6 +18,7 @@ import { SpectaclePanel } from './spectacle-panel.js';
 import { BetPanel } from './bet-panel.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
 import { AccountPanel } from './account-panel.js';
+import { ActionOverlay } from './action-overlay.js';
 import { connect, type Conn } from './ws-client.js';
 import { getUserId, setUserId, enablePush } from './push-client.js';
 
@@ -117,8 +118,12 @@ async function main(): Promise<void> {
     onRaidStrike: (amount) => conn.send({ t: 'raidStrike', amount, userId }),
   });
 
+  // 統合アクションオーバーレイ (§v1.3-E): 上記の操作パネル群を 1 つのタブ式パネルへ集約。
+  // 各パネルは index.html のオーバーレイ内 id に既に mount 済み。ここでは枠 (タブ/ヘッダ/開閉) を起こす。
+  const overlay = new ActionOverlay(el('action-overlay'), el('ao-header'), el('ao-tabs'), el('btn-actions'), el('ao-backdrop'));
+
   const verdict = el('verdict');
-  // 死刑/教育ボタンは「殺す/活かす」を決める fate 段階でのみ出す (foolish=被告選びは右パネル)。
+  // 死刑/教育ボタンは「殺す/活かす」を決める fate 段階でのみ出す (foolish=被告選びは裁判タブ)。
   const showVerdict = (world: { phase: string; trial: { stage: string } | null }): boolean =>
     world.phase === 'ten' && world.trial?.stage === 'fate';
 
@@ -155,6 +160,15 @@ async function main(): Promise<void> {
       cards.setKarma(state.karma);
       economy.setState(state.karma, state.savings);
       account.setSpent(state.spent);
+      // 常時ヘッダ (カルマ/善性/課金/推し/応援クールダウン) を更新。
+      overlay.setPlayerState({
+        karma: state.karma,
+        virtue: state.virtue,
+        spent: state.spent,
+        championId: state.championId,
+        ...(state.championName !== undefined ? { championName: state.championName } : {}),
+        canCheerInMs: state.canCheerInMs,
+      });
     },
     onCommandRejected: (reason) => showToast(`⚠ ${reason}`),
     onLoggedOut: (reason) => {
