@@ -24,6 +24,7 @@ import { estimateTokens } from '@ludiars/llm-gateway';
 
 import type { LlmClient } from './llm-client.js';
 import { CliLlmClient, type CliLlmClientOptions } from './cli-llm-client.js';
+import { logLlm } from './llm-vg.js';
 import { BackendRegistry } from './backend-registry.js';
 import type { Backend } from './backend-registry.js';
 import type { CostSink } from './cost-log.js';
@@ -162,12 +163,25 @@ export class LlmBrain implements Brain {
         model: backend.model,
       });
       // 成功した invoke ごとにコスト計上 (parse 成否に関わらず CLI 呼び出しは発生済)。
+      const inTokens = estimateTokens(parts.system) + estimateTokens(parts.prompt);
+      const outTokens = estimateTokens(text);
       this.costSink?.({
         kind: parts.kind,
         provider: backend.provider,
         model: backend.model,
-        inTokens: estimateTokens(parts.system) + estimateTokens(parts.prompt),
-        outTokens: estimateTokens(text),
+        inTokens,
+        outTokens,
+      });
+      // LLM 使用ログ (channel='llm')。プロンプト + 推定トークンを横断ログへ。
+      logLlm({
+        backend: backend.provider,
+        model: backend.model,
+        kind: parts.kind,
+        system: parts.system,
+        prompt: parts.prompt,
+        input_tokens: inTokens,
+        output_tokens: outTokens,
+        ok: true,
       });
       try {
         return validate(extractJson(text));
