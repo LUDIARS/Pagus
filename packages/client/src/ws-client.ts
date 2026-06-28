@@ -19,8 +19,8 @@ export interface WsHandlers {
   onTrialLines(incidentId: string, lines: TrialLine[]): void;
   onLlm(info: LlmInfo): void;
   onChronicle(entries: ChronicleEntry[]): void;
-  /** その接続ユーザのカルマ/善性状態 (§4.4)。Phase D で本 UI。 */
-  onPlayerState?(state: { karma: number; virtue: number; sanctionCost: number; canCheerInMs: number }): void;
+  /** その接続ユーザのカルマ/善性状態 (§4.4)。推し (§1) を含む。 */
+  onPlayerState?(state: { karma: number; virtue: number; sanctionCost: number; canCheerInMs: number; championId: string | null; championName?: string }): void;
   /** コマンド却下 (カルマ不足/インターバル中など)。 */
   onCommandRejected?(reason: string): void;
   /** 人間の行動記録 (§8)。 */
@@ -58,7 +58,14 @@ export function connect(url: string, h: WsHandlers): Conn {
       else if (msg.t === 'llm') h.onLlm(msg.info);
       else if (msg.t === 'chronicle') h.onChronicle(msg.entries);
       else if (msg.t === 'playerState') {
-        h.onPlayerState?.({ karma: msg.karma, virtue: msg.virtue, sanctionCost: msg.sanctionCost, canCheerInMs: msg.canCheerInMs });
+        h.onPlayerState?.({
+          karma: msg.karma,
+          virtue: msg.virtue,
+          sanctionCost: msg.sanctionCost,
+          canCheerInMs: msg.canCheerInMs,
+          championId: msg.championId ?? null,
+          ...(msg.championName !== undefined ? { championName: msg.championName } : {}),
+        });
       } else if (msg.t === 'commandRejected') h.onCommandRejected?.(msg.reason);
       else if (msg.t === 'playerActions') h.onPlayerActions?.(msg.entries);
       else if (msg.t === 'sysStatus') {

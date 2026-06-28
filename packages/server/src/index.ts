@@ -1,7 +1,7 @@
 // Pagus server エントリ。data からワールドを起こし、TermLoop と WS を配線する。
 // 思考は PAGUS_BRAIN で切替: 'stub'(既定/決定的) | 'llm'(実 LLM = claude/codex CLI)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
 import { TermLoop } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
@@ -175,6 +175,14 @@ function main(): void {
   // プレイヤーのカルマ/善性 (userId ごと, §4.4)。1 秒間隔で accrue する。
   const ps = new PlayerState();
   const knownUsers = new Set<string>();
+
+  // しきたり改定 (§2) のコスト/上限。
+  const RULE_ADD_COST = numEnv('PAGUS_RULE_ADD_COST', 15);
+  const RULE_REMOVE_COST = numEnv('PAGUS_RULE_REMOVE_COST', 25);
+  const VILLAGE_RULES_MAX = numEnv('PAGUS_VILLAGE_RULES_MAX', 12);
+  // 推しの死の検知 (§1): 前回 alive だった villager id 集合。初回 snapshot で現状を seed する。
+  const prevAliveIds = new Set<string>();
+  let aliveInitialized = false;
   // 人間の行動記録のリングバッファ (§8, 上限 200)。
   const PLAYER_ACTIONS_CAP = 200;
   const playerActions: PlayerActionEntry[] = [];
@@ -182,9 +190,48 @@ function main(): void {
   let loop: TermLoop;
   let ws: GameWsServer;
 
-  /** その userId の現状態を本人の全接続へ push。 */
+  /** その userId の現状態を本人の全接続へ push (推し名は world から補完, §1)。 */
   const pushState = (userId: string): void => {
-    ws.sendPlayerState(userId, ps.snapshot(userId, Date.now()));
+    const snap = ps.snapshot(userId, Date.now());
+    const name = snap.championId ? tm.world.villagers.get(snap.championId)?.name : undefined;
+    ws.sendPlayerState(userId, snap, name);
+  };
+
+  /**
+   * 推しの死を検知して弔う (§1)。前回 alive → 今回 消滅(alive=false or 不在) の villager を拾い、
+   * 推しにしていた全ユーザへ onChampionDeath + playerState push。推しが 1 人でもいた死には
+   * 追悼の村ルールを 1 件追加し chronicle に弔いを刻む。snapshot/chronicle を変えたら true。
+   */
+  const detectChampionDeaths = (w: World): boolean => {
+    const currentAlive = new Set<string>();
+    for (const v of w.villagers.values()) if (v.alive) currentAlive.add(v.id);
+    if (!aliveInitialized) {
+      aliveInitialized = true;
+      for (const id of currentAlive) prevAliveIds.add(id);
+      return false;
+    }
+    let changed = false;
+    const cal = w.calendar;
+    for (const id of prevAliveIds) {
+      if (currentAlive.has(id)) continue; // まだ生きている
+      const mourners = ps.usersWithChampion(id);
+      if (mourners.length === 0) continue; // 推しのいない死は弔いなし
+      const name = w.villagers.get(id)?.name ?? id;
+      for (const uid of mourners) {
+        ps.onChampionDeath(uid);
+        pushState(uid);
+      }
+      // 弔い (legacy): 死を村のしきたりとして残す (上限内なら)。
+      const rule = addVillageRule(w, `「${name}」の名をみだりに口にしてはならない`, VILLAGE_RULES_MAX);
+      if (rule) {
+        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `🕯 弔い: ${name} を悼む掟が生まれた`, 'rule');
+        changed = true;
+      }
+    }
+    // 生存集合を更新 (次回の差分基準)。
+    prevAliveIds.clear();
+    for (const id of currentAlive) prevAliveIds.add(id);
+    return changed;
   };
   /** 人間の行動を記録し全クライアントへ配る (target はどうぶつ名)。 */
   const recordAction = (userId: string, type: PlayerActionEntry['type'], targetId: string): void => {
@@ -245,13 +292,67 @@ function main(): void {
       pushState(userId);
     },
     onVote: (pick, userId) => loop.vote(pick, userId),
+    onChampion: (targetId, userId) => {
+      knownUsers.add(userId);
+      const v = tm.world.villagers.get(targetId);
+      if (!v || !v.alive) {
+        ws.sendRejected(userId, 'その推しは指名できない (生存どうぶつのみ)');
+        return;
+      }
+      ps.setChampion(userId, targetId);
+      pushState(userId);
+    },
+    onAddRule: (text, userId) => {
+      knownUsers.add(userId);
+      const trimmed = text.trim();
+      if (trimmed.length < 1 || trimmed.length > 40) {
+        ws.sendRejected(userId, 'しきたりは1〜40文字');
+        return;
+      }
+      if (tm.world.villageRules.length >= VILLAGE_RULES_MAX) {
+        ws.sendRejected(userId, 'しきたりが上限に達している');
+        return;
+      }
+      if (!ps.spend(userId, RULE_ADD_COST)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      // 上限は直前に確認済 → maxRules を渡さず必ず追加 (同期処理なので競合なし)。
+      addVillageRule(tm.world, trimmed);
+      const cal = tm.world.calendar;
+      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `📜 しきたり: 「${trimmed}」が定められた`, 'rule');
+      ws.updateChronicle(chronicle.recent());
+      ws.broadcastSnapshot(tm.world);
+      pushState(userId);
+    },
+    onRemoveRule: (ruleId, userId) => {
+      knownUsers.add(userId);
+      const rule = tm.world.villageRules.find((r) => r.id === ruleId);
+      if (!rule) {
+        ws.sendRejected(userId, 'そのしきたりは存在しない');
+        return;
+      }
+      if (!ps.spend(userId, RULE_REMOVE_COST)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      const text = rule.text;
+      removeVillageRule(tm.world, ruleId);
+      const cal = tm.world.calendar;
+      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `📜 しきたり: 「${text}」が廃された`, 'rule');
+      ws.updateChronicle(chronicle.recent());
+      ws.broadcastSnapshot(tm.world);
+      pushState(userId);
+    },
   });
   ws.setLlmInfo(llmInfo);
   ws.updateChronicle(chronicle.recent()); // 既存の歴史を初期配信対象に。
 
   loop = new TermLoop(tm, pace, incidentStepMs, {
     onSnapshot: (w) => {
+      const mourned = detectChampionDeaths(w); // 推しの死 → 弔い (world/chronicle を変えうる)
       ws.broadcastSnapshot(w);
+      if (mourned) ws.updateChronicle(chronicle.recent());
       sessionLog.snapshot(w);
       store.maybeSave(w, tm.getBornCount(), tm.getIncidentCount(), tm.getRuleCount()); // 揮発状態 (出生/改変/評判/法則) を間引いて永続化
       scheduleSysStatus(); // スナップショット送信時に状態を反映 (§2.3 イベント駆動)
@@ -326,7 +427,11 @@ function main(): void {
   // カルマを 1 秒ごとに自動加算し、数秒おきに接続中ユーザへ状態を間引き push する (§4.4)。
   let stateTicks = 0;
   const stateTimer = setInterval(() => {
-    ps.accrue(Date.now());
+    // 推し生存中はカルマ加速 (§1)。
+    ps.accrue(Date.now(), (uid) => {
+      const cid = ps.getChampion(uid);
+      return cid !== null && tm.world.villagers.get(cid)?.alive === true;
+    });
     stateTicks += 1;
     if (stateTicks % 3 === 0) for (const uid of knownUsers) pushState(uid);
   }, 1000);

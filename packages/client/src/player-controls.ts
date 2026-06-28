@@ -9,6 +9,10 @@ export interface PlayerStateView {
   virtue: number;
   sanctionCost: number;
   canCheerInMs: number;
+  /** 推し (champion) の villager id。未指名は null (§1)。 */
+  championId: string | null;
+  /** 推しの名前 (server が world から補完)。 */
+  championName?: string;
 }
 
 export type ActionType = 'incite' | 'sanction' | 'cheer';
@@ -16,6 +20,8 @@ export type ActionType = 'incite' | 'sanction' | 'cheer';
 export interface ControlHandlers {
   /** 対象 id を伴って操作を送る。扇動は rumorAboutId (悪口の主) を任意で伴う (§4.2)。 */
   onAction(type: ActionType, targetId: string, rumorAboutId?: string): void;
+  /** 選択中の対象を推しに指名する (§1)。 */
+  onChampion(targetId: string): void;
 }
 
 export class PlayerControls {
@@ -62,6 +68,18 @@ export class PlayerControls {
     );
     this.root.appendChild(btns);
     this.root.appendChild(hint('扇動=偽情報で事件化を促す / 制裁=即つるし上げ裁判 / 応援=気質を後押し'));
+
+    // 推し指名 (§1): 選択中の対象を推しにする。生存中はカルマ加速。
+    this.root.appendChild(subLabel('推し (応援すると贔屓)'));
+    const champBtn = document.createElement('button');
+    champBtn.textContent = '⭐ 推しに指名';
+    champBtn.className = 'btn-champion';
+    champBtn.addEventListener('click', () => {
+      const id = this.selectedId;
+      if (id) this.h.onChampion(id);
+    });
+    this.root.appendChild(champBtn);
+    this.root.appendChild(hint('推しが生存中はカルマ加速。死ぬとカルマ罰 + 弔いの掟が生まれる'));
 
     this.renderState();
   }
@@ -132,6 +150,10 @@ export class PlayerControls {
     this.stateBox.appendChild(kv('⚖ 制裁コスト', s.sanctionCost.toFixed(1)));
     const cd = s.canCheerInMs;
     this.stateBox.appendChild(kv('🌸 応援', cd <= 0 ? 'いま可能' : `あと ${Math.ceil(cd / 1000)}秒`));
+    // 推し (§1): 指名中なら名前 + 加速中の旨を出す。
+    const champ = s.championId ? (s.championName ?? s.championId) : '(未指名)';
+    this.stateBox.appendChild(kv('⭐ 推し', champ));
+    if (s.championId) this.stateBox.appendChild(hint('推し生存中 → カルマ加速'));
   }
 
   private actionButton(label: string, type: ActionType, cls: string): HTMLButtonElement {
