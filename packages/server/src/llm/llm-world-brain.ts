@@ -12,6 +12,8 @@ import type {
   MonthlySchedule,
   IncidentDesignContext,
   IncidentDesign,
+  RuleProposalContext,
+  BehaviorRule,
 } from '@pagus/sim';
 
 import { estimateTokens } from '@ludiars/llm-gateway';
@@ -21,14 +23,18 @@ import { CliLlmClient } from './cli-llm-client.js';
 import { BackendRegistry } from './backend-registry.js';
 import type { Backend } from './backend-registry.js';
 import type { CostSink } from './cost-log.js';
-import { buildWorldPrompt, buildHolidayPrompt, buildSchedulePrompt, buildDesignPrompt, type PromptParts } from './prompt-build.js';
+import { buildWorldPrompt, buildHolidayPrompt, buildSchedulePrompt, buildDesignPrompt, buildRulePrompt, type PromptParts } from './prompt-build.js';
 import {
   extractJson,
   coerceDayEvaluation,
   coerceHolidayEvent,
   coerceMonthlySchedule,
   coerceIncidentDesign,
+  coerceBehaviorRule,
 } from './json-coerce.js';
+
+/** RuleSmith は Haiku 固定 (cheap・低頻度なのでコスト方針と両立, §2.1)。 */
+const RULE_BACKEND: Backend = { id: 'haiku', provider: 'claude', model: 'claude-haiku-4-5' };
 
 export interface LlmWorldBrainOptions {
   createClient?: (backend: Backend) => LlmClient;
@@ -144,6 +150,28 @@ export class LlmWorldBrain implements WorldBrain {
       }
     }
     throw new Error(`事件デザインの parse に失敗 (backend=${backend.id}): ${(lastErr as Error).message}`);
+  }
+
+  async proposeRule(ctx: RuleProposalContext): Promise<BehaviorRule> {
+    const parts = buildRulePrompt(ctx);
+    // ルール起案は Haiku 固定 (cheap・低頻度, §2.1)。registry の strong (opus) には寄せない。
+    const backend = RULE_BACKEND;
+    const client = this.clientFor(backend);
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { text } = await client.invoke({
+        system: parts.system,
+        prompt: parts.prompt,
+        model: backend.model,
+      });
+      this.reportCost(parts, backend, text);
+      try {
+        return coerceBehaviorRule(extractJson(text));
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw new Error(`ふるまいの法則の parse に失敗 (backend=${backend.id}): ${(lastErr as Error).message}`);
   }
 
   private clientFor(backend: Backend): LlmClient {

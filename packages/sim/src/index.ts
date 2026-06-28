@@ -8,6 +8,7 @@ export * from './calendar.js';
 export * from './world.js';
 export * from './village-rules.js';
 export * from './villager-factory.js';
+export * from './behavior-rules.js';
 export * from './daily-engine.js';
 export * from './event-director.js';
 export * from './term-machine.js';

@@ -2,6 +2,7 @@ import type { World, WorldConfig, Villager, GridPos, Calendar, VillageRule } fro
 import type { EnvironmentView } from './brain.js';
 import { season, daysInMonth, timeOfDayForSegment, isAwake } from './calendar.js';
 import { makeVirtueVector } from './virtue.js';
+import { defaultBehaviorRules, type BehaviorRule } from './behavior-rules.js';
 
 export const DEFAULT_CONFIG: WorldConfig = {
   gridWidth: 24,
@@ -37,6 +38,7 @@ export function createWorld(
   config: WorldConfig = DEFAULT_CONFIG,
   calendar: CalendarInit = { year: 2026, month: 1 },
   villageRules: VillageRule[] = [],
+  behaviorRules: BehaviorRule[] = defaultBehaviorRules(),
 ): World {
   return {
     config,
@@ -49,6 +51,7 @@ export function createWorld(
     trial: null,
     scheduledIncident: null,
     villageRules,
+    behaviorRules,
   };
 }
 

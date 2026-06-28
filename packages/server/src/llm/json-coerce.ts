@@ -21,12 +21,19 @@ import type {
   IncidentDesign,
   IncidentCharacterSpec,
   ActivityPattern,
+  BehaviorRule,
+  RuleCondition,
+  RuleEffect,
+  RuleCategory,
+  TimeOfDay,
 } from '@pagus/sim';
 
 const ACTIVITY_SET = new Set<ActivityPattern>(['diurnal', 'nocturnal', 'crepuscular', 'always']);
 
 const AXIS_SET = new Set<string>(PERSONALITY_AXES);
 const VIRTUE_SET = new Set<string>(VIRTUES);
+const TIME_OF_DAY_SET = new Set<TimeOfDay>(['night', 'morning', 'noon', 'evening']);
+const RULE_CATEGORY_SET = new Set<RuleCategory>(['harass', 'good', 'chat', 'wander']);
 
 /** LLM 出力テキストから JSON オブジェクトを取り出す (コードフェンス除去込み)。 */
 export function extractJson(text: string): unknown {
@@ -276,5 +283,83 @@ export function coerceIncidentDesign(u: unknown): IncidentDesign {
     perpetratorId: asNullableId(o.perpetratorId),
     scapegoat: o.scapegoat === true,
     framedTargetId: asNullableId(o.framedTargetId),
+  };
+}
+
+// --- ふるまいの法則 (§2.1) ----------------------------------------------------
+
+/** ルール条件 1 件を厳密に検証する (未知 kind/軸/値域は throw)。無言フォールバック禁止。 */
+function coerceRuleCondition(u: unknown): RuleCondition {
+  const o = asObj(u);
+  const kind = o.kind;
+  switch (kind) {
+    case 'traitAbove':
+    case 'traitBelow': {
+      const axis = asString(o.axis, 'when.axis');
+      if (!AXIS_SET.has(axis)) throw new Error(`when.axis が未知の気質軸です: ${axis}`);
+      return { kind, axis: axis as PersonalityAxis, value: clamp(asNumber(o.value, 'when.value'), 0, 1) };
+    }
+    case 'emotionAbove':
+      return { kind, emotionAxis: asString(o.emotionAxis, 'when.emotionAxis'), value: clamp(asNumber(o.value, 'when.value'), -1, 1) };
+    case 'eventParamAbove':
+      return { kind, tag: asString(o.tag, 'when.tag'), value: asNumber(o.value, 'when.value') };
+    case 'place':
+      return { kind, place: asString(o.place, 'when.place') };
+    case 'timeOfDay': {
+      const t = asString(o.timeOfDay, 'when.timeOfDay');
+      if (!TIME_OF_DAY_SET.has(t as TimeOfDay)) throw new Error(`when.timeOfDay が未知です: ${t}`);
+      return { kind, timeOfDay: t as TimeOfDay };
+    }
+    case 'hasNeighbor':
+      return { kind };
+    case 'species':
+      return { kind, species: asString(o.species, 'when.species') };
+    case 'actionCategory': {
+      const c = asString(o.category, 'when.category');
+      if (!RULE_CATEGORY_SET.has(c as RuleCategory)) throw new Error(`when.category が未知です: ${c}`);
+      return { kind, category: c as RuleCategory };
+    }
+    default:
+      throw new Error(`未知のルール条件 kind です: ${String(kind)}`);
+  }
+}
+
+/** ルール効果 1 件を厳密に検証する (未知 kind/値域は throw)。delta は安全域にクランプ。 */
+function coerceRuleEffect(u: unknown): RuleEffect {
+  const o = asObj(u);
+  const kind = o.kind;
+  switch (kind) {
+    case 'emotionDelta':
+      return { kind, emotionAxis: asString(o.emotionAxis, 'then.emotionAxis'), delta: clamp(asNumber(o.delta, 'then.delta'), -1, 1) };
+    case 'triggerWeight':
+      // 暴走防止に triggerWeight の絶対値を抑える。
+      return { kind, delta: clamp(asNumber(o.delta, 'then.delta'), -5, 5) };
+    case 'actionFlavor':
+      return { kind, text: asString(o.text, 'then.text') };
+    default:
+      throw new Error(`未知のルール効果 kind です: ${String(kind)}`);
+  }
+}
+
+/**
+ * LLM が起案した ふるまいの法則 を厳密検証して BehaviorRule に整える (§2.1)。
+ * 未知 kind/軸/値域は弾く。source は 'haiku' 固定、id は呼び出し側で採番される前提のプレースホルダ。
+ * when/then が空なら無効 (何もしないルール) として throw。
+ */
+export function coerceBehaviorRule(u: unknown): BehaviorRule {
+  const o = asObj(u);
+  const whenRaw = Array.isArray(o.when) ? o.when : [];
+  const thenRaw = Array.isArray(o.then) ? o.then : [];
+  const when = whenRaw.map(coerceRuleCondition);
+  const then = thenRaw.map(coerceRuleEffect);
+  if (when.length === 0) throw new Error('ふるまいの法則: when (条件) が空です');
+  if (then.length === 0) throw new Error('ふるまいの法則: then (効果) が空です');
+  const id = typeof o.id === 'string' && o.id.length > 0 ? o.id : 'rule_haiku';
+  return {
+    id,
+    source: 'haiku',
+    description: asString(o.description, 'description'),
+    when,
+    then,
   };
 }

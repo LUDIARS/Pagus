@@ -4,6 +4,7 @@
 import type { Villager, VillagerId, Incident, Calendar, Verdict, VillageRule, IncidentDesign } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 import type { Personality } from './personality.js';
+import type { BehaviorRule } from './behavior-rules.js';
 
 export interface WorldEvalContext {
   reputation: VirtueVector;
@@ -71,6 +72,16 @@ export interface IncidentDesignContext {
   survivingCulprits: Villager[];
 }
 
+// --- ふるまいの法則の起案 (RuleSmith, §2.1) ----------------------------------
+
+/** ルール生成の文脈。村の評判・住民・既存ルール・暦を渡す。 */
+export interface RuleProposalContext {
+  reputation: VirtueVector;
+  villagers: Villager[];
+  existingRules: BehaviorRule[];
+  calendar: Calendar;
+}
+
 export interface WorldBrain {
   evaluateDay(ctx: WorldEvalContext): Promise<DayEvaluation>;
   /** 祝日にあたる日のイベントを生成する (§4.7)。 */
@@ -79,4 +90,6 @@ export interface WorldBrain {
   scheduleMonthlyIncident(ctx: MonthlyScheduleContext): Promise<MonthlySchedule>;
   /** 事件前日に詳細デザイン + 事件用キャラ仕様を作る (§12.3.2)。 */
   designIncident(ctx: IncidentDesignContext): Promise<IncidentDesign>;
+  /** ふるまいの法則を 1 つ起案する (RuleSmith, §2.1)。source='haiku'。 */
+  proposeRule(ctx: RuleProposalContext): Promise<BehaviorRule>;
 }

@@ -26,9 +26,11 @@ import type {
   HolidayContext,
   MonthlyScheduleContext,
   IncidentDesignContext,
+  RuleProposalContext,
   Villager,
   VillageRule,
   Personality,
+  BehaviorRule,
 } from '@pagus/sim';
 
 /** 組み上げたプロンプト。kind は tier ルーティングに使う。 */
@@ -323,6 +325,48 @@ export function buildDesignPrompt(ctx: IncidentDesignContext): PromptParts {
     `居座る過去の事件犯 (連続犯の継続入力):\n${culprits}\n` +
     '明日の事件の詳細デザインを JSON で返せ。';
   return partsFromSegments('world', [
+    { stability: 'fixed', role: 'system', text: sys },
+    { stability: 'volatile', role: 'user', text: user },
+  ]);
+}
+
+// --- ふるまいの法則の起案 (RuleSmith, §2.1) ----------------------------------
+
+/** 既存ルールを 1 行で (重複起案を避けるための提示)。 */
+function ruleLine(r: BehaviorRule): string {
+  return `- [${r.source}] ${r.description}`;
+}
+
+export function buildRulePrompt(ctx: RuleProposalContext): PromptParts {
+  const virtueList = VIRTUES.map((v) => `${v}(${VIRTUE_LABELS[v]})`).join(', ');
+  const axisList = PERSONALITY_AXES.map((a) => `${a}(${PERSONALITY_LABELS[a]})`).join(', ');
+  const sys =
+    'あなたは村の「ふるまいの法則」を編む者。村のどうぶつの感情・行動を決める安全なルールを 1 つ起案する。\n' +
+    'ルールは閉じた DSL に従う。条件 (when) は AND、効果 (then) は集約される。\n' +
+    '出力スキーマ: {"description": "ルールの説明(短い日本語)", ' +
+    '"when": [<条件>...], "then": [<効果>...]}\n' +
+    '条件 (kind と付随フィールド):\n' +
+    '  {"kind":"traitAbove","axis":<気質軸>,"value":0..1} / {"kind":"traitBelow","axis":<気質軸>,"value":0..1}\n' +
+    '  {"kind":"emotionAbove","emotionAxis":"anger|joy|fear など","value":-1..1}\n' +
+    '  {"kind":"eventParamAbove","tag":"incidentExposure など","value":数値}\n' +
+    '  {"kind":"place","place":"広場|住宅地|村はずれ"} / {"kind":"timeOfDay","timeOfDay":"night|morning|noon|evening"}\n' +
+    '  {"kind":"hasNeighbor"} / {"kind":"species","species":"猫 など"} / {"kind":"actionCategory","category":"harass|good|chat|wander"}\n' +
+    '効果 (kind と付随フィールド):\n' +
+    '  {"kind":"emotionDelta","emotionAxis":"anger|joy など","delta":-1..1}\n' +
+    '  {"kind":"triggerWeight","delta":-5..5(事件化しやすさ)} / {"kind":"actionFlavor","text":"行動文の差し替え"}\n' +
+    `気質軸: ${axisList}。徳目: ${virtueList}。when と then は最低 1 件。既存と重複しない新味のあるルールを。` +
+    JSON_ONLY;
+  const cal = ctx.calendar;
+  const repLine = VIRTUES.map((v) => `${VIRTUE_LABELS[v]}=${ctx.reputation[v].toFixed(2)}`).join(' ');
+  const existing = ctx.existingRules.map(ruleLine).join('\n') || '(なし)';
+  const names = ctx.villagers.slice(0, 12).map((v) => `${v.name}(${v.species})`).join(', ');
+  const user =
+    `暦: ${cal.year}年${cal.month}月${cal.dayOfMonth}日 (${cal.season})\n` +
+    `村の評判: ${repLine}\n` +
+    `住民 (${ctx.villagers.length}体): ${names || 'なし'}\n` +
+    `既存のふるまいの法則:\n${existing}\n` +
+    '村の今の様子に映える新しいふるまいの法則を 1 つ JSON で返せ。';
+  return partsFromSegments('rule', [
     { stability: 'fixed', role: 'system', text: sys },
     { stability: 'volatile', role: 'user', text: user },
   ]);

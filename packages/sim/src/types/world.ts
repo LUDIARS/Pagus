@@ -3,6 +3,7 @@ import type { Incident } from './incident.js';
 import type { TrialState } from './trial.js';
 import type { VirtueVector } from '../virtue.js';
 import type { PersonalityAxis } from '../personality.js';
+import type { BehaviorRule } from '../behavior-rules.js';
 
 /** ターム内の進行フェーズ (起承転結 + 後処理)。 */
 export type Phase =
@@ -123,4 +124,6 @@ export interface World {
   scheduledIncident: ScheduledIncident | null;
   /** 村のしきたり (§12.8.1)。事件の火種。 */
   villageRules: VillageRule[];
+  /** ふるまいの法則 (§2.1)。日常の感情/行動を決めるルール群。Haiku が日末に増やす。 */
+  behaviorRules: BehaviorRule[];
 }

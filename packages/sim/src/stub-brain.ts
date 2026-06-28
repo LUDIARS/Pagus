@@ -11,8 +11,10 @@ import type {
   MonthlyScheduleContext,
   MonthlySchedule,
   IncidentDesignContext,
+  RuleProposalContext,
 } from './world-brain.js';
 import type { EmotionState, Reform, VillagerId, IncidentDesign } from './types/index.js';
+import type { BehaviorRule } from './behavior-rules.js';
 
 export interface StubBrainOptions {
   /** decideAction がこの回数に達し、かつ周囲に村人がいれば事件を発火する。 */
@@ -161,4 +163,36 @@ export class StubWorldBrain implements WorldBrain {
       framedTargetId: null,
     };
   }
+
+  /** 決定的テンプレ smith (LLM 不使用, §2.1)。既存 haiku ルール数をシードにテンプレを循環選択する。 */
+  async proposeRule(ctx: RuleProposalContext): Promise<BehaviorRule> {
+    const n = ctx.existingRules.filter((r) => r.source === 'haiku').length;
+    const template = STUB_RULE_TEMPLATES[n % STUB_RULE_TEMPLATES.length] as Omit<BehaviorRule, 'id' | 'source'>;
+    return { id: `rule_haiku_${n + 1}`, source: 'haiku', ...template };
+  }
 }
+
+/** 決定的テンプレ smith のルール候補 (循環選択, §2.1)。 */
+const STUB_RULE_TEMPLATES: ReadonlyArray<Omit<BehaviorRule, 'id' | 'source'>> = [
+  {
+    description: '攻撃的などうぶつは事件を起こしやすい',
+    when: [{ kind: 'traitAbove', axis: 'aggression', value: 0.6 }],
+    then: [{ kind: 'triggerWeight', delta: 1 }],
+  },
+  {
+    description: '夜の村はずれでは怒りが昂る',
+    when: [
+      { kind: 'place', place: '村はずれ' },
+      { kind: 'timeOfDay', timeOfDay: 'night' },
+    ],
+    then: [{ kind: 'emotionDelta', emotionAxis: 'anger', delta: 0.1 }],
+  },
+  {
+    description: '優しいどうぶつは雑談で更にごきげんになる',
+    when: [
+      { kind: 'actionCategory', category: 'chat' },
+      { kind: 'traitAbove', axis: 'kindness', value: 0.5 },
+    ],
+    then: [{ kind: 'emotionDelta', emotionAxis: 'joy', delta: 0.1 }],
+  },
+];

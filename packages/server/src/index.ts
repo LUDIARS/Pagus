@@ -1,7 +1,7 @@
 // Pagus server エントリ。data からワールドを起こし、TermLoop と WS を配線する。
 // 思考は PAGUS_BRAIN で切替: 'stub'(既定/決定的) | 'llm'(実 LLM = claude/codex CLI)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
 import { TermLoop } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
@@ -18,13 +18,35 @@ import { createRequestListener } from './http-api.js';
 /** 村の歴史に残す「節目」のログか判定する。 */
 function isMilestone(text: string): boolean {
   return (
-    /^[⚡✦💍👶📅]/.test(text) ||
+    /^[⚡✦💍👶📅📜]/.test(text) ||
     text.startsWith('—— 審判') ||
     text.startsWith('判決') ||
     text.startsWith('🕊') ||
+    text.startsWith('⚖') ||
     text.startsWith('──') ||
     text.includes('月がかわった')
   );
+}
+
+/**
+ * 節目ログの種別を 1 箇所で判定する (§2.2 履歴の構造化)。
+ * クライアントの絵文字 startsWith 判定を server 側へ集約し、ChronicleEntry.kind を埋める。
+ */
+function classifyKind(text: string): ChronicleKind {
+  const t = text.trimStart();
+  if (t.startsWith('⚡')) return 'incident';
+  if (t.startsWith('🕊')) return 'reconcile';
+  if (t.startsWith('⚖')) return 'sanction';
+  if (t.startsWith('✦')) return 'reform';
+  if (t.startsWith('💍')) return 'marriage';
+  if (t.startsWith('👶')) return 'birth';
+  if (t.startsWith('📜')) return 'rule';
+  if (t.startsWith('📅')) return 'holiday';
+  if (t.startsWith('—— 審判')) return 'trial';
+  if (t.startsWith('判決')) return 'verdict';
+  if (t.includes('月がかわった')) return 'month';
+  if (t.startsWith('──')) return 'day';
+  return 'other';
 }
 
 function numEnv(name: string, fallback: number): number {
@@ -107,8 +129,13 @@ function main(): void {
   const villagers = [...world.villagers.values()];
 
   // LLM コストログ (§7)。llm モードのみ計上 (stub は costSink を呼ばない)。
+  // コスト計上時に sysStatus を速やかに反映する (§2.3 イベント駆動)。実体は後で差し込む。
   const costLog = new CostLog();
-  const { brain, worldBrain, registry } = selectBrains((e) => costLog.record(e));
+  let scheduleSysStatus: () => void = () => {};
+  const { brain, worldBrain, registry } = selectBrains((e) => {
+    costLog.record(e);
+    scheduleSysStatus();
+  });
   const llmInfo = buildLlmInfo(registry, villagers);
   const director = new EventDirector({ maxRepsPerSegment: numEnv('PAGUS_REPS', 3) });
   const tm = new TermMachine(world, brain, {
@@ -120,8 +147,10 @@ function main(): void {
     stressFizzleK: numEnv('PAGUS_STRESS_K', 0.06), // ストレス耐性で嫌がらせを受け流す効き
     marriageChance: numEnv('PAGUS_MARRIAGE', 0.12), // 日末の結婚確率
     birthChance: numEnv('PAGUS_BIRTH', 0.1), // 日末の出産確率
+    rulesMax: numEnv('PAGUS_RULES_MAX', 40), // ふるまいの法則の上限 (§2.1)
     bornCount: restored?.bornCount ?? 0, // 出生 id の通し番号を引き継ぐ
     incidentCount: restored?.incidentCount ?? 0, // 事件用キャラ id の通し番号を引き継ぐ
+    ruleCount: restored?.ruleCount ?? 0, // ふるまいの法則 id の通し番号を引き継ぐ
   });
 
   const port = numEnv('PAGUS_WS_PORT', 4310);
@@ -174,6 +203,7 @@ function main(): void {
     onHello: (userId) => {
       knownUsers.add(userId);
       pushState(userId);
+      scheduleSysStatus(); // 接続時に最新の状態を反映 (§2.3 イベント駆動)
     },
     onIncite: (targetId, rumorAboutId, userId) => {
       knownUsers.add(userId);
@@ -198,7 +228,7 @@ function main(): void {
       if (loop.sanction(targetId)) {
         const cal = tm.world.calendar;
         const name = tm.world.villagers.get(targetId)?.name ?? targetId;
-        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `⚖ 制裁: ${name} がつるし上げられた`);
+        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `⚖ 制裁: ${name} がつるし上げられた`, 'sanction');
         ws.updateChronicle(chronicle.recent());
       }
       recordAction(userId, 'sanction', targetId);
@@ -223,14 +253,15 @@ function main(): void {
     onSnapshot: (w) => {
       ws.broadcastSnapshot(w);
       sessionLog.snapshot(w);
-      store.maybeSave(w, tm.getBornCount(), tm.getIncidentCount()); // 揮発状態 (出生/改変/評判) を間引いて永続化
+      store.maybeSave(w, tm.getBornCount(), tm.getIncidentCount(), tm.getRuleCount()); // 揮発状態 (出生/改変/評判/法則) を間引いて永続化
+      scheduleSysStatus(); // スナップショット送信時に状態を反映 (§2.3 イベント駆動)
     },
     onLog: (phase, text) => {
       ws.broadcastLog(phase, text);
       sessionLog.line(phase, text);
       if (isMilestone(text)) {
         const cal = tm.world.calendar;
-        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, text);
+        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, text, classifyKind(text));
         ws.updateChronicle(chronicle.recent());
       }
     },
@@ -251,6 +282,10 @@ function main(): void {
         })
         .catch((e) => console.error('[pagus] 糾弾生成エラー', e));
     },
+  }, {
+    // ふるまいの法則の Haiku 増殖 (§2.1)。PAGUS_RULEGEN=0 で無効化 (既定有効)。
+    enabled: (process.env.PAGUS_RULEGEN ?? '1') !== '0',
+    chance: numEnv('PAGUS_RULEGEN_CHANCE', 0.15),
   });
   loop.start();
 
@@ -267,7 +302,26 @@ function main(): void {
     });
   };
   broadcastSysStatus(); // 初回 (接続前の現値を ws にも保持させる)
-  const sysTimer = setInterval(broadcastSysStatus, 5000);
+
+  // sysStatus はイベント駆動 (§2.3): スナップショット送信時・コスト計上時・接続時に送る。
+  // ただし最短間隔 1.5s でデバウンスし、無駄打ちを抑える。タイマーは 30s heartbeat に降格。
+  const SYS_DEBOUNCE_MS = 1500;
+  let lastSysAt = Date.now();
+  let sysPending: ReturnType<typeof setTimeout> | null = null;
+  scheduleSysStatus = (): void => {
+    const since = Date.now() - lastSysAt;
+    if (since >= SYS_DEBOUNCE_MS) {
+      lastSysAt = Date.now();
+      broadcastSysStatus();
+    } else if (!sysPending) {
+      sysPending = setTimeout(() => {
+        sysPending = null;
+        lastSysAt = Date.now();
+        broadcastSysStatus();
+      }, SYS_DEBOUNCE_MS - since);
+    }
+  };
+  const sysTimer = setInterval(broadcastSysStatus, 30000); // フォールバックの heartbeat
 
   // カルマを 1 秒ごとに自動加算し、数秒おきに接続中ユーザへ状態を間引き push する (§4.4)。
   let stateTicks = 0;
@@ -281,8 +335,9 @@ function main(): void {
   const shutdown = (): void => {
     clearInterval(stateTimer);
     clearInterval(sysTimer);
+    if (sysPending) clearTimeout(sysPending);
     loop.stop();
-    store.save(tm.world, tm.getBornCount(), tm.getIncidentCount()); // 終了時は確実に最新を書き出す
+    store.save(tm.world, tm.getBornCount(), tm.getIncidentCount(), tm.getRuleCount()); // 終了時は確実に最新を書き出す
     sessionLog.close();
     process.exit(0);
   };

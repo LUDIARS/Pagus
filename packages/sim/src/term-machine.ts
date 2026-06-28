@@ -11,6 +11,7 @@ import { groupByDominant, dominantAxis, PERSONALITY_AXES, PERSONALITY_LABELS, ty
 import { personalityFromVirtue, VIRTUES } from './virtue.js';
 import { createVillager } from './villager-factory.js';
 import type { WorldBrain, DayEvaluation, WorldEvalContext, HolidayEvent, MonthlySchedule } from './world-brain.js';
+import type { BehaviorRule } from './behavior-rules.js';
 import type { EventDirector } from './event-director.js';
 
 export type IdGen = () => string;
@@ -61,6 +62,10 @@ export interface TermMachineOptions {
   bornCount?: number;
   /** スナップショット復元時の事件用キャラ通し番号 (incident_N が衝突しないよう引き継ぐ)。既定 0。 */
   incidentCount?: number;
+  /** スナップショット復元時のふるまいの法則通し番号 (rule_haiku_N が衝突しないよう引き継ぐ)。既定 0。 */
+  ruleCount?: number;
+  /** ふるまいの法則の上限 (§2.1)。超えたら古い haiku ルールを 1 件間引く。既定 40。 */
+  rulesMax?: number;
 }
 
 /** 日末の生活イベント (結婚/出産)。server がログ表示する。 */
@@ -119,6 +124,10 @@ export class TermMachine {
   private bornCount: number;
   /** 事件用キャラの通し番号 (incident_N を振る, §12.3.3)。 */
   private incidentCount: number;
+  /** ふるまいの法則の通し番号 (rule_haiku_N を振る, §2.1)。 */
+  private ruleCount: number;
+  /** ふるまいの法則の上限 (§2.1)。 */
+  private readonly rulesMax: number;
   /** その日の裁判結末。applyReform が incident/trial を null にする前に ketsuStep で捕捉する。 */
   private dayOutcome: { incident: Incident; verdict: Verdict; defendantId: VillagerId } | null = null;
 
@@ -143,6 +152,8 @@ export class TermMachine {
     this.birthChance = opts.birthChance ?? 0;
     this.bornCount = opts.bornCount ?? 0;
     this.incidentCount = opts.incidentCount ?? 0;
+    this.ruleCount = opts.ruleCount ?? 0;
+    this.rulesMax = opts.rulesMax ?? 40;
   }
 
   /** スナップショット保存用: 出生通し番号 (born_N が再起動後も衝突しないよう保持する)。 */
@@ -153,6 +164,35 @@ export class TermMachine {
   /** スナップショット保存用: 事件用キャラ通し番号 (incident_N が再起動後も衝突しないよう保持する)。 */
   getIncidentCount(): number {
     return this.incidentCount;
+  }
+
+  /** スナップショット保存用: ふるまいの法則通し番号 (rule_haiku_N が再起動後も衝突しないよう保持する)。 */
+  getRuleCount(): number {
+    return this.ruleCount;
+  }
+
+  /**
+   * ふるまいの法則を 1 つ増やす (RuleSmith, §2.1)。worldBrain が無ければ null。
+   * worldBrain.proposeRule で起案 → world.behaviorRules に追加。
+   * rulesMax を超えたら最古の haiku ルールを 1 件間引く。生成ルールを返す。
+   */
+  async maybeGrowRule(): Promise<BehaviorRule | null> {
+    if (!this.worldBrain) return null;
+    const proposed = await this.worldBrain.proposeRule({
+      reputation: this.world.reputation,
+      villagers: aliveVillagers(this.world),
+      existingRules: this.world.behaviorRules,
+      calendar: this.world.calendar,
+    });
+    this.ruleCount += 1;
+    // id/source は呼び出し側で確定 (通し番号で衝突回避、source は haiku 固定)。
+    const rule: BehaviorRule = { ...proposed, id: `rule_haiku_${this.ruleCount}`, source: 'haiku' };
+    this.world.behaviorRules.push(rule);
+    if (this.world.behaviorRules.length > this.rulesMax) {
+      const oldest = this.world.behaviorRules.findIndex((r) => r.source === 'haiku');
+      if (oldest >= 0) this.world.behaviorRules.splice(oldest, 1);
+    }
+    return rule;
   }
 
   /** プレイヤーの扇動: この事件が和解しにくくなる (= 裁判に持ち込みやすい)。 */
@@ -386,6 +426,8 @@ export class TermMachine {
   // --- 起: 現セグメントの行動 (director があれば代表のみ、無ければ全 awake) ---
   async kishoTick(): Promise<KishoTickResult> {
     if (this.world.phase !== 'kisho') throw new Error(`kishoTick in phase ${this.world.phase}`);
+    // 日常エンジンに現在の ふるまいの法則 を流し込む (Haiku 増殖が即反映される, §2.1)。
+    this.daily.setRules(this.world.behaviorRules);
     const actions: KishoTickResult['actions'] = [];
 
     if (this.director) {

@@ -18,6 +18,7 @@ export interface RestoredWorld {
   world: World;
   bornCount: number;
   incidentCount: number;
+  ruleCount: number;
 }
 
 export class WorldStore {
@@ -47,24 +48,26 @@ export class WorldStore {
       world: fromWire(snap.world),
       bornCount: snap.bornCount ?? 0,
       incidentCount: snap.incidentCount ?? 0,
+      ruleCount: snap.ruleCount ?? 0,
     };
   }
 
   /** 前回保存から minIntervalMs 以上経っていれば保存する (tick からの呼び出し用)。 */
-  maybeSave(world: World, bornCount: number, incidentCount: number): void {
+  maybeSave(world: World, bornCount: number, incidentCount: number, ruleCount: number): void {
     const now = Date.now();
     if (now - this.lastSaveMs < this.minIntervalMs) return;
-    this.save(world, bornCount, incidentCount);
+    this.save(world, bornCount, incidentCount, ruleCount);
   }
 
   /** 即時保存する (shutdown / 節目)。 */
-  save(world: World, bornCount: number, incidentCount: number): void {
+  save(world: World, bornCount: number, incidentCount: number, ruleCount: number): void {
     const snap: WorldSnapshot = {
       version: WORLD_SNAPSHOT_VERSION,
       savedAt: new Date().toISOString(),
       world: toWire(world),
       bornCount,
       incidentCount,
+      ruleCount,
     };
     try {
       mkdirSync(dirname(this.path), { recursive: true });

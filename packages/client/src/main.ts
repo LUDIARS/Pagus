@@ -46,9 +46,11 @@ async function main(): Promise<void> {
   const trial = new TrialPanel(el('trial'), (pick) => conn.send({ t: 'vote', pick, userId }));
 
   // 操作パネル (§4): 対象を選んで 扇動 / 制裁 / 応援 を送る。
-  const sendAction = (type: ActionType, targetId: string): void => {
-    if (type === 'incite') conn.send({ t: 'incite', targetId, userId });
-    else if (type === 'sanction') conn.send({ t: 'sanction', targetId, userId });
+  // 扇動は noun (悪口の主 rumorAboutId) を任意で伴う (§4.2)。未選択なら省略。
+  const sendAction = (type: ActionType, targetId: string, rumorAboutId?: string): void => {
+    if (type === 'incite') {
+      conn.send(rumorAboutId ? { t: 'incite', targetId, rumorAboutId, userId } : { t: 'incite', targetId, userId });
+    } else if (type === 'sanction') conn.send({ t: 'sanction', targetId, userId });
     else conn.send({ t: 'cheer', targetId, userId });
   };
   const controls = new PlayerControls(el('controls'), { onAction: sendAction });
