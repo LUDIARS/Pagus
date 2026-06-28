@@ -392,7 +392,7 @@ data/
 | v0.6 | 人口増減バランス調整 + **world スナップショット永続化 ✅** + **push通知投票 ✅** + **祝日イベント実発火 ✅** |
 | **v1.0** ✅ | **コスト削減リデザイン (#16–#19)**: 日常 LLM 全廃 (BT/ブラックボックス) + 事件=月初スケジュール/前日デザイン/事件用キャラ生成 + 操作刷新 (沈静化廃止/扇動カルマ化/制裁新設/応援) + 裁判=死刑/教育2択 + イベント由来パラメータ + 状態パネル + 村の歴史多面化。詳細 §12 / `spec/feature/cost-reduction-redesign.md` |
 | **v1.1** ✅ | **ふるまいの法則 (#21)**: 感情=データ駆動 BehaviorRule の決定的評価、Haiku がアトランダムにルール増殖 (§12.2.1)。+ v1.0 粗解消 (噂セレクタ/履歴 kind 構造化/sysStatus イベント駆動) |
-| **v1.2** | **多人数ソーシャル (計画中)**: 推し指名+弔い(legacy) / しきたり改定 / 裁判ベット / 称号・二大陣営。詳細 §13 / `spec/feature/multiplayer-social.md` |
+| **v1.2** ✅ | **多人数ソーシャル (#22/#23)**: 推し指名+弔い(legacy) / しきたり改定 / 裁判ベット / 称号・二大陣営。詳細 §13 / `spec/feature/multiplayer-social.md` |
 
 > runtime 永続化は糾弾プール/村の歴史/**world スナップショット (`data/runtime/world.json`)** を実装済。world 全体 (どうぶつ状態・評判・暦・進行中の事件/裁判) を JSON で保存・復元する (`packages/server/src/world-store.ts`、`toWire`/`fromWire`)。
 
