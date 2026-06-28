@@ -23,6 +23,18 @@ const ACTION_JA: Record<PlayerActionEntry['type'], string> = {
   cheer: '応援',
 };
 
+/** しきたり改定 (§2) のコスト表示。既定 env (PAGUS_RULE_ADD_COST/REMOVE_COST) に合わせる。 */
+const RULE_ADD_COST = 15;
+const RULE_REMOVE_COST = 25;
+
+/** しきたり改定の操作ハンドラ (§2)。 */
+export interface RuleHandlers {
+  /** 新しいしきたりを定める (カルマを払う)。 */
+  onAddRule(text: string): void;
+  /** しきたりを廃する (カルマを払う)。 */
+  onRemoveRule(ruleId: string): void;
+}
+
 export class ChronicleView {
   private entries: ChronicleEntry[] = [];
   private world: WireWorld | null = null;
@@ -35,6 +47,7 @@ export class ChronicleView {
     private readonly body: HTMLElement,
     openBtn: HTMLElement,
     closeBtn: HTMLElement,
+    private readonly rules?: RuleHandlers,
   ) {
     openBtn.addEventListener('click', () => this.toggle(true));
     closeBtn.addEventListener('click', () => this.toggle(false));
@@ -165,14 +178,50 @@ export class ChronicleView {
 
   private renderRules(host: HTMLElement): void {
     const rules = this.world?.villageRules ?? [];
+    // しきたり改定 UI (§2): 新しい掟を定める入力 (ハンドラがあるときのみ)。
+    if (this.rules) host.appendChild(this.addRuleForm());
     if (rules.length === 0) {
       host.appendChild(div('この村にはまだしきたりがありません。', 'muted'));
       return;
     }
     host.appendChild(div('村のしきたり (事件の火種)', 'hist-date'));
     for (const r of rules) {
-      host.appendChild(div(`・${r.text}`, 'hist-line'));
+      const row = div('', 'hist-rule-row');
+      row.appendChild(div(`・${r.text}`, 'hist-line'));
+      if (this.rules) {
+        const rm = document.createElement('button');
+        rm.textContent = `廃する (${RULE_REMOVE_COST})`;
+        rm.className = 'rule-remove-btn';
+        rm.addEventListener('click', () => this.rules?.onRemoveRule(r.id));
+        row.appendChild(rm);
+      }
+      host.appendChild(row);
     }
+  }
+
+  /** 新しいしきたりを定める入力フォーム (§2)。 */
+  private addRuleForm(): HTMLElement {
+    const box = div('', 'rule-add-box');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 40;
+    input.placeholder = '新しいしきたり (1〜40文字)';
+    input.className = 'rule-add-input';
+    const btn = document.createElement('button');
+    btn.textContent = `掟を定める (${RULE_ADD_COST})`;
+    btn.className = 'rule-add-btn';
+    const submit = (): void => {
+      const text = input.value.trim();
+      if (text.length < 1) return;
+      this.rules?.onAddRule(text);
+      input.value = '';
+    };
+    btn.addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submit();
+    });
+    box.append(input, btn);
+    return box;
   }
 
   private renderActions(host: HTMLElement): void {

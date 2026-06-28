@@ -38,7 +38,11 @@ async function main(): Promise<void> {
   const incident = new IncidentPanel(el('left'));
   const vstatus = new VillageStatus(el('vstatus'));
   const llmPanel = new LlmPanel(el('llm-head'), el('llm-body'));
-  const chronicle = new ChronicleView(el('chronicle'), el('chronicle-body'), el('hist-btn'), el('chronicle-close'));
+  const chronicle = new ChronicleView(el('chronicle'), el('chronicle-body'), el('hist-btn'), el('chronicle-close'), {
+    // しきたり改定 (§2): カルマを払って村のルールを増減。
+    onAddRule: (text) => conn.send({ t: 'addRule', text, userId }),
+    onRemoveRule: (ruleId) => conn.send({ t: 'removeRule', ruleId, userId }),
+  });
   const statusPanel = new StatusPanel(el('status-head'), el('status-body'));
 
   const userId = getUserId();
@@ -53,7 +57,11 @@ async function main(): Promise<void> {
     } else if (type === 'sanction') conn.send({ t: 'sanction', targetId, userId });
     else conn.send({ t: 'cheer', targetId, userId });
   };
-  const controls = new PlayerControls(el('controls'), { onAction: sendAction });
+  const controls = new PlayerControls(el('controls'), {
+    onAction: sendAction,
+    // 推し指名 (§1): 選択中の対象を推しにする。
+    onChampion: (targetId) => conn.send({ t: 'champion', targetId, userId }),
+  });
 
   const verdict = el('verdict');
   // 死刑/教育ボタンは「殺す/活かす」を決める fate 段階でのみ出す (foolish=被告選びは右パネル)。

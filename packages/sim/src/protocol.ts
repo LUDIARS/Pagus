@@ -179,7 +179,17 @@ export type ServerMessage =
   | { t: 'trialLines'; incidentId: string; lines: TrialLine[] } // 裁判の糾弾セリフ
   | { t: 'llm'; info: LlmInfo } // 稼働中の LLM 構成
   | { t: 'chronicle'; entries: ChronicleEntry[] } // 村の歴史
-  | { t: 'playerState'; karma: number; virtue: number; sanctionCost: number; canCheerInMs: number } // その接続ユーザの状態
+  | {
+      t: 'playerState'; // その接続ユーザの状態
+      karma: number;
+      virtue: number;
+      sanctionCost: number;
+      canCheerInMs: number;
+      /** 推し (champion) の villager id。未指名は null (§1)。 */
+      championId?: string | null;
+      /** 推しの名前 (index が world から補完)。未指名/不在なら省略。 */
+      championName?: string;
+    }
   | { t: 'commandRejected'; reason: string } // カルマ不足/インターバル中など
   | { t: 'playerActions'; entries: PlayerActionEntry[] } // 人間の行動記録 (§8, broadcast)
   | {
@@ -202,4 +212,7 @@ export type ClientMessage =
   | { t: 'incite'; targetId: string; rumorAboutId?: string; userId?: string } // 対象に偽情報を吹き込み事件化を促す (§4.2)
   | { t: 'sanction'; targetId: string; userId?: string } // 対象を即時つるし上げ裁判にかける (§4.3)
   | { t: 'cheer'; targetId: string; userId?: string } // 対象の気質を後押しする (§4.5)
-  | { t: 'vote'; pick: string; userId?: string }; // 裁判への 1 票 (foolish=候補id / fate='kill'|'spare')。userId で接続ユーザを区別 (重み合算)
+  | { t: 'vote'; pick: string; userId?: string } // 裁判への 1 票 (foolish=候補id / fate='kill'|'spare')。userId で接続ユーザを区別 (重み合算)
+  | { t: 'champion'; targetId: string; userId?: string } // 推しを 1 体指名 (§1)。再送で差し替え
+  | { t: 'addRule'; text: string; userId?: string } // カルマを払って村のしきたりを 1 件追加 (§2)
+  | { t: 'removeRule'; ruleId: string; userId?: string }; // カルマを払って村のしきたりを 1 件廃する (§2)
