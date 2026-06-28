@@ -1,6 +1,7 @@
 // 村の歴史ビュー (§8)。📜ボタンで開閉するモーダル。
 // タブで多面化: ハイライト / 事件 / 住民 / 教育 / 村のルール / 人間の行動記録。
-//   データ源は chronicle (⚡🕊✦ 行) / 最新 snapshot (住民・村のルール) / playerActions。
+//   データ源は chronicle (entry.kind で分類) / 最新 snapshot (住民・村のルール) / playerActions。
+//   分類は server が ChronicleEntry.kind を明示する (絵文字接頭辞依存を廃止, §2.2)。
 
 import { dominantAxis, PERSONALITY_LABELS } from '@pagus/sim';
 import type { ChronicleEntry, PlayerActionEntry, WireWorld, Villager } from '@pagus/sim';
@@ -111,14 +112,16 @@ export class ChronicleView {
     }
   }
 
-  /** 事件 = ⚡(発火/予兆) / 🕊(和解) / ⚖(制裁) 行。 */
+  /** 事件 = incident(発火/予兆) / reconcile(和解) / sanction(制裁) 種別 (§2.2)。 */
   private incidentEntries(): ChronicleEntry[] {
-    return this.entries.filter((e) => /^[⚡🕊⚖]/.test(e.text.trimStart()));
+    return this.entries.filter(
+      (e) => e.kind === 'incident' || e.kind === 'reconcile' || e.kind === 'sanction',
+    );
   }
 
-  /** 教育 = ✦ 行。 */
+  /** 教育 = reform 種別 (§2.2)。 */
   private educationEntries(): ChronicleEntry[] {
-    return this.entries.filter((e) => e.text.trimStart().startsWith('✦'));
+    return this.entries.filter((e) => e.kind === 'reform');
   }
 
   private renderEntryList(host: HTMLElement, list: ChronicleEntry[], emptyMsg: string): void {

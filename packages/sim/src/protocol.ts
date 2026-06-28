@@ -3,6 +3,7 @@
 
 import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
+import { defaultBehaviorRules, type BehaviorRule } from './behavior-rules.js';
 
 export interface WireWorld {
   config: WorldConfig;
@@ -15,6 +16,7 @@ export interface WireWorld {
   trial: TrialState | null;
   scheduledIncident: ScheduledIncident | null;
   villageRules: VillageRule[];
+  behaviorRules: BehaviorRule[];
 }
 
 export function toWire(world: World): WireWorld {
@@ -29,6 +31,7 @@ export function toWire(world: World): WireWorld {
     trial: world.trial,
     scheduledIncident: world.scheduledIncident,
     villageRules: world.villageRules,
+    behaviorRules: world.behaviorRules,
   };
 }
 
@@ -45,11 +48,12 @@ export function fromWire(wire: WireWorld): World {
     trial: wire.trial,
     scheduledIncident: wire.scheduledIncident ?? null,
     villageRules: wire.villageRules ?? [],
+    behaviorRules: wire.behaviorRules ?? defaultBehaviorRules(),
   };
 }
 
 /** 現スナップショット形式のバージョン。型が壊れる変更時に増やし、古い snapshot を破棄する。 */
-export const WORLD_SNAPSHOT_VERSION = 3;
+export const WORLD_SNAPSHOT_VERSION = 4;
 
 /**
  * 永続化する world スナップショット。WireWorld (JSON 化可能な world) に加え、
@@ -65,6 +69,8 @@ export interface WorldSnapshot {
   bornCount: number;
   /** TermMachine.incidentCount (事件用キャラの通し番号, §12.3.3)。 */
   incidentCount: number;
+  /** TermMachine.ruleCount (ふるまいの法則の通し番号, §2.1)。 */
+  ruleCount: number;
 }
 
 /** 裁判の糾弾セリフ (server が生成/再利用して配る)。 */
@@ -73,11 +79,29 @@ export interface TrialLine {
   text: string;
 }
 
+/** 村の歴史エントリの種別 (§8 タブ分類)。絵文字接頭辞でなく生成元が明示する。 */
+export type ChronicleKind =
+  | 'incident'
+  | 'trial'
+  | 'verdict'
+  | 'reform'
+  | 'marriage'
+  | 'birth'
+  | 'reconcile'
+  | 'holiday'
+  | 'day'
+  | 'month'
+  | 'rule'
+  | 'sanction'
+  | 'other';
+
 /** 村の歴史の 1 エントリ (節目の出来事)。 */
 export interface ChronicleEntry {
   /** ゲーム内日付 (例 "6月12日")。 */
   date: string;
   text: string;
+  /** 種別 (§8 タブ分類)。旧データは未設定 = 'other' 相当に扱う。 */
+  kind?: ChronicleKind;
 }
 
 /** 人間の行動記録の 1 エントリ (§8 村の歴史「人間の行動記録」)。 */

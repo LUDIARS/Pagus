@@ -4,7 +4,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
-import type { ChronicleEntry } from '@pagus/sim';
+import type { ChronicleEntry, ChronicleKind } from '@pagus/sim';
 import { dataDir } from './load-data.js';
 
 const CAP = 500;
@@ -18,9 +18,10 @@ export class Chronicle {
     this.entries = this.load();
   }
 
-  /** 節目を 1 件追加して永続化。 */
-  add(date: string, text: string): void {
-    this.entries.push({ date, text });
+  /** 節目を 1 件追加して永続化。kind は生成元が明示する (§2.2 履歴の構造化)。 */
+  add(date: string, text: string, kind?: ChronicleKind): void {
+    // exactOptionalPropertyTypes: kind は値があるときだけキーを足す。
+    this.entries.push(kind === undefined ? { date, text } : { date, text, kind });
     if (this.entries.length > CAP) this.entries = this.entries.slice(-CAP);
     this.save();
   }

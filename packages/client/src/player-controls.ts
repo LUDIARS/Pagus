@@ -14,17 +14,20 @@ export interface PlayerStateView {
 export type ActionType = 'incite' | 'sanction' | 'cheer';
 
 export interface ControlHandlers {
-  /** 対象 id を伴って操作を送る。 */
-  onAction(type: ActionType, targetId: string): void;
+  /** 対象 id を伴って操作を送る。扇動は rumorAboutId (悪口の主) を任意で伴う (§4.2)。 */
+  onAction(type: ActionType, targetId: string, rumorAboutId?: string): void;
 }
 
 export class PlayerControls {
   private world: WireWorld | null = null;
   private state: PlayerStateView | null = null;
   private selectedId: string | null = null;
+  /** 扇動の噂の主 (誰の悪口を吹き込むか, §4.2)。未選択は null。 */
+  private rumorAboutId: string | null = null;
 
   private readonly stateBox = document.createElement('div');
   private readonly select = document.createElement('select');
+  private readonly rumorSelect = document.createElement('select');
 
   constructor(
     private readonly root: HTMLElement,
@@ -41,6 +44,14 @@ export class PlayerControls {
       this.selectedId = this.select.value || null;
     });
     this.root.appendChild(this.select);
+
+    // 扇動の噂の主 (§4.2): 「誰の悪口か」を選ぶ第2セレクタ。未選択 = 漠然とした不穏な噂。
+    this.root.appendChild(subLabel('悪口の主 (扇動)'));
+    this.rumorSelect.className = 'target-select';
+    this.rumorSelect.addEventListener('change', () => {
+      this.rumorAboutId = this.rumorSelect.value || null;
+    });
+    this.root.appendChild(this.rumorSelect);
 
     const btns = document.createElement('div');
     btns.className = 'ctl-btns';
@@ -89,6 +100,24 @@ export class PlayerControls {
       opt.textContent = '(どうぶつがいません)';
       this.select.appendChild(opt);
     }
+
+    // 噂の主セレクタ (§4.2): 先頭に「(指定なし)」、続いて生存どうぶつ。退場済みはリセット。
+    if (this.rumorAboutId && !alive.some((v) => v.id === this.rumorAboutId)) {
+      this.rumorAboutId = null;
+    }
+    this.rumorSelect.replaceChildren();
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = '(指定なし)';
+    if (!this.rumorAboutId) none.selected = true;
+    this.rumorSelect.appendChild(none);
+    for (const v of alive) {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = `${v.name} (${v.species})`;
+      if (v.id === this.rumorAboutId) opt.selected = true;
+      this.rumorSelect.appendChild(opt);
+    }
   }
 
   private renderState(): void {
@@ -111,7 +140,10 @@ export class PlayerControls {
     btn.className = cls;
     btn.addEventListener('click', () => {
       const id = this.selectedId;
-      if (id) this.h.onAction(type, id);
+      if (!id) return;
+      // 扇動のときだけ噂の主 (rumorAboutId) を伴わせる (§4.2)。未選択なら省略。
+      if (type === 'incite' && this.rumorAboutId) this.h.onAction(type, id, this.rumorAboutId);
+      else this.h.onAction(type, id);
     });
     return btn;
   }

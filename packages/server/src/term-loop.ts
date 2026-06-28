@@ -11,16 +11,32 @@ export interface LoopHandlers {
   onTrialOpen?(world: World): void;
 }
 
+/** ふるまいの法則の Haiku 増殖設定 (§2.1)。 */
+export interface RuleGenOptions {
+  /** 有効か (PAGUS_RULEGEN)。既定で有効。 */
+  enabled: boolean;
+  /** 日末に増殖を試みる確率 (PAGUS_RULEGEN_CHANCE)。 */
+  chance: number;
+  /** 乱数源 (既定 Math.random)。 */
+  rng?: () => number;
+}
+
 export class TermLoop {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
+  private readonly ruleGen: RuleGenOptions;
+  private readonly ruleRng: () => number;
 
   constructor(
     private readonly tm: TermMachine,
     private readonly pace: PaceOptions,
     private readonly incidentStepMs: number,
     private readonly h: LoopHandlers,
-  ) {}
+    ruleGen: RuleGenOptions = { enabled: false, chance: 0 },
+  ) {
+    this.ruleGen = ruleGen;
+    this.ruleRng = ruleGen.rng ?? Math.random;
+  }
 
   start(): void {
     if (this.running) return;
@@ -161,6 +177,11 @@ export class TermLoop {
         const life = this.tm.lifeEvents();
         for (const m of life.marriages) this.h.onLog('kisho', `💍 ${m.aName} と ${m.bName} が結ばれた`);
         for (const b of life.births) this.h.onLog('kisho', `👶 ${b.parents} に ${b.childName} が生まれた`);
+        // ふるまいの法則の Haiku 増殖 (§2.1): 低確率で 1 つ生成して村に芽生えさせる。
+        if (this.ruleGen.enabled && this.ruleRng() < this.ruleGen.chance) {
+          const rule = await this.tm.maybeGrowRule();
+          if (rule) this.h.onLog('kisho', `📜法則: 「${rule.description}」が村に芽生えた`);
+        }
         break;
       }
     }
