@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ludiars/encrypted-config": "^0.1.0",
     "@ludiars/llm-gateway": "^0.1.0",
     "@pagus/sim": "workspace:*",
     "web-push": "^3.6.7",

@@ -26,6 +26,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@ludiars/encrypted-config':
+        specifier: ^0.1.0
+        version: 0.1.0
       '@ludiars/llm-gateway':
         specifier: ^0.1.0
         version: 0.1.0
@@ -206,6 +209,9 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
+
+  '@ludiars/encrypted-config@0.1.0':
+    resolution: {integrity: sha512-ts01jBX0XAXA7Q2tzM/9xKvRKivnHu87/qEYt2VEbs0lzXsj9n5iTzsPTWpPY66TGwQBdzEQuInPRpF3G412jg==, tarball: https://npm.pkg.github.com/download/@ludiars/encrypted-config/0.1.0/8e3738e88b171b2a530de3cbfb8bc86420c0a6d0}
 
   '@ludiars/llm-gateway@0.1.0':
     resolution: {integrity: sha512-NH9FOv8r0oJZhSAtPx4apePevTBthvkUvRkQ3+2zH3oBzQW9CyZ0pIDw/njJDtgORcBcqoQ77U9I9C3sbx0D8A==, tarball: https://npm.pkg.github.com/download/@ludiars/llm-gateway/0.1.0/0f5d3bc936b2cabebbb38831468ca8dcf2d0b341}
@@ -735,6 +741,8 @@ snapshots:
     optional: true
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
+
+  '@ludiars/encrypted-config@0.1.0': {}
 
   '@ludiars/llm-gateway@0.1.0': {}
 

@@ -1,19 +1,24 @@
 // Pagus の設定スキーマと暗号化 config ローダ.
 //
-// 旧来 server 全体に散っていた ~60 個の `PAGUS_*` env (numEnv/process.env) を、単一の暗号化
-// config (data/runtime/pagus.config.enc, SecretBox = AES-256-GCM) に集約する. 値は index で 1 回
-// loadPagusConfig() し、各モジュールへコンストラクタ注入する (各モジュールは env を読まない).
+// 旧来 server 全体に散っていた ~70 個の `PAGUS_*` env (numEnv/process.env) を、LUDIARS 正本の
+// 共有パッケージ `@ludiars/encrypted-config` (Lapilli, AES-256-GCM + scrypt) による単一の
+// config (data/runtime/pagus.config.json) に集約する. 値は index で 1 回 loadPagusConfig() し、
+// 各モジュールへコンストラクタ注入する (各モジュールは env を読まない).
 //
-// 無言フォールバック禁止 (RULE_CODE §7.1): 復号失敗 / JSON 不正 / 型不正は throw. ファイルが
-// 無いときだけは DEFAULT_CONFIG を返す (これは「正規の既定値」であって劣化フォールバックではない).
+// 形式 (パッケージ準拠): { plain: {<dotkey>: 文字列}, secrets: {<dotkey>: EncryptedBlob} }.
+//   - 非シークセット (チューニング値) は dot-path キー (例 "karma.rate") で plain に平文保存.
+//   - シークレット (VAPID 秘密鍵) は secretKeys に入れ AES-256-GCM で暗号化保存.
+// master secret: env `PAGUS_MASTER_KEY` → 無ければマシン束縛値 `pagus:hostname:user`
+//   (Canalis/Excubitor と同方式. 別マシンへ持ち出すなら PAGUS_MASTER_KEY を共有する).
 //
-// 秘密 (§14): VAPID 鍵も config に含める. enc ファイルも鍵ファイルもリポにコミットしない
-// (data/runtime/ は gitignore 済).
+// 無言フォールバック禁止 (RULE_CODE §7.1): 型不正は throw. ファイルが無いときだけ DEFAULT_CONFIG
+// を返す (これは「正規の既定値」であって劣化フォールバックではない).
+//
+// 秘密 (§14): config ファイルはリポにコミットしない (data/runtime/ は gitignore 済).
 
-import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { readConfig, type StoreOptions } from '@ludiars/encrypted-config';
 import { dataDir } from '../load-data.js';
-import { SecretBox, resolveSecretKey } from './secret-box.js';
 
 /** シミュレーション核 (TermMachine / StubBrain / RuleGen) のチューニング. */
 export interface SimConfig {
@@ -266,14 +271,21 @@ export const DEFAULT_CONFIG: PagusConfig = {
   },
 };
 
-/** 既定の鍵ファイル (env passphrase が無いときに使う). */
-export function defaultKeyFile(): string {
-  return resolve(dataDir(), 'runtime', 'pagus.config.key');
-}
+/** 暗号化保存するキー (dot-path). VAPID 秘密鍵のみ暗号化, 公開鍵/subject は平文. */
+export const SECRET_KEYS: ReadonlySet<string> = new Set(['push.vapidPrivate']);
 
-/** 既定の暗号化 config ファイル. */
-export function defaultEncFile(): string {
-  return resolve(dataDir(), 'runtime', 'pagus.config.enc');
+/** @ludiars/encrypted-config の StoreOptions (Pagus 用). config パスは env override で渡す. */
+export const STORE_OPTIONS: StoreOptions = {
+  secretKeys: new Set(SECRET_KEYS),
+  configPathEnv: 'PAGUS_CONFIG_PATH',
+  masterKeyEnv: 'PAGUS_MASTER_KEY',
+  defaultConfigFile: 'pagus.config.json',
+  masterSecretPrefix: 'pagus',
+};
+
+/** 既定の config ファイル (data/runtime/pagus.config.json, 絶対パス). */
+export function defaultConfigPath(): string {
+  return resolve(dataDir(), 'runtime', 'pagus.config.json');
 }
 
 /** plain object か (配列/null を除く). */
@@ -335,44 +347,108 @@ export function mergePagusConfig(partial: unknown): PagusConfig {
   return mergeInto(DEFAULT_CONFIG, partial, '');
 }
 
-/** loadPagusConfig の差し替え可能なパス (テストで tmp を指す). */
+/** DEFAULT_CONFIG を dot-path で辿り、その位置の既定値を返す (無ければ undefined). */
+export function defaultAt(dotpath: string): unknown {
+  let cur: unknown = DEFAULT_CONFIG;
+  for (const seg of dotpath.split('.')) {
+    if (!isPlainObject(cur) || !(seg in cur)) return undefined;
+    cur = cur[seg];
+  }
+  return cur;
+}
+
+/** DEFAULT_CONFIG を { "a.b": 文字列値 } の flat map に畳む (CLI の init/import 用). 配列は JSON 文字列. */
+export function flattenConfig(obj: unknown = DEFAULT_CONFIG, prefix = ''): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!isPlainObject(obj)) return out;
+  for (const [key, val] of Object.entries(obj)) {
+    const here = prefix ? `${prefix}.${key}` : key;
+    if (isPlainObject(val)) Object.assign(out, flattenConfig(val, here));
+    else if (Array.isArray(val)) out[here] = JSON.stringify(val);
+    else out[here] = String(val);
+  }
+  return out;
+}
+
+/** flat の生文字列を、その dot-path の既定値の型に合わせて変換する (型不正は throw). */
+export function coerceLeaf(dotpath: string, raw: string): number | string | boolean | unknown[] {
+  const def = defaultAt(dotpath);
+  if (Array.isArray(def)) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (cause) {
+      throw new Error(`config の ${dotpath} は JSON 配列である必要があります: ${raw}`, { cause });
+    }
+    if (!Array.isArray(parsed)) throw new Error(`config の ${dotpath} は配列である必要があります`);
+    return parsed;
+  }
+  switch (typeof def) {
+    case 'number': {
+      const n = Number(raw);
+      if (raw.trim() === '' || Number.isNaN(n)) throw new Error(`config の ${dotpath} が数値ではありません: ${raw}`);
+      return n;
+    }
+    case 'boolean':
+      if (raw === 'true') return true;
+      if (raw === 'false') return false;
+      throw new Error(`config の ${dotpath} は true|false である必要があります: ${raw}`);
+    case 'string':
+      return raw;
+    default:
+      // 既定に無いキー (defaultAt が undefined) は nestFromFlat 側で弾く.
+      throw new Error(`config の不明なキー: ${dotpath}`);
+  }
+}
+
+/** readConfig が返す flat map を、型変換しつつ nested な部分 config に組み立てる. */
+function nestFromFlat(flat: Record<string, string>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [dotpath, raw] of Object.entries(flat)) {
+    if (defaultAt(dotpath) === undefined) {
+      console.warn(`[pagus] config: 不明なキー ${dotpath} を無視します`);
+      continue;
+    }
+    const segs = dotpath.split('.');
+    let cur = out;
+    for (let i = 0; i < segs.length - 1; i += 1) {
+      const seg = segs[i] as string;
+      if (!isPlainObject(cur[seg])) cur[seg] = {};
+      cur = cur[seg] as Record<string, unknown>;
+    }
+    cur[segs[segs.length - 1] as string] = coerceLeaf(dotpath, raw);
+  }
+  return out;
+}
+
+/** loadPagusConfig / CLI の差し替え可能なパス (テストで tmp / 任意 master key を指す). */
 export interface LoadConfigOptions {
-  /** 暗号化 config ファイル (既定 data/runtime/pagus.config.enc). */
-  encFile?: string;
-  /** 鍵ファイル (既定 data/runtime/pagus.config.key). */
-  keyFile?: string;
-  /** env passphrase (既定 process.env.PAGUS_CONFIG_KEY). null で無効化. */
-  envKey?: string | null;
+  /** config ファイルパス (既定 data/runtime/pagus.config.json). */
+  configPath?: string;
+  /** master secret (既定 env PAGUS_MASTER_KEY → マシン束縛値). */
+  masterKey?: string;
+}
+
+/** StoreOptions + (configPath/masterKey override を載せた) env を組む.
+ * config パスの優先順: 明示 opts > 環境変数 PAGUS_CONFIG_PATH > 既定 (data/runtime/pagus.config.json). */
+export function storeEnv(opts: LoadConfigOptions = {}): NodeJS.ProcessEnv {
+  const path = opts.configPath ?? process.env.PAGUS_CONFIG_PATH ?? defaultConfigPath();
+  const env: NodeJS.ProcessEnv = { ...process.env, PAGUS_CONFIG_PATH: path };
+  if (opts.masterKey !== undefined) env.PAGUS_MASTER_KEY = opts.masterKey;
+  return env;
 }
 
 /**
- * 暗号化 config を読み込む.
- *  - ファイルがあれば: SecretBox で復号 → JSON.parse → DEFAULT_CONFIG へ deep merge して返す.
- *    復号失敗 / JSON 不正 / 型不正は throw (fail-fast, 無言フォールバック禁止).
- *  - ファイルが無ければ: DEFAULT_CONFIG を返しつつ警告 (正規の既定値で起動).
+ * config を読み込む (`@ludiars/encrypted-config` の readConfig 経由).
+ *  - ファイルがあれば: plain + 復号した secrets の flat map → 型変換 → DEFAULT_CONFIG へ deep merge.
+ *    型不正は throw (fail-fast, 無言フォールバック禁止).
+ *  - ファイルが無ければ (readConfig が null): DEFAULT_CONFIG を返しつつ警告 (正規の既定値で起動).
  */
 export function loadPagusConfig(opts: LoadConfigOptions = {}): PagusConfig {
-  const encFile = opts.encFile ?? defaultEncFile();
-  const keyFile = opts.keyFile ?? defaultKeyFile();
-  const envKey = opts.envKey === undefined ? (process.env.PAGUS_CONFIG_KEY ?? null) : opts.envKey;
-
-  if (!existsSync(encFile)) {
-    console.warn(
-      '[pagus] 暗号化 config 未作成 — 既定値で起動。`pnpm pagus:config init` で作成',
-    );
+  const flat = readConfig(STORE_OPTIONS, storeEnv(opts));
+  if (flat === null) {
+    console.warn('[pagus] config 未作成 — 既定値で起動。`pnpm pagus:config init` で作成');
     return structuredClone(DEFAULT_CONFIG);
   }
-
-  const enc = readFileSync(encFile, 'utf8').trim();
-  const box = new SecretBox(resolveSecretKey({ envValue: envKey, keyFile }));
-  // 復号失敗 (鍵違い/改竄) は SecretBox が throw → そのまま伝播 (握り潰さない).
-  const plain = box.decrypt(enc);
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(plain);
-  } catch (cause) {
-    throw new Error(`config の JSON parse に失敗しました: ${encFile}`, { cause });
-  }
-  return mergePagusConfig(parsed);
+  return mergePagusConfig(nestFromFlat(flat));
 }

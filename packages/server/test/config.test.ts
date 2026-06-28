@@ -1,60 +1,44 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SecretBox, resolveSecretKey, isEncrypted } from '../src/config/secret-box.js';
+import { setConfig } from '@ludiars/encrypted-config';
 import {
   DEFAULT_CONFIG,
+  STORE_OPTIONS,
   loadPagusConfig,
   mergePagusConfig,
+  flattenConfig,
+  coerceLeaf,
+  storeEnv,
 } from '../src/config/pagus-config.js';
 
-// 一時ディレクトリで実 data/ を汚さずに検証する。
+// 一時ファイルで実 data/ を汚さずに検証する (@ludiars/encrypted-config 経由)。
 let dir: string;
-const ENV_KEY = 'test-passphrase-12345';
+let cfgPath: string;
+const MASTER = 'test-master-secret-12345';
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'pagus-config-test-'));
+  cfgPath = join(dir, 'pagus.config.json');
 });
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-/** ENV_KEY 由来の決定的な鍵で SecretBox を作る (keyFile は使わない)。 */
-function boxForEnvKey(): SecretBox {
-  return new SecretBox(resolveSecretKey({ envValue: ENV_KEY, keyFile: join(dir, 'unused.key') }));
+/** tmp config パス + master を載せた env で 1 キー保存する。 */
+function set(key: string, value: string): void {
+  setConfig(key, value, STORE_OPTIONS, storeEnv({ configPath: cfgPath, masterKey: MASTER }));
+}
+function load() {
+  return loadPagusConfig({ configPath: cfgPath, masterKey: MASTER });
 }
 
-describe('SecretBox (AES-256-GCM at-rest)', () => {
-  it('encrypt → decrypt で平文に戻る (enc:v1 形式)', () => {
-    const box = boxForEnvKey();
-    const enc = box.encrypt('秘密の VAPID 鍵');
-    expect(isEncrypted(enc)).toBe(true);
-    expect(enc.startsWith('enc:v1:')).toBe(true);
-    expect(box.decrypt(enc)).toBe('秘密の VAPID 鍵');
-  });
-
-  it('改竄された ciphertext は復号で throw する (GCM 認証)', () => {
-    const box = boxForEnvKey();
-    const enc = box.encrypt('original');
-    // ciphertext 末尾を 1 文字いじる (base64 を壊さない範囲で別文字へ)。
-    const last = enc.slice(-1);
-    const tampered = enc.slice(0, -1) + (last === 'A' ? 'B' : 'A');
-    expect(() => box.decrypt(tampered)).toThrow();
-  });
-
-  it('別の鍵では復号できない (throw)', () => {
-    const a = new SecretBox(resolveSecretKey({ envValue: 'key-a', keyFile: join(dir, 'a.key') }));
-    const b = new SecretBox(resolveSecretKey({ envValue: 'key-b', keyFile: join(dir, 'b.key') }));
-    expect(() => b.decrypt(a.encrypt('msg'))).toThrow();
-  });
-});
-
-describe('mergePagusConfig (部分 JSON を defaults へ deep merge)', () => {
+describe('mergePagusConfig (部分 nested を defaults へ deep merge)', () => {
   it('部分指定は defaults に重なり、未指定は既定値のまま', () => {
     const cfg = mergePagusConfig({ karma: { rate: 2 }, server: { wsPort: 9999 } });
-    expect(cfg.karma.rate).toBe(2); // 上書き
-    expect(cfg.karma.max).toBe(DEFAULT_CONFIG.karma.max); // 既定維持
+    expect(cfg.karma.rate).toBe(2);
+    expect(cfg.karma.max).toBe(DEFAULT_CONFIG.karma.max);
     expect(cfg.server.wsPort).toBe(9999);
     expect(cfg.sim.triggerAfter).toBe(DEFAULT_CONFIG.sim.triggerAfter);
   });
@@ -65,7 +49,7 @@ describe('mergePagusConfig (部分 JSON を defaults へ deep merge)', () => {
     expect(() => mergePagusConfig({ economy: { topupPacks: 100 } })).toThrow();
   });
 
-  it('不明キーは warn して無視する (throw しない)', () => {
+  it('不明キーは warn して無視する', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const cfg = mergePagusConfig({ karma: { bogus: 1 }, nope: {} });
     expect(cfg.karma.rate).toBe(DEFAULT_CONFIG.karma.rate);
@@ -79,34 +63,62 @@ describe('mergePagusConfig (部分 JSON を defaults へ deep merge)', () => {
   });
 });
 
-describe('loadPagusConfig (暗号化ファイル)', () => {
-  it('ファイルがあれば復号して defaults へ merge する', () => {
-    const encFile = join(dir, 'pagus.config.enc');
-    const box = boxForEnvKey();
-    writeFileSync(encFile, box.encrypt(JSON.stringify({ karma: { rate: 3 }, push: { enabled: true } })), 'utf8');
-    const cfg = loadPagusConfig({ encFile, keyFile: join(dir, 'k.key'), envKey: ENV_KEY });
+describe('flattenConfig / coerceLeaf (dot-path ⇄ 文字列)', () => {
+  it('DEFAULT_CONFIG を dot-key の文字列 map に畳む', () => {
+    const flat = flattenConfig(DEFAULT_CONFIG);
+    expect(flat['karma.rate']).toBe('0.5');
+    expect(flat['server.logStdout']).toBe('true');
+    expect(flat['economy.topupPacks']).toBe('[100,500,1000]'); // 配列は JSON 文字列
+  });
+
+  it('coerceLeaf は dot-path の既定型に合わせて変換し、不正は throw', () => {
+    expect(coerceLeaf('karma.rate', '0.9')).toBe(0.9);
+    expect(coerceLeaf('server.logStdout', 'false')).toBe(false);
+    expect(coerceLeaf('economy.topupPacks', '[5,10]')).toEqual([5, 10]);
+    expect(() => coerceLeaf('karma.rate', 'fast')).toThrow();
+    expect(() => coerceLeaf('server.logStdout', 'yes')).toThrow();
+  });
+});
+
+describe('loadPagusConfig (@ludiars/encrypted-config 経由)', () => {
+  it('ファイルが無ければ defaults を返して warn する (劣化フォールバックではない)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(load()).toEqual(DEFAULT_CONFIG);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('保存したキーを型変換して defaults へ merge する', () => {
+    set('karma.rate', '3');
+    set('server.wsPort', '9999');
+    const cfg = load();
     expect(cfg.karma.rate).toBe(3);
-    expect(cfg.push.enabled).toBe(true);
+    expect(cfg.server.wsPort).toBe(9999);
     expect(cfg.karma.max).toBe(DEFAULT_CONFIG.karma.max); // 未指定は既定
   });
 
-  it('復号できる JSON が型不正なら throw', () => {
-    const encFile = join(dir, 'pagus.config.enc');
-    writeFileSync(encFile, boxForEnvKey().encrypt(JSON.stringify({ karma: { rate: 'x' } })), 'utf8');
-    expect(() => loadPagusConfig({ encFile, keyFile: join(dir, 'k.key'), envKey: ENV_KEY })).toThrow();
+  it('VAPID 秘密鍵は secrets として暗号化保存される (ファイルに平文で出ない)', () => {
+    set('push.vapidPrivate', 'super-secret-key');
+    const onDisk = readFileSync(cfgPath, 'utf8');
+    expect(onDisk).not.toContain('super-secret-key'); // 平文で出ない
+    expect(onDisk).toContain('secrets'); // EncryptedBlob として格納
+    expect(load().push.vapidPrivate).toBe('super-secret-key'); // 復号して読める
   });
 
-  it('復号後が JSON でないなら throw', () => {
-    const encFile = join(dir, 'pagus.config.enc');
-    writeFileSync(encFile, boxForEnvKey().encrypt('not json at all'), 'utf8');
-    expect(() => loadPagusConfig({ encFile, keyFile: join(dir, 'k.key'), envKey: ENV_KEY })).toThrow();
+  it('master secret が違うと secrets は復号できず欠落する (= 既定値のまま)', () => {
+    set('push.vapidPrivate', 'k');
+    const cfg = loadPagusConfig({ configPath: cfgPath, masterKey: 'WRONG-master' });
+    expect(cfg.push.vapidPrivate).toBe(DEFAULT_CONFIG.push.vapidPrivate); // 復号失敗キーは skip
   });
 
-  it('ファイルが無ければ defaults を返して warn する (劣化フォールバックではない)', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const cfg = loadPagusConfig({ encFile: join(dir, 'absent.enc'), keyFile: join(dir, 'k.key'), envKey: ENV_KEY });
-    expect(cfg).toEqual(DEFAULT_CONFIG);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+  it('保存値が型不正なら load で throw (無言フォールバック禁止)', () => {
+    // 数値キーに非数値文字列を直接保存しておく。
+    set('karma.rate', 'not-a-number');
+    expect(() => load()).toThrow();
+  });
+
+  it('config ファイルが実際に生成される', () => {
+    set('karma.rate', '1');
+    expect(existsSync(cfgPath)).toBe(true);
   });
 });

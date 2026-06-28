@@ -1,5 +1,5 @@
 {
-  "_comment": "Pagus 設定スキーマの参考 (= DEFAULT_CONFIG 相当の既定値)。秘密は含まない。実際の設定は暗号化 config (data/runtime/pagus.config.enc) で管理する: `pnpm pagus:config init` で本ファイル相当の既定から作成し、`pnpm pagus:config set <dotpath> <value>` で調整する。VAPID 鍵 (push.vapidPublic/vapidPrivate) は秘密なので暗号化 config 側にのみ入れる (ここでは空)。部分指定でよい (未指定キーは既定値が使われる)。",
+  "_comment": "Pagus 設定スキーマの参考 (= DEFAULT_CONFIG 相当の既定値)。秘密は含まない。実際の設定は @ludiars/encrypted-config による config (data/runtime/pagus.config.json, {plain,secrets} 形式) で管理する: `pnpm pagus:config init` で本ファイル相当の既定から作成し、`pnpm pagus:config set <dotpath> <value>`(例 karma.rate 0.9) で調整、`pnpm pagus:config import <this.json>` で一括取込できる。VAPID 秘密鍵 (push.vapidPrivate) は secrets として AES-256-GCM 暗号化保存される (ここでは空)。master secret は env PAGUS_MASTER_KEY か無ければマシン束縛値。部分指定でよい (未指定キーは既定値)。",
   "sim": {
     "triggerAfter": 6,
     "reps": 3,

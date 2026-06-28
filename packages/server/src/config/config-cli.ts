@@ -1,100 +1,59 @@
-// 暗号化 config 編集 CLI (`pnpm pagus:config <cmd>`).
+// 設定編集 CLI (`pnpm pagus:config <cmd>`).
 //
-//   init [--force]   DEFAULT_CONFIG を暗号化して pagus.config.enc を作成 (既存は --force 無しで拒否).
-//                    鍵が無ければ resolveSecretKey が data/runtime/pagus.config.key を生成する.
-//   show             復号して整形 JSON を stdout へ.
-//   set <path> <val> 復号 → 該当キーを設定 (数値/bool/文字列を推論) → 再暗号化保存.
-//   import <file>    平文 JSON を読んで暗号化保存 (一括設定).
+//   init [--force]   DEFAULT_CONFIG を config ファイルへ書き出す (既存は --force 無しで拒否).
+//   show             現在の (復号済) config を整形 JSON で stdout へ.
+//   set <path> <val> 1 キーを設定 (型は DEFAULT_CONFIG に合わせて検証). secretKeys は暗号化保存.
+//   import <file>    平文 (nested) JSON を読んで一括設定 (部分指定可・型検証).
 //
-// 鍵は env passphrase (PAGUS_CONFIG_KEY) があればそれ、無ければ鍵ファイル.
-// 無言フォールバック禁止 (RULE_CODE §7.1): 不正な引数 / 型不一致 / 復号失敗は throw して非ゼロ終了.
+// 実体は LUDIARS 正本 `@ludiars/encrypted-config` (Lapilli) の setConfig/readConfig/writeConfigFile.
+// master secret: env PAGUS_MASTER_KEY → 無ければマシン束縛値 (pagus:hostname:user).
+// 無言フォールバック禁止 (RULE_CODE §7.1): 不正な引数 / 型不一致は throw して非ゼロ終了.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { SecretBox, resolveSecretKey } from './secret-box.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { setConfig, writeConfigFile, type ConfigFile } from '@ludiars/encrypted-config';
 import {
   DEFAULT_CONFIG,
-  defaultEncFile,
-  defaultKeyFile,
+  STORE_OPTIONS,
+  defaultConfigPath,
+  flattenConfig,
+  coerceLeaf,
+  defaultAt,
+  loadPagusConfig,
   mergePagusConfig,
-  type PagusConfig,
+  storeEnv,
 } from './pagus-config.js';
-
-function box(): SecretBox {
-  const envKey = process.env.PAGUS_CONFIG_KEY ?? null;
-  const keyFile = defaultKeyFile();
-  mkdirSync(dirname(keyFile), { recursive: true });
-  return new SecretBox(resolveSecretKey({ envValue: envKey, keyFile }));
-}
-
-/** enc ファイルを復号して PagusConfig を得る (存在しなければ throw). */
-function readConfig(): PagusConfig {
-  const encFile = defaultEncFile();
-  if (!existsSync(encFile)) {
-    throw new Error(`暗号化 config がありません: ${encFile} (先に \`pnpm pagus:config init\`)`);
-  }
-  const plain = box().decrypt(readFileSync(encFile, 'utf8').trim());
-  return mergePagusConfig(JSON.parse(plain));
-}
-
-/** PagusConfig を暗号化して enc ファイルへ書く. */
-function writeConfig(config: PagusConfig): void {
-  const encFile = defaultEncFile();
-  mkdirSync(dirname(encFile), { recursive: true });
-  const enc = box().encrypt(JSON.stringify(config, null, 2));
-  writeFileSync(encFile, enc, 'utf8');
-}
-
-/** 文字列を bool/number/string に推論する. */
-function inferValue(raw: string): boolean | number | string {
-  if (raw === 'true') return true;
-  if (raw === 'false') return false;
-  if (raw.trim() !== '' && !Number.isNaN(Number(raw))) return Number(raw);
-  return raw;
-}
-
-/** dotpath で config の leaf を設定する (中間/leaf 不在や非 leaf は throw). */
-function setByPath(config: PagusConfig, dotpath: string, value: boolean | number | string): void {
-  const keys = dotpath.split('.');
-  if (keys.length < 2) throw new Error(`設定パスは <group>.<key> 形式で指定: ${dotpath}`);
-  let cur: Record<string, unknown> = config as unknown as Record<string, unknown>;
-  for (let i = 0; i < keys.length - 1; i += 1) {
-    const k = keys[i] as string;
-    const next = cur[k];
-    if (typeof next !== 'object' || next === null || Array.isArray(next)) {
-      throw new Error(`設定パスが不正です: ${dotpath} (${k} はグループではありません)`);
-    }
-    cur = next as Record<string, unknown>;
-  }
-  const leaf = keys[keys.length - 1] as string;
-  if (!(leaf in cur)) throw new Error(`不明な設定キー: ${dotpath}`);
-  if (typeof cur[leaf] === 'object') throw new Error(`${dotpath} は leaf ではありません (配列/オブジェクトは import で)`);
-  cur[leaf] = value;
-}
 
 function cmdInit(args: string[]): void {
   const force = args.includes('--force');
-  const encFile = defaultEncFile();
-  if (existsSync(encFile) && !force) {
-    throw new Error(`${encFile} は既に存在します (上書きは --force)`);
+  const path = defaultConfigPath();
+  if (existsSync(path) && !force) {
+    throw new Error(`${path} は既に存在します (上書きは --force)`);
   }
-  writeConfig(structuredClone(DEFAULT_CONFIG));
-  console.log(`[pagus] 暗号化 config を作成しました: ${encFile}`);
-  console.log(`[pagus] 鍵: ${process.env.PAGUS_CONFIG_KEY ? 'PAGUS_CONFIG_KEY (env)' : defaultKeyFile()}`);
+  // 既定値を全 dot-key で書き出す (secretKeys は暗号化される).
+  const env = storeEnv();
+  // --force 時は空にしてから書き直す (古いキーを残さない).
+  if (force) writeConfigFile({ plain: {}, secrets: {} } satisfies ConfigFile, STORE_OPTIONS, env);
+  for (const [key, value] of Object.entries(flattenConfig(DEFAULT_CONFIG))) {
+    setConfig(key, value, STORE_OPTIONS, env);
+  }
+  console.log(`[pagus] config を作成しました: ${path}`);
+  console.log(`[pagus] master: ${process.env.PAGUS_MASTER_KEY ? 'PAGUS_MASTER_KEY (env)' : 'machine-bound (pagus:hostname:user)'}`);
 }
 
 function cmdShow(): void {
-  const config = readConfig();
-  console.log(JSON.stringify(config, null, 2));
+  console.log(JSON.stringify(loadPagusConfig(), null, 2));
 }
 
 function cmdSet(args: string[]): void {
   const [dotpath, raw] = args;
   if (!dotpath || raw === undefined) throw new Error('使い方: set <dotpath> <value>');
-  const config = readConfig();
-  setByPath(config, dotpath, inferValue(raw));
-  // 設定後に再検証 (型不一致は throw) してから保存する.
-  writeConfig(mergePagusConfig(config));
+  if (defaultAt(dotpath) === undefined) throw new Error(`不明な設定キー: ${dotpath}`);
+  if (typeof defaultAt(dotpath) === 'object') {
+    throw new Error(`${dotpath} は leaf ではありません (配列/オブジェクトは import で)`);
+  }
+  // DEFAULT_CONFIG の型に合わせて検証 (不正は throw). 保存値は文字列 (配列は JSON 文字列).
+  coerceLeaf(dotpath, raw);
+  setConfig(dotpath, raw, STORE_OPTIONS, storeEnv());
   console.log(`[pagus] ${dotpath} = ${raw} を保存しました`);
 }
 
@@ -103,9 +62,13 @@ function cmdImport(args: string[]): void {
   if (!file) throw new Error('使い方: import <file.json>');
   if (!existsSync(file)) throw new Error(`JSON ファイルがありません: ${file}`);
   const parsed: unknown = JSON.parse(readFileSync(file, 'utf8'));
-  const config = mergePagusConfig(parsed); // 部分指定可 + 型検証
-  writeConfig(config);
-  console.log(`[pagus] ${file} を暗号化 config へ取り込みました`);
+  // 部分指定可 + 型検証 (不正は throw). 検証済みの nested を flat 化して 1 キーずつ保存.
+  const validated = mergePagusConfig(parsed);
+  const env = storeEnv();
+  for (const [key, value] of Object.entries(flattenConfig(validated))) {
+    setConfig(key, value, STORE_OPTIONS, env);
+  }
+  console.log(`[pagus] ${file} を config へ取り込みました`);
 }
 
 function main(): void {
