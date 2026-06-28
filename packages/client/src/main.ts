@@ -11,6 +11,7 @@ import { LlmPanel } from './llm-panel.js';
 import { ChronicleView } from './chronicle-view.js';
 import { StatusPanel } from './status-panel.js';
 import { PlayerControls, type ActionType } from './player-controls.js';
+import { CardPanel } from './card-panel.js';
 import { BetPanel } from './bet-panel.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
 import { connect, type Conn } from './ws-client.js';
@@ -69,6 +70,11 @@ async function main(): Promise<void> {
     onChampion: (targetId) => conn.send({ t: 'champion', targetId, userId }),
   });
 
+  // カードパネル (§v1.3-A): カルマで切る一発介入カード 5 種。
+  const cards = new CardPanel(el('cards'), {
+    onCard: (card, args) => conn.send({ t: 'card', card, userId, ...args }),
+  });
+
   const verdict = el('verdict');
   // 死刑/教育ボタンは「殺す/活かす」を決める fate 段階でのみ出す (foolish=被告選びは右パネル)。
   const showVerdict = (world: { phase: string; trial: { stage: string } | null }): boolean =>
@@ -85,6 +91,7 @@ async function main(): Promise<void> {
       llmPanel.setNames(world);
       chronicle.setWorld(world);
       controls.setWorld(world);
+      cards.setWorld(world);
       betPanel.update(world);
       verdict.classList.toggle('show', showVerdict(world));
     },
@@ -99,7 +106,10 @@ async function main(): Promise<void> {
     onLlm: (info) => llmPanel.setInfo(info),
     onChronicle: (entries) => chronicle.setEntries(entries),
     onSysStatus: (s) => statusPanel.setStatus(s),
-    onPlayerState: (state) => controls.setState(state),
+    onPlayerState: (state) => {
+      controls.setState(state);
+      cards.setKarma(state.karma);
+    },
     onCommandRejected: (reason) => showToast(`⚠ ${reason}`),
     onPlayerActions: (entries) => chronicle.setActions(entries),
     onBetState: (s) => betPanel.setBetState(s),

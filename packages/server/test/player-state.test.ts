@@ -152,6 +152,36 @@ describe('PlayerState 称号 (§4.2 titles)', () => {
   });
 });
 
+// env 既定: PAGUS_CARD_COOLDOWN_MS=60000。
+describe('PlayerState カード介入クールダウン (§v1.3-A)', () => {
+  it('canUseCard は未使用なら true、markCard 後はクールダウン中 false、経過後 true', () => {
+    const ps = new PlayerState();
+    const t0 = 1_000_000;
+    expect(ps.canUseCard('u', t0)).toBe(true); // 未使用
+    ps.markCard('u', t0);
+    expect(ps.canUseCard('u', t0)).toBe(false); // 直後
+    expect(ps.canUseCard('u', t0 + 59_999)).toBe(false); // クールダウン中
+    expect(ps.canUseCard('u', t0 + 60_000)).toBe(true); // 経過 (>=)
+  });
+
+  it('cardCooldownInMs は残り時間を返す (0 = いま可能)', () => {
+    const ps = new PlayerState();
+    const t0 = 1_000_000;
+    expect(ps.cardCooldownInMs('u', t0)).toBe(0); // 未使用
+    ps.markCard('u', t0);
+    expect(ps.cardCooldownInMs('u', t0 + 20_000)).toBe(40_000);
+    expect(ps.cardCooldownInMs('u', t0 + 60_000)).toBe(0);
+  });
+
+  it('クールダウンは userId ごとに独立', () => {
+    const ps = new PlayerState();
+    const t0 = 1_000_000;
+    ps.markCard('a', t0);
+    expect(ps.canUseCard('a', t0 + 1)).toBe(false);
+    expect(ps.canUseCard('b', t0 + 1)).toBe(true); // 別ユーザは影響なし
+  });
+});
+
 describe('PlayerState 二大陣営 (§4.3 faction)', () => {
   it('明示選択した陣営を返す', () => {
     const ps = new PlayerState();

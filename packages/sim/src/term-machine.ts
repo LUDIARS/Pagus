@@ -288,6 +288,103 @@ export class TermMachine {
     };
   }
 
+  // --- カードパック (§v1.3-A) ----------------------------------------------------
+
+  /** 天災カード等の一時 BehaviorRule を村に足す (§v1.3-A ⑯)。TTL は rule.expiresAtTerm。 */
+  addCardRule(rule: BehaviorRule): void {
+    this.world.behaviorRules.push(rule);
+  }
+
+  /**
+   * 失効した一時ルール (expiresAtTerm <= world.term) を除去する (§v1.3 TTL)。
+   * server が日末 (advanceDay 後) に呼ぶ。除去したルールを返す。
+   */
+  pruneExpiredRules(): BehaviorRule[] {
+    const removed: BehaviorRule[] = [];
+    for (let i = this.world.behaviorRules.length - 1; i >= 0; i -= 1) {
+      const r = this.world.behaviorRules[i];
+      if (r && r.expiresAtTerm !== undefined && r.expiresAtTerm <= this.world.term) {
+        removed.push(r);
+        this.world.behaviorRules.splice(i, 1);
+      }
+    }
+    return removed;
+  }
+
+  /**
+   * 神隠し (§v1.3-A ⑰)。対象を days ターム退避させる (hiddenUntilTerm = term + days)。
+   * 進行中裁判の被告 (または候補) なら裁判を中断し起 (kisho) へ戻す (裁判逃れ)。
+   * 対象が生存しなければ false。
+   */
+  spiritAway(targetId: VillagerId, days: number): boolean {
+    const target = this.world.villagers.get(targetId);
+    if (!target || !target.alive) return false;
+    target.hiddenUntilTerm = this.world.term + days;
+    const trial = this.world.trial;
+    if (trial && (trial.defendant === targetId || trial.candidates.includes(targetId))) {
+      // 裁判の被告が消えた → 進行中の事件/裁判を中断して起へ戻す。
+      this.world.incident = null;
+      this.world.trial = null;
+      this.world.phase = 'kisho';
+    }
+    return true;
+  }
+
+  /**
+   * 入れ替え (§v1.3-A ⑱)。2 住民の persona.traits と appearance を交換する。
+   * どちらかが不在/同一なら false。
+   */
+  swapVillagers(aId: VillagerId, bId: VillagerId): boolean {
+    if (aId === bId) return false;
+    const a = this.world.villagers.get(aId);
+    const b = this.world.villagers.get(bId);
+    if (!a || !b) return false;
+    const traits = a.persona.traits;
+    a.persona.traits = b.persona.traits;
+    b.persona.traits = traits;
+    const appearance = a.appearance;
+    a.appearance = b.appearance;
+    b.appearance = appearance;
+    return true;
+  }
+
+  /**
+   * 覚醒 (§v1.3-A ⑲)。対象の最小気質軸を高位 (0.9) へ引き上げる (隠し気質の解放)。
+   * 引き上げた軸を返す。対象が生存しなければ null。
+   */
+  awaken(targetId: VillagerId): { axis: PersonalityAxis } | null {
+    const target = this.world.villagers.get(targetId);
+    if (!target || !target.alive) return null;
+    let minAxis: PersonalityAxis = PERSONALITY_AXES[0];
+    for (const ax of PERSONALITY_AXES) {
+      if (target.persona.traits[ax] < target.persona.traits[minAxis]) minAxis = ax;
+    }
+    target.persona.traits[minAxis] = 0.9;
+    return { axis: minAxis };
+  }
+
+  /**
+   * 偽予言 (§v1.3-A ⑳)。生存住民全員に偽 InfoItem を撒き、各自の REACTION_EXPOSURE を +1 して
+   * 翌日のアルゴリズムイベントを底上げする。注入した人数を返す。
+   */
+  falseProphecy(text?: string): number {
+    const body = text && text.trim().length > 0 ? text.trim() : '村に災いが訪れるという不吉な予言を聞いた';
+    let n = 0;
+    for (const v of aliveVillagers(this.world)) {
+      this.rumorCount += 1;
+      const item: InfoItem = {
+        id: `prophecy_${this.world.term}_${this.rumorCount}`,
+        text: body,
+        source: 'player',
+        termAcquired: this.world.term,
+      };
+      v.information.push(item);
+      bumpEventParam(v, REACTION_EXPOSURE, 1);
+      n += 1;
+    }
+    return n;
+  }
+
   // --- 月次事件のライフサイクル (§12.3) ----------------------------------------
 
   /**
@@ -887,6 +984,12 @@ export class TermMachine {
     if (this.world.phase !== 'advance') throw new Error(`advanceDay in phase ${this.world.phase}`);
     const cal = this.world.calendar;
     this.world.term += 1;
+    // 神隠し (§v1.3-A ⑰) の一時退避が期限切れ (hiddenUntilTerm <= 新ターム) になったら村へ復帰させる。
+    for (const v of this.world.villagers.values()) {
+      if (v.hiddenUntilTerm !== undefined && v.hiddenUntilTerm <= this.world.term) {
+        delete v.hiddenUntilTerm;
+      }
+    }
     cal.segment = 0;
     let monthRolled = false;
     cal.dayOfMonth += 1;

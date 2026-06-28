@@ -54,6 +54,9 @@ export class PlayerState {
   private readonly players = new Map<string, PlayerEntry>();
   /** 直近に accrue した時刻 (経過秒からカルマ増分を出す)。未 accrue は null。 */
   private lastAccrueMs: number | null = null;
+  /** カード介入クールダウン (§v1.3-A): userId → 次に使える時刻 (ms)。未登録はいつでも可。 */
+  private readonly cardReadyAt = new Map<string, number>();
+  private readonly cardCooldownMs = numEnv('PAGUS_CARD_COOLDOWN_MS', 60000); // カード使用クールダウン
 
   private readonly rate = numEnv('PAGUS_KARMA_RATE', 0.5); // 毎秒のカルマ加算量
   private readonly max = numEnv('PAGUS_KARMA_MAX', 100); // カルマ上限
@@ -153,6 +156,21 @@ export class PlayerState {
   canCheerInMs(userId: string, now: number): number {
     const e = this.get(userId);
     return Math.max(0, this.cheerInterval - (now - e.lastCheerMs));
+  }
+
+  /** カード介入が使えるか (§v1.3-A クールダウン)。未使用 or クールダウン経過で true。 */
+  canUseCard(userId: string, now: number): boolean {
+    return now >= (this.cardReadyAt.get(userId) ?? 0);
+  }
+
+  /** カード介入を 1 回使ったとして次回可能時刻を記録する (§v1.3-A)。 */
+  markCard(userId: string, now: number): void {
+    this.cardReadyAt.set(userId, now + this.cardCooldownMs);
+  }
+
+  /** 次にカードを使えるまでの残りミリ秒 (0 = いま可能, §v1.3-A)。 */
+  cardCooldownInMs(userId: string, now: number): number {
+    return Math.max(0, (this.cardReadyAt.get(userId) ?? 0) - now);
   }
 
   /** カルマを加算する (ベット払い戻し, §3)。下限0。払い戻しは上限 max を超過してよい。 */

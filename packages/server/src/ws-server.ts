@@ -16,8 +16,17 @@ import {
   type PlayerActionEntry,
   type LeaderboardEntry,
   type Faction,
+  type CardName,
 } from '@pagus/sim';
 import type { PlayerStateSnapshot } from './player-state.js';
+
+/** カード介入 (§v1.3-A) の引数 (card 別に必要分だけ伴う)。 */
+export interface CardArgs {
+  targetId?: string;
+  targetId2?: string;
+  kind?: string;
+  text?: string;
+}
 
 /** 状態パネル (§7) の sysStatus メッセージ形。 */
 type SysStatusMessage = Extract<ServerMessage, { t: 'sysStatus' }>;
@@ -33,6 +42,7 @@ export interface WsHandlers {
   onRemoveRule(ruleId: string, userId: string): void;
   onBet(pick: 'death' | 'educate', amount: number, userId: string): void;
   onFaction(side: Faction, userId: string): void;
+  onCard(card: CardName, args: CardArgs, userId: string): void;
 }
 
 export class GameWsServer {
@@ -127,6 +137,15 @@ export class GameWsServer {
     } else if (msg.t === 'faction') {
       this.bind(ws, msg.userId);
       this.h.onFaction(msg.side, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'card') {
+      this.bind(ws, msg.userId);
+      // exactOptionalPropertyTypes: 値があるキーだけ詰める。
+      const args: CardArgs = {};
+      if (msg.targetId !== undefined) args.targetId = msg.targetId;
+      if (msg.targetId2 !== undefined) args.targetId2 = msg.targetId2;
+      if (msg.kind !== undefined) args.kind = msg.kind;
+      if (msg.text !== undefined) args.text = msg.text;
+      this.h.onCard(msg.card, args, this.resolveUser(ws, msg.userId));
     }
   }
 

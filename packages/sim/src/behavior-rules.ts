@@ -33,13 +33,18 @@ export type RuleEffect =
   | { kind: 'triggerWeight'; delta: number }
   | { kind: 'actionFlavor'; text: string };
 
-/** ふるまいの法則 1 件。base = 組込み / haiku = 生成由来。 */
+/** ふるまいの法則 1 件。base = 組込み / haiku = 生成由来 / card = カード(天災)由来の一時効果。 */
 export interface BehaviorRule {
   id: string;
-  source: 'base' | 'haiku';
+  source: 'base' | 'haiku' | 'card';
   description: string;
   when: RuleCondition[];
   then: RuleEffect[];
+  /**
+   * 失効するターム (§v1.3 TTL)。expiresAtTerm <= world.term になったら除去される。
+   * 値があるときだけキーを足す (exactOptionalPropertyTypes)。常設ルールは未設定。
+   */
+  expiresAtTerm?: number;
 }
 
 /** ルール評価のコンテキスト。category は最終的に決まった行動カテゴリ。 */
@@ -174,4 +179,24 @@ export const BASE_BEHAVIOR_RULES: BehaviorRule[] = [
 /** base ルールの独立コピーを作る (world ごとに別配列で持たせ、haiku 追加で汚染しない)。 */
 export function defaultBehaviorRules(): BehaviorRule[] {
   return BASE_BEHAVIOR_RULES.map((r) => ({ ...r, when: [...r.when], then: [...r.then] }));
+}
+
+/** 天災カード (§v1.3-A ⑯) の種別。 */
+export type DisasterKind = 'drought' | 'storm' | 'plague';
+
+/**
+ * 天災カードの一時 BehaviorRule を作る (§v1.3-A ⑯)。actionCategory 不問 (when は空 = 常時 match) で
+ * 村全体へ効く。expiresAtTerm までの TTL 付き (source='card')。
+ * drought → 苛立ち (anger+0.15) / storm → 事件多発 (triggerWeight+2) / plague → 気鬱 (joy-0.15)。
+ */
+export function makeDisasterRule(kind: DisasterKind, expiresAtTerm: number, id: string): BehaviorRule {
+  const base = { id, source: 'card' as const, when: [] as RuleCondition[], expiresAtTerm };
+  switch (kind) {
+    case 'drought':
+      return { ...base, description: '天災: 干ばつで村に苛立ちが募る', then: [{ kind: 'emotionDelta', emotionAxis: 'anger', delta: 0.15 }] };
+    case 'storm':
+      return { ...base, description: '天災: 嵐で諍いが起きやすい', then: [{ kind: 'triggerWeight', delta: 2 }] };
+    case 'plague':
+      return { ...base, description: '天災: 疫病で気が滅入る', then: [{ kind: 'emotionDelta', emotionAxis: 'joy', delta: -0.15 }] };
+  }
 }

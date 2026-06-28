@@ -153,6 +153,9 @@ export class TermLoop {
         const ev = await this.tm.evaluateDay();
         if (ev) this.h.onLog('kisho', ev.narrative);
         const r = this.tm.advanceDay();
+        // 天災カード等の TTL 切れ一時ルールを除去する (§v1.3-A)。hidden 退避の復帰は advanceDay 内で済む。
+        const expired = this.tm.pruneExpiredRules();
+        for (const rule of expired) this.h.onLog('kisho', `🃏 天災がおさまった: 「${rule.description}」`);
         const extra = `${r.monthRolled ? ' / 月がかわった' : ''}${r.holiday ? ` (${r.holiday})` : ''}`;
         this.h.onLog('kisho', `日が暮れた${extra}`);
         // 月初: その月の事件発生日を決める (§12.3.1)。発生日が初日なら前日が無いので即デザイン。

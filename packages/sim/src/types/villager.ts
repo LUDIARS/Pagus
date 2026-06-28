@@ -77,6 +77,12 @@ export interface Villager {
   /** 出自 (種/出生/事件用キャラ)。既定 'seed'。 */
   origin: VillagerOrigin;
   /**
+   * 一時退避 (§v1.3-A ⑰ 神隠し)。hiddenUntilTerm > world.term の間は alive/awake/裁判候補から除外され、
+   * 期限が来たら (hiddenUntilTerm <= term) TermMachine が日末に復帰させる (キー削除)。
+   * 値があるときだけキーを足す (exactOptionalPropertyTypes)。
+   */
+  hiddenUntilTerm?: number;
+  /**
    * イベント由来パラメータ (§12.6)。事件種別ごとに反応値を溜める (例: 'murder' → 殺人を見た反応)。
    * 日常エンジン (BT) のアルゴリズムイベント発火条件に使い、人間が定期レビューで消す。
    */
