@@ -9,6 +9,7 @@ import { PlayerState } from './player-state.js';
 import { BetPool } from './bet-pool.js';
 import { AuctionManager } from './auction.js';
 import { Governance } from './governance.js';
+import { SpectacleManager, RaidManager, SeasonStore } from './spectacle.js';
 import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, CostLog, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND, type CostSink } from './llm/index.js';
 import { createServer } from 'node:http';
 import { SessionLog } from './session-log.js';
@@ -236,6 +237,14 @@ function main(): void {
   let ws: GameWsServer;
   let auction: AuctionManager;
   let governance: Governance;
+  let spectacle: SpectacleManager;
+  let raid: RaidManager;
+
+  // 演出・協力パック (§v1.3-D) の env。
+  const RAID_CHANCE = numEnv('PAGUS_RAID_CHANCE', 0.05); // 日末にレイドが出現する確率 (㉙)
+  // 月替わり検知 (MVP集計 / シーズン進行 / 予測リセット) と事件発火検知 (予測判定) の基準。
+  let lastMonthKey = tm.world.calendar.year * 12 + tm.world.calendar.month;
+  let lastScheduledFired = tm.world.scheduledIncident?.fired ?? false;
 
   // 政治パック (§v1.3-C) の env。
   const REVOLT_THRESHOLD = numEnv('PAGUS_REVOLT_THRESHOLD', 0.7); // 蜂起の悪辣しきい値 (⑧)
@@ -846,6 +855,41 @@ function main(): void {
       const res = governance.martial(userId, mode, Date.now());
       if (!res.ok) ws.sendRejected(userId, res.reason);
     },
+    // --- 演出・協力パック (§v1.3-D) ---------------------------------------------
+    onPredictDay: (dayOfMonth, userId) => {
+      knownUsers.add(userId);
+      // 受付窓: 月初スケジュール後〜発生前 (scheduledIncident があり未発火, ㉓)。
+      const sched = tm.world.scheduledIncident;
+      if (!sched || sched.fired) {
+        ws.sendRejected(userId, 'いまは予測を受け付けていない');
+        return;
+      }
+      const res = spectacle.predict(userId, dayOfMonth, tm.world.calendar.daysInMonth);
+      if (!res.ok) ws.sendRejected(userId, res.reason);
+    },
+    onVoteMvp: (villagerId, userId) => {
+      knownUsers.add(userId);
+      const v = villagerId ? tm.world.villagers.get(villagerId) : undefined;
+      const res = spectacle.voteMvp(userId, villagerId, !!v && v.alive);
+      if (!res.ok) ws.sendRejected(userId, res.reason);
+    },
+    onPray: (userId) => {
+      knownUsers.add(userId);
+      const res = spectacle.pray(userId, Date.now()); // 無料 (協力要素, ㉕)
+      if (!res.fired) return;
+      // 閾値到達 → 村バフ発火 (善良/活気 +0.05・全生存 stress-1)。
+      tm.applyPrayerBuff();
+      const cal = tm.world.calendar;
+      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `🙏 祈り: ${res.count}人の祈りが届き村が癒やされた`, 'other');
+      ws.updateChronicle(chronicle.recent());
+      ws.broadcastSnapshot(tm.world);
+      scheduleLeaderboard(); // 徳目綱引きは reputation 由来
+    },
+    onRaidStrike: (amount, userId) => {
+      knownUsers.add(userId);
+      const res = raid.strike(userId, amount, Date.now());
+      if (!res.ok) ws.sendRejected(userId, res.reason);
+    },
   });
   ws.setLlmInfo(llmInfo);
   ws.updateChronicle(chronicle.recent()); // 既存の歴史を初期配信対象に。
@@ -937,6 +981,106 @@ function main(): void {
   );
   governance.broadcastAll(Date.now()); // 初回 (接続前の現値を ws に保持させる)
 
+  // 演出・協力パック (§v1.3-D): ハイライト/予測/MVP/祈り/シーズン。状態と集計は SpectacleManager。
+  const seasonStore = new SeasonStore();
+  spectacle = new SpectacleManager(
+    {
+      predictReward: numEnv('PAGUS_PREDICT_REWARD', 30),
+      prayWindowMs: numEnv('PAGUS_PRAY_WINDOW_MS', 30000),
+      prayNeeded: numEnv('PAGUS_PRAY_NEEDED', 3),
+      seasonMonths: numEnv('PAGUS_SEASON_MONTHS', 3),
+      seasonReward: numEnv('PAGUS_SEASON_REWARD', 50),
+    },
+    {
+      addKarma: (uid, amt) => ps.addKarma(uid, amt),
+      pushState: (uid) => pushState(uid),
+      knownUserIds: () => [...knownUsers],
+      factionOf: (uid) => ps.factionOf(uid),
+      reputation: () => {
+        const rep = tm.world.reputation;
+        return { benevolence: rep.benevolence, malice: rep.malice, order: rep.order };
+      },
+      buildLeaderboard: () => ps.leaderboard(),
+      broadcastHighlights: (cards) => ws.broadcastHighlights(cards),
+      broadcastSeason: (number, winner, leaderboard) => ws.broadcastSeason(number, winner, leaderboard),
+      persistSeason: (record) => seasonStore.append(record),
+    },
+  );
+
+  // 共闘レイド (§v1.3-D ㉙): 凶悪 villain との協力ミニゲーム。状態と時間管理は RaidManager。
+  const RAID_VILLAIN_NAMES = ['黒爪のガロ', '影喰いゾル', '血塗れのバド', '夜歩きのケダ'];
+  let raidNameIdx = 0;
+  raid = new RaidManager(
+    {
+      hp: numEnv('PAGUS_RAID_HP', 100),
+      windowMs: numEnv('PAGUS_RAID_WINDOW_MS', 120000),
+      reward: numEnv('PAGUS_RAID_REWARD', 50),
+      chance: RAID_CHANCE,
+    },
+    {
+      spawnVillain: () => {
+        const name = RAID_VILLAIN_NAMES[raidNameIdx % RAID_VILLAIN_NAMES.length] ?? '凶賊';
+        raidNameIdx += 1;
+        const v = tm.spawnVillain(name);
+        // spawn を死亡検知の差分基準へ反映 (退場時に誤って弔い扱いされないよう生存集合へ加える)。
+        if (aliveInitialized) prevAliveIds.add(v.id);
+        return { id: v.id, name: v.name };
+      },
+      despawnVillain: (id) => {
+        tm.despawnVillain(id);
+        // レイド villain の退場は弔い対象外 → 死亡検知の差分基準から外す。
+        prevAliveIds.delete(id);
+      },
+      spend: (uid, amt) => ps.spend(uid, amt),
+      reward: (uid, amt) => ps.addKarma(uid, amt),
+      pushState: (uid) => pushState(uid),
+      applyFailure: () => {
+        tm.applyRaidFailure();
+        scheduleLeaderboard(); // 徳目綱引きは reputation 由来
+      },
+      chronicle: (text) => {
+        const cal = tm.world.calendar;
+        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, text, 'other');
+        ws.updateChronicle(chronicle.recent());
+      },
+      highlight: (title, summary) => {
+        const cal = tm.world.calendar;
+        spectacle.recordHighlight(`${cal.month}月${cal.dayOfMonth}日`, title, 'other', summary);
+      },
+      broadcast: (active, villainName, hp, hpMax, endsInMs) => ws.broadcastRaid(active, villainName, hp, hpMax, endsInMs),
+      snapshot: () => ws.broadcastSnapshot(tm.world),
+    },
+  );
+  ws.broadcastHighlights(spectacle.highlights()); // 初回 (接続前の現値を ws に保持させる)
+  ws.broadcastRaid(false, '', 0, 0, 0);
+
+  /** 月替わりの演出処理 (§v1.3-D): MVP集計 (㉔) / 予測リセット (㉓) / シーズン進行 (㉚)。 */
+  const handleMonthRoll = (): void => {
+    const cal = tm.world.calendar;
+    const date = `${cal.month}月${cal.dayOfMonth}日`;
+    // ㉔ 月間MVP を集計し「今月の主役」を発表する。
+    const mvp = spectacle.resolveMvp();
+    if (mvp) {
+      const name = tm.world.villagers.get(mvp.villagerId)?.name ?? mvp.villagerId;
+      chronicle.add(date, `🏅 MVP: ${name} が今月の主役に選ばれた (${mvp.votes}票)`, 'other');
+      ws.updateChronicle(chronicle.recent());
+      ws.broadcastMvp(mvp.villagerId, name);
+      spectacle.recordHighlight(date, '月間MVP', 'other', `${name} が今月の主役に輝いた`);
+    }
+    // ㉓ 新しい月の予測受付を開く (発火検知の基準もリセット)。
+    spectacle.resetMonth();
+    lastScheduledFired = false;
+    // ㉚ シーズン境界なら陣営勝敗を確定する。
+    const season = spectacle.advanceSeasonMonth();
+    if (season) {
+      const label = season.winner === 'guide' ? '善導陣営の勝利' : season.winner === 'incite' ? '扇動陣営の勝利' : '引き分け';
+      chronicle.add(date, `🏁 シーズン${season.number} 終幕: ${label}`, 'other');
+      ws.updateChronicle(chronicle.recent());
+      spectacle.recordHighlight(date, `シーズン${season.number}`, 'other', label);
+      scheduleLeaderboard();
+    }
+  };
+
   loop = new TermLoop(tm, pace, incidentStepMs, {
     onSnapshot: (w) => {
       // 日末 (term 進行) を検知して銀行利子付与 + 保険の期限切れ掃除 (§v1.3-B ③④)。
@@ -958,6 +1102,27 @@ function main(): void {
         }
         // 悪辣が閾値を超えていたら蜂起ウィンドウを開く (⑧)。
         governance.maybeStartRevolt(w.reputation.malice, Date.now());
+        // 共闘レイド (§v1.3-D ㉙): 日末に低確率で凶悪 villain を出現させる (多重防止は内部)。
+        raid.maybeSpawn(Date.now());
+      }
+      // 予測アワード (§v1.3-D ㉓): スケジュール事件が発火した瞬間に的中を判定する。
+      const sched = w.scheduledIncident;
+      const firedNow = sched?.fired === true;
+      if (firedNow && !lastScheduledFired && sched) {
+        const payouts = spectacle.resolvePredictions(sched.dayOfMonth);
+        if (payouts.length > 0) {
+          const cal = w.calendar;
+          chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `🔮 予測的中: ${payouts.length}人が事件発生日 (${sched.dayOfMonth}日) を当てた`, 'other');
+          ws.updateChronicle(chronicle.recent());
+          scheduleLeaderboard();
+        }
+      }
+      lastScheduledFired = firedNow;
+      // 月替わり (§v1.3-D ㉔㉚㉓): MVP集計 / シーズン進行 / 予測リセット。
+      const monthKey = w.calendar.year * 12 + w.calendar.month;
+      if (monthKey > lastMonthKey) {
+        lastMonthKey = monthKey;
+        handleMonthRoll();
       }
       const mourned = detectChampionDeaths(w); // 推しの死 → 弔い (world/chronicle を変えうる)
       const settled = detectBetSettlement(w); // ベット決済 (§3, chronicle を変えうる)
@@ -978,8 +1143,14 @@ function main(): void {
       sessionLog.line(phase, text);
       if (isMilestone(text)) {
         const cal = tm.world.calendar;
-        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, text, classifyKind(text));
+        const kind = classifyKind(text);
+        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, text, kind);
         ws.updateChronicle(chronicle.recent());
+        // ハイライト (§v1.3-D ㉑): 処刑 (判決) / 和解 を節目カードとして積む。
+        if (kind === 'verdict' || kind === 'reconcile') {
+          const title = kind === 'verdict' ? '判決' : '和解';
+          spectacle.recordHighlight(`${cal.month}月${cal.dayOfMonth}日`, title, kind, text);
+        }
       }
     },
     onTrialOpen: (w) => {
@@ -1063,12 +1234,16 @@ function main(): void {
   // 政治パック (§v1.3-C): 1 秒ごとに任期更新 / 法案締切 / 蜂起決着 / 課税を回す。
   const govTimer = setInterval(() => governance.tick(Date.now()), 1000);
 
+  // 共闘レイド (§v1.3-D ㉙): 1 秒ごとに制限時間を判定 (時間切れで失敗 = 村に大被害)。
+  const raidTimer = setInterval(() => raid.tick(Date.now()), 1000);
+
   // Ctrl-C でループを止めログを flush してから抜ける。
   const shutdown = (): void => {
     clearInterval(stateTimer);
     clearInterval(sysTimer);
     clearInterval(auctionTimer);
     clearInterval(govTimer);
+    clearInterval(raidTimer);
     if (sysPending) clearTimeout(sysPending);
     if (lbPending) clearTimeout(lbPending);
     loop.stop();

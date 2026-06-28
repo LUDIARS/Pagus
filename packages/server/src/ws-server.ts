@@ -21,6 +21,8 @@ import {
   type AuctionLotView,
   type LawView,
   type MartialMode,
+  type HighlightCard,
+  type SeasonWinner,
 } from '@pagus/sim';
 import type { PlayerStateSnapshot } from './player-state.js';
 
@@ -66,6 +68,11 @@ export interface WsHandlers {
   onVoteLaw(lawId: string, approve: boolean, userId: string): void;
   onRevolt(side: 'incite' | 'suppress', userId: string): void;
   onMartial(mode: MartialMode, userId: string): void;
+  // 演出・協力パック (§v1.3-D)。
+  onPredictDay(dayOfMonth: number, userId: string): void;
+  onVoteMvp(villagerId: string, userId: string): void;
+  onPray(userId: string): void;
+  onRaidStrike(amount: number, userId: string): void;
 }
 
 export class GameWsServer {
@@ -86,6 +93,11 @@ export class GameWsServer {
   private revolt: Extract<ServerMessage, { t: 'revolt' }> | null = null;
   private martial: Extract<ServerMessage, { t: 'martial' }> | null = null;
   private fund: Extract<ServerMessage, { t: 'fund' }> | null = null;
+  /** 演出・協力パック (§v1.3-D) の最新状態 (ハイライト/レイド/MVP/シーズン)。接続時に現値を送る。 */
+  private highlights: Extract<ServerMessage, { t: 'highlights' }> | null = null;
+  private raid: Extract<ServerMessage, { t: 'raid' }> | null = null;
+  private mvp: Extract<ServerMessage, { t: 'mvp' }> | null = null;
+  private season: Extract<ServerMessage, { t: 'season' }> | null = null;
   /** 接続 → その接続を名乗った userId。per-connection 配信の宛先解決に使う。 */
   private readonly connUser = new Map<WebSocket, string>();
 
@@ -122,6 +134,10 @@ export class GameWsServer {
     if (this.revolt) ws.send(JSON.stringify(this.revolt));
     if (this.martial) ws.send(JSON.stringify(this.martial));
     if (this.fund) ws.send(JSON.stringify(this.fund));
+    if (this.highlights) ws.send(JSON.stringify(this.highlights));
+    if (this.raid) ws.send(JSON.stringify(this.raid));
+    if (this.mvp) ws.send(JSON.stringify(this.mvp));
+    if (this.season) ws.send(JSON.stringify(this.season));
     this.broadcastPlayers();
     ws.on('close', () => {
       this.connUser.delete(ws);
@@ -221,6 +237,18 @@ export class GameWsServer {
     } else if (msg.t === 'martial') {
       this.bind(ws, msg.userId);
       this.h.onMartial(msg.mode, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'predictDay') {
+      this.bind(ws, msg.userId);
+      this.h.onPredictDay(msg.dayOfMonth, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'voteMvp') {
+      this.bind(ws, msg.userId);
+      this.h.onVoteMvp(msg.villagerId, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'pray') {
+      this.bind(ws, msg.userId);
+      this.h.onPray(this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'raidStrike') {
+      this.bind(ws, msg.userId);
+      this.h.onRaidStrike(msg.amount, this.resolveUser(ws, msg.userId));
     }
   }
 
@@ -298,6 +326,34 @@ export class GameWsServer {
   broadcastFund(amount: number, threshold: number): void {
     const msg: Extract<ServerMessage, { t: 'fund' }> = { t: 'fund', amount, threshold };
     this.fund = msg;
+    this.fanout(JSON.stringify(msg));
+  }
+
+  /** ハイライト一覧 (§v1.3-D ㉑) を更新し全クライアントへ配る。接続時にも現値を送る。 */
+  broadcastHighlights(cards: HighlightCard[]): void {
+    const msg: Extract<ServerMessage, { t: 'highlights' }> = { t: 'highlights', cards };
+    this.highlights = msg;
+    this.fanout(JSON.stringify(msg));
+  }
+
+  /** 共闘レイド状態 (§v1.3-D ㉙) を更新し全クライアントへ配る。接続時にも現値を送る。 */
+  broadcastRaid(active: boolean, villainName: string, hp: number, hpMax: number, endsInMs: number): void {
+    const msg: Extract<ServerMessage, { t: 'raid' }> = { t: 'raid', active, villainName, hp, hpMax, endsInMs };
+    this.raid = msg;
+    this.fanout(JSON.stringify(msg));
+  }
+
+  /** 月間MVP (§v1.3-D ㉔) を更新し全クライアントへ配る。接続時にも現値を送る。 */
+  broadcastMvp(villagerId: string, name: string): void {
+    const msg: Extract<ServerMessage, { t: 'mvp' }> = { t: 'mvp', villagerId, name };
+    this.mvp = msg;
+    this.fanout(JSON.stringify(msg));
+  }
+
+  /** シーズン確定 (§v1.3-D ㉚) を更新し全クライアントへ配る。接続時にも現値を送る。 */
+  broadcastSeason(number: number, winner: SeasonWinner, leaderboard: LeaderboardEntry[]): void {
+    const msg: Extract<ServerMessage, { t: 'season' }> = { t: 'season', number, winner, leaderboard };
+    this.season = msg;
     this.fanout(JSON.stringify(msg));
   }
 

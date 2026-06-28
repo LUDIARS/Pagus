@@ -14,6 +14,7 @@ import { PlayerControls, type ActionType } from './player-controls.js';
 import { CardPanel } from './card-panel.js';
 import { EconomyPanel } from './economy-panel.js';
 import { GovernancePanel } from './governance-panel.js';
+import { SpectaclePanel } from './spectacle-panel.js';
 import { BetPanel } from './bet-panel.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
 import { connect, type Conn } from './ws-client.js';
@@ -96,6 +97,14 @@ async function main(): Promise<void> {
     onMartial: (mode) => conn.send({ t: 'martial', mode, userId }),
   });
 
+  // 演出・協力パネル (§v1.3-D): ハイライト / 予測 / MVP / 祈り / レイド / シーズン。
+  const spectacle = new SpectaclePanel(el('spectacle'), {
+    onPredictDay: (dayOfMonth) => conn.send({ t: 'predictDay', dayOfMonth, userId }),
+    onVoteMvp: (villagerId) => conn.send({ t: 'voteMvp', villagerId, userId }),
+    onPray: () => conn.send({ t: 'pray', userId }),
+    onRaidStrike: (amount) => conn.send({ t: 'raidStrike', amount, userId }),
+  });
+
   const verdict = el('verdict');
   // 死刑/教育ボタンは「殺す/活かす」を決める fate 段階でのみ出す (foolish=被告選びは右パネル)。
   const showVerdict = (world: { phase: string; trial: { stage: string } | null }): boolean =>
@@ -114,6 +123,7 @@ async function main(): Promise<void> {
       controls.setWorld(world);
       cards.setWorld(world);
       economy.setWorld(world);
+      spectacle.setWorld(world);
       betPanel.update(world);
       verdict.classList.toggle('show', showVerdict(world));
     },
@@ -143,6 +153,10 @@ async function main(): Promise<void> {
     onRevolt: (active, incite, suppress, endsInMs) => governance.setRevolt(active, incite, suppress, endsInMs),
     onMartial: (mode) => governance.setMartial(mode),
     onFund: (amount, threshold) => governance.setFund(amount, threshold),
+    onHighlights: (cards) => spectacle.setHighlights(cards),
+    onMvp: (villagerId, name) => spectacle.setMvp(villagerId, name),
+    onRaid: (active, villainName, hp, hpMax, endsInMs) => spectacle.setRaid(active, villainName, hp, hpMax, endsInMs),
+    onSeason: (num, winner, leaderboard) => spectacle.setSeason(num, winner, leaderboard),
   });
 
   // 裁判の票は中央の 死刑/教育 に一本化 (沈静化は廃止 §4.1)。

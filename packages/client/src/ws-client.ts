@@ -1,6 +1,6 @@
 // WS 接続。server からの snapshot/log を受け、扇動/沈静化コマンドを送る。自動再接続。
 
-import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView, LawView, MartialMode } from '@pagus/sim';
+import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView, LawView, MartialMode, HighlightCard, SeasonWinner } from '@pagus/sim';
 
 /** 裁判ベットのプール状態 (§3 betState 受信ペイロード)。 */
 export interface BetStateView {
@@ -56,6 +56,14 @@ export interface WsHandlers {
   onMartial?(mode: MartialMode | null, endsInMs: number): void;
   /** 村基金残高 (§v1.3-C ⑩)。 */
   onFund?(amount: number, threshold: number): void;
+  /** ハイライト一覧 (§v1.3-D ㉑)。 */
+  onHighlights?(cards: HighlightCard[]): void;
+  /** 月間MVP (§v1.3-D ㉔)。 */
+  onMvp?(villagerId: string, name: string): void;
+  /** 共闘レイド状態 (§v1.3-D ㉙)。 */
+  onRaid?(active: boolean, villainName: string, hp: number, hpMax: number, endsInMs: number): void;
+  /** シーズン確定 (§v1.3-D ㉚)。 */
+  onSeason?(num: number, winner: SeasonWinner, leaderboard: LeaderboardEntry[]): void;
 }
 
 export interface Conn {
@@ -116,6 +124,10 @@ export function connect(url: string, h: WsHandlers): Conn {
       else if (msg.t === 'revolt') h.onRevolt?.(msg.active, msg.incite, msg.suppress, msg.endsInMs);
       else if (msg.t === 'martial') h.onMartial?.(msg.mode, msg.endsInMs);
       else if (msg.t === 'fund') h.onFund?.(msg.amount, msg.threshold);
+      else if (msg.t === 'highlights') h.onHighlights?.(msg.cards);
+      else if (msg.t === 'mvp') h.onMvp?.(msg.villagerId, msg.name);
+      else if (msg.t === 'raid') h.onRaid?.(msg.active, msg.villainName, msg.hp, msg.hpMax, msg.endsInMs);
+      else if (msg.t === 'season') h.onSeason?.(msg.number, msg.winner, msg.leaderboard);
     };
   };
   open();
