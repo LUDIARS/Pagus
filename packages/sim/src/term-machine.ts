@@ -465,6 +465,71 @@ export class TermMachine {
     return n;
   }
 
+  // --- 演出・協力パック (§v1.3-D) ------------------------------------------------
+
+  /**
+   * 観客の祈り (§v1.3-D ㉕) の村バフを適用する。村の評判 (善良 +0.05 / 活気 +0.05) を上げ、
+   * 全生存どうぶつの stress を 1 下げる (下限0)。stress を下げた人数を返す。
+   */
+  applyPrayerBuff(): number {
+    const rep = this.world.reputation;
+    rep.benevolence = clamp01(rep.benevolence + 0.05);
+    rep.vitality = clamp01(rep.vitality + 0.05);
+    let n = 0;
+    for (const v of aliveVillagers(this.world)) {
+      v.stress = Math.max(0, v.stress - 1);
+      n += 1;
+    }
+    return n;
+  }
+
+  /**
+   * 共闘レイド (§v1.3-D ㉙) の凶悪 villain を 1 体生成して村に投入する。
+   * 事件用キャラ (origin 'incident') として強気質 (攻撃性高・優しさ低・規律低) で spawn する。
+   * 生成したどうぶつを返す。
+   */
+  spawnVillain(name: string): Villager {
+    this.incidentCount += 1;
+    const v = createVillager({
+      id: `incident_${this.incidentCount}`,
+      name,
+      position: {
+        x: Math.floor(this.rng() * this.world.config.gridWidth),
+        y: Math.floor(this.rng() * this.world.config.gridHeight),
+      },
+      species: '狼',
+      activity: 'always',
+      traits: { aggression: 0.95, kindness: 0.05, discipline: 0.1 },
+      origin: 'incident',
+    });
+    this.world.villagers.set(v.id, v);
+    return v;
+  }
+
+  /** レイドの villain を退場させる (§v1.3-D ㉙, 討伐/時間切れ時)。生存していたら alive=false にして true。 */
+  despawnVillain(villagerId: VillagerId): boolean {
+    const v = this.world.villagers.get(villagerId);
+    if (!v || !v.alive) return false;
+    v.alive = false;
+    return true;
+  }
+
+  /**
+   * レイド失敗 (§v1.3-D ㉙, 時間切れ) の村への大被害を適用する。悪辣 +0.15 / 活気 -0.1 (クランプ)、
+   * 全生存どうぶつの stress を +2 する。被害を受けた人数を返す。
+   */
+  applyRaidFailure(): number {
+    const rep = this.world.reputation;
+    rep.malice = clamp01(rep.malice + 0.15);
+    rep.vitality = clamp01(rep.vitality - 0.1);
+    let n = 0;
+    for (const v of aliveVillagers(this.world)) {
+      v.stress += 2;
+      n += 1;
+    }
+    return n;
+  }
+
   // --- 月次事件のライフサイクル (§12.3) ----------------------------------------
 
   /**

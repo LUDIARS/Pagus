@@ -182,6 +182,21 @@ export interface PlayerStats {
 /** 二大陣営 (§4.3)。善導 = guide / 扇動 = incite。 */
 export type Faction = 'guide' | 'incite';
 
+/** ハイライトカード (§v1.3-D ㉑)。節目をカード化して共有用に整形する。 */
+export interface HighlightCard {
+  /** ゲーム内日付 (例 "6月12日")。 */
+  date: string;
+  /** カードの見出し (短い節目ラベル)。 */
+  title: string;
+  /** 種別 (chronicle と同じ分類)。 */
+  kind: ChronicleKind;
+  /** 出来事の要約 (本文)。 */
+  summary: string;
+}
+
+/** シーズン (§v1.3-D ㉚) の勝敗。guide=善導 / incite=扇動 / draw=引き分け。 */
+export type SeasonWinner = 'guide' | 'incite' | 'draw';
+
 /** リーダーボードの 1 行 (§4.3, broadcast)。 */
 export interface LeaderboardEntry {
   userId: string;
@@ -295,7 +310,12 @@ export type ServerMessage =
   | { t: 'laws'; items: LawView[] } // 投票中の法案一覧 (⑦, broadcast)
   | { t: 'revolt'; active: boolean; incite: number; suppress: number; endsInMs: number } // 革命の蜂起状態 (⑧, broadcast)
   | { t: 'martial'; mode: MartialMode | null; endsInMs: number } // 戒厳令の発動状態 (⑨, broadcast)
-  | { t: 'fund'; amount: number; threshold: number }; // 村基金の残高 (⑩, broadcast)
+  | { t: 'fund'; amount: number; threshold: number } // 村基金の残高 (⑩, broadcast)
+  // --- 演出・協力パック (§v1.3-D) ---
+  | { t: 'highlights'; cards: HighlightCard[] } // ハイライト一覧 (㉑, broadcast)
+  | { t: 'mvp'; villagerId: string; name: string } // 月間MVP (㉔, broadcast)
+  | { t: 'raid'; active: boolean; villainName: string; hp: number; hpMax: number; endsInMs: number } // 共闘レイド (㉙, broadcast)
+  | { t: 'season'; number: number; winner: SeasonWinner; leaderboard: LeaderboardEntry[] }; // シーズン確定 (㉚, broadcast)
 
 /** カードパック (§v1.3-A) の 5 種。 */
 export type CardName = 'disaster' | 'spiritAway' | 'swap' | 'awaken' | 'falseProphecy';
@@ -330,4 +350,9 @@ export type ClientMessage =
   | { t: 'proposeLaw'; text: string; userId?: string } // 法案を供託カルマ付きで提案 (⑦)
   | { t: 'voteLaw'; lawId: string; approve: boolean; userId?: string } // 法案へ賛成/反対 (⑦)
   | { t: 'revolt'; side: 'incite' | 'suppress'; userId?: string } // 蜂起にカルマを投じる (⑧)
-  | { t: 'martial'; mode: MartialMode; userId?: string }; // 戒厳令にカルマを投じる (⑨)
+  | { t: 'martial'; mode: MartialMode; userId?: string } // 戒厳令にカルマを投じる (⑨)
+  // 演出・協力パック (§v1.3-D): 予測 / MVP / 祈り / レイド。
+  | { t: 'predictDay'; dayOfMonth: number; userId?: string } // 今月の事件発生日を予測 (㉓)
+  | { t: 'voteMvp'; villagerId: string; userId?: string } // 月間MVP に住民を投票 (㉔)
+  | { t: 'pray'; userId?: string } // 観客の祈り (㉕, 協力バフ)
+  | { t: 'raidStrike'; amount: number; userId?: string }; // 共闘レイドにカルマを投じて削る (㉙)
