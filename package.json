@@ -8,7 +8,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "pagus:config": "pnpm --filter @pagus/server pagus:config"
   },
   "packageManager": "pnpm@9.12.0",
   "engines": {

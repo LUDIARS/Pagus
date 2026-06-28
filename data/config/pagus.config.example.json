@@ -1,0 +1,95 @@
+{
+  "_comment": "Pagus 設定スキーマの参考 (= DEFAULT_CONFIG 相当の既定値)。秘密は含まない。実際の設定は暗号化 config (data/runtime/pagus.config.enc) で管理する: `pnpm pagus:config init` で本ファイル相当の既定から作成し、`pnpm pagus:config set <dotpath> <value>` で調整する。VAPID 鍵 (push.vapidPublic/vapidPrivate) は秘密なので暗号化 config 側にのみ入れる (ここでは空)。部分指定でよい (未指定キーは既定値が使われる)。",
+  "sim": {
+    "triggerAfter": 6,
+    "reps": 3,
+    "reconcileChance": 0.15,
+    "secondaryChance": 0.18,
+    "stressFizzleK": 0.06,
+    "marriageChance": 0.12,
+    "birthChance": 0.1,
+    "rulesMax": 40,
+    "martialSurgeBonus": 4,
+    "rulegenEnabled": true,
+    "rulegenChance": 0.15
+  },
+  "karma": {
+    "rate": 0.5,
+    "max": 100,
+    "inciteCost": 10,
+    "sanctionCost": 30,
+    "sanctionVirtueK": 1,
+    "cheerIntervalMs": 180000,
+    "cheerVirtue": 0.05,
+    "championKarmaMult": 1.5,
+    "championDeathPenalty": 20,
+    "transferFeePct": 0,
+    "cardCooldownMs": 60000
+  },
+  "cards": {
+    "disasterCost": 40,
+    "spiritAwayCost": 35,
+    "swapCost": 30,
+    "awakenCost": 25,
+    "prophecyCost": 20,
+    "disasterDays": 3,
+    "spiritAwayDays": 2
+  },
+  "economy": {
+    "bankInterest": 0.02,
+    "insureDays": 5,
+    "insureMult": 3,
+    "reviveCost": 80,
+    "auctionPeriodMs": 120000,
+    "marketPremium": 1.5,
+    "betMin": 1,
+    "ruleAddCost": 15,
+    "ruleRemoveCost": 25,
+    "villageRulesMax": 12,
+    "topupPacks": [100, 500, 1000]
+  },
+  "politics": {
+    "revoltThreshold": 0.7,
+    "martialDays": 2,
+    "mayorPeriodMs": 180000,
+    "lawDeposit": 20,
+    "lawVoteMs": 60000,
+    "revoltStake": 10,
+    "revoltWindowMs": 60000,
+    "martialStake": 25,
+    "martialCost": 100,
+    "taxPeriodMs": 180000,
+    "taxAmount": 5,
+    "fundThreshold": 100
+  },
+  "spectacle": {
+    "predictReward": 30,
+    "prayWindowMs": 30000,
+    "prayNeeded": 3,
+    "seasonMonths": 3,
+    "seasonReward": 50,
+    "raidChance": 0.05,
+    "raidHp": 100,
+    "raidWindowMs": 120000,
+    "raidReward": 50
+  },
+  "llm": {
+    "cliRetries": 2,
+    "disableCodex": false
+  },
+  "push": {
+    "enabled": false,
+    "vapidPublic": "",
+    "vapidPrivate": "",
+    "vapidSubject": "mailto:pagus@vtn-game.com"
+  },
+  "server": {
+    "wsPort": 4310,
+    "accel": 600,
+    "minMs": 400,
+    "incidentStepMs": 700,
+    "logStdout": true,
+    "logFile": true,
+    "logDir": ""
+  }
+}

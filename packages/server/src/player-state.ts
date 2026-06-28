@@ -2,18 +2,51 @@
 // カルマは時間経過で自動でたまり (accrue)、扇動/制裁で消費 (spend) する。
 // 善性 (virtue) は応援で上がり、制裁コストを重くする。WS の per-connection 配信で使う。
 //
-// 設定不備の無言フォールバック禁止 (RULE_CODE §7.1): env が数値でなければ即エラー。
-
-/** env を数値で読む。未設定は fallback、数値でなければ throw (無言フォールバック禁止)。 */
-function numEnv(name: string, fallback: number): number {
-  const v = process.env[name];
-  if (v === undefined || v === '') return fallback;
-  const n = Number(v);
-  if (Number.isNaN(n)) throw new Error(`環境変数 ${name} が数値ではありません: ${v}`);
-  return n;
-}
+// チューニング値は暗号化 config (PagusConfig.karma) から index がコンストラクタ注入する。
+// 自前で env を読まない (RULE_CODE §7.1: 設定は集約・fail-fast)。
 
 import type { PlayerStats, Faction, LeaderboardEntry } from '@pagus/sim';
+
+/** PlayerState のチューニング値 (PagusConfig.karma 相当)。 */
+export interface PlayerStateConfig {
+  /** 毎秒のカルマ加算量。 */
+  rate: number;
+  /** カルマ上限。 */
+  max: number;
+  /** 扇動コスト。 */
+  inciteCost: number;
+  /** 制裁コスト基準。 */
+  sanctionCost: number;
+  /** 善性による制裁コスト係数。 */
+  sanctionVirtueK: number;
+  /** 応援インターバル ms。 */
+  cheerIntervalMs: number;
+  /** 応援 1 回の善性上昇。 */
+  cheerVirtue: number;
+  /** 推し生存中のカルマ加速倍率 (§1)。 */
+  championKarmaMult: number;
+  /** 推しの死のカルマ罰 (§1)。 */
+  championDeathPenalty: number;
+  /** 送金手数料 (%) (§v1.3-B ①)。 */
+  transferFeePct: number;
+  /** カード使用クールダウン ms。 */
+  cardCooldownMs: number;
+}
+
+/** 既定値 (暗号化 config 未注入時 / テスト用)。DEFAULT_CONFIG.karma と一致させる。 */
+export const DEFAULT_PLAYER_STATE_CONFIG: PlayerStateConfig = {
+  rate: 0.5,
+  max: 100,
+  inciteCost: 10,
+  sanctionCost: 30,
+  sanctionVirtueK: 1,
+  cheerIntervalMs: 180000,
+  cheerVirtue: 0.05,
+  championKarmaMult: 1.5,
+  championDeathPenalty: 20,
+  transferFeePct: 0,
+  cardCooldownMs: 60000,
+};
 
 interface PlayerEntry {
   karma: number;
@@ -78,18 +111,33 @@ export class PlayerState {
   private lastAccrueMs: number | null = null;
   /** カード介入クールダウン (§v1.3-A): userId → 次に使える時刻 (ms)。未登録はいつでも可。 */
   private readonly cardReadyAt = new Map<string, number>();
-  private readonly cardCooldownMs = numEnv('PAGUS_CARD_COOLDOWN_MS', 60000); // カード使用クールダウン
+  private readonly cardCooldownMs: number; // カード使用クールダウン
 
-  private readonly rate = numEnv('PAGUS_KARMA_RATE', 0.5); // 毎秒のカルマ加算量
-  private readonly max = numEnv('PAGUS_KARMA_MAX', 100); // カルマ上限
-  private readonly inciteCost = numEnv('PAGUS_INCITE_COST', 10); // 扇動コスト
-  private readonly sanctionBase = numEnv('PAGUS_SANCTION_COST', 30); // 制裁コスト基準
-  private readonly virtueK = numEnv('PAGUS_SANCTION_VIRTUE_K', 1); // 善性による制裁コスト係数
-  private readonly cheerInterval = numEnv('PAGUS_CHEER_INTERVAL_MS', 180000); // 応援インターバル
-  private readonly cheerVirtue = numEnv('PAGUS_CHEER_VIRTUE', 0.05); // 応援1回の善性上昇
-  private readonly championKarmaMult = numEnv('PAGUS_CHAMPION_KARMA_MULT', 1.5); // 推し生存中のカルマ加速倍率 (§1)
-  private readonly championDeathPenalty = numEnv('PAGUS_CHAMPION_DEATH_PENALTY', 20); // 推しの死のカルマ罰 (§1)
-  private readonly transferFeePct = numEnv('PAGUS_TRANSFER_FEE_PCT', 0); // 送金手数料 (%) (§v1.3-B ①)
+  private readonly rate: number; // 毎秒のカルマ加算量
+  private readonly max: number; // カルマ上限
+  private readonly inciteCost: number; // 扇動コスト
+  private readonly sanctionBase: number; // 制裁コスト基準
+  private readonly virtueK: number; // 善性による制裁コスト係数
+  private readonly cheerInterval: number; // 応援インターバル
+  private readonly cheerVirtue: number; // 応援1回の善性上昇
+  private readonly championKarmaMult: number; // 推し生存中のカルマ加速倍率 (§1)
+  private readonly championDeathPenalty: number; // 推しの死のカルマ罰 (§1)
+  private readonly transferFeePct: number; // 送金手数料 (%) (§v1.3-B ①)
+
+  /** チューニング値を注入する (省略時は既定 = 旧 env 既定と一致)。 */
+  constructor(config: PlayerStateConfig = DEFAULT_PLAYER_STATE_CONFIG) {
+    this.cardCooldownMs = config.cardCooldownMs;
+    this.rate = config.rate;
+    this.max = config.max;
+    this.inciteCost = config.inciteCost;
+    this.sanctionBase = config.sanctionCost;
+    this.virtueK = config.sanctionVirtueK;
+    this.cheerInterval = config.cheerIntervalMs;
+    this.cheerVirtue = config.cheerVirtue;
+    this.championKarmaMult = config.championKarmaMult;
+    this.championDeathPenalty = config.championDeathPenalty;
+    this.transferFeePct = config.transferFeePct;
+  }
 
   /** 推し保険の契約 (§v1.3-B ③): `${userId}:${villagerId}` → 契約。 */
   private readonly insurances = new Map<string, InsuranceContract>();

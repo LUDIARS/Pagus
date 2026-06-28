@@ -30,13 +30,11 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 
 /**
  * CLI の一過性失敗 (codex exec の hook 由来 exit 1 / レート / sandbox blip 等) を
- * 吸収するリトライ既定回数。env `PAGUS_CLI_RETRIES` で上書き可 (0 で無効)。
+ * 吸収するリトライ既定回数。実値は暗号化 config (PagusConfig.llm.cliRetries) から index が
+ * options.retries で注入する。ここは未注入時のフォールバック既定 (2)。
  * リトライは「同じ呼び出しをやり直す」だけで、設定不備の無言フォールバックではない。
  */
-const DEFAULT_RETRIES = ((): number => {
-  const v = Number(process.env.PAGUS_CLI_RETRIES);
-  return Number.isInteger(v) && v >= 0 ? v : 2;
-})();
+const DEFAULT_RETRIES = 2;
 /** リトライ間の基礎待機 ms (試行ごとに線形に伸ばす)。 */
 const DEFAULT_RETRY_BACKOFF_MS = 500;
 

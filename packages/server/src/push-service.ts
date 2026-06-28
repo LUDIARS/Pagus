@@ -1,12 +1,24 @@
 // WebPush 通知 (§4.8)。裁判など投票が要る局面で、接続を閉じていても
-// 端末へ通知を飛ばす。VAPID 鍵は秘密なので env から受け、未設定なら無効
-// (PAGUS_PUSH=1 を立てたのに鍵が無ければ即エラー = 無言フォールバック禁止)。
+// 端末へ通知を飛ばす。VAPID 鍵は秘密なので暗号化 config (PagusConfig.push) から受け、
+// 未設定なら無効 (enabled なのに鍵が無ければ即エラー = 無言フォールバック禁止)。
 // 購読は data/runtime/push-subscriptions.json に永続化する (gitignore)。
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import webpush, { type PushSubscription } from 'web-push';
 import { dataDir } from './load-data.js';
+
+/** PushService の設定 (PagusConfig.push 相当)。 */
+export interface PushServiceConfig {
+  /** push 通知を有効化するか。 */
+  enabled: boolean;
+  /** VAPID 公開鍵 (秘密)。空=未設定。 */
+  vapidPublic: string;
+  /** VAPID 秘密鍵 (秘密)。空=未設定。 */
+  vapidPrivate: string;
+  /** VAPID subject。 */
+  vapidSubject: string;
+}
 
 /** 通知ペイロード (service worker が showNotification に使う)。 */
 export interface PushPayload {
@@ -22,25 +34,25 @@ export class PushService {
   private readonly path: string;
   private subscriptions: PushSubscription[];
 
-  constructor() {
+  constructor(config: PushServiceConfig) {
     this.path = resolve(dataDir(), 'runtime', 'push-subscriptions.json');
-    this.enabled = (process.env.PAGUS_PUSH ?? '') === '1';
+    this.enabled = config.enabled;
 
     if (!this.enabled) {
       this.publicKey = null;
       this.subscriptions = [];
-      console.log('[pagus] push 通知は無効 (PAGUS_PUSH=1 + VAPID 鍵で有効化)');
+      console.log('[pagus] push 通知は無効 (config push.enabled=true + VAPID 鍵で有効化)');
       return;
     }
 
-    const pub = process.env.PAGUS_VAPID_PUBLIC;
-    const priv = process.env.PAGUS_VAPID_PRIVATE;
-    const subject = process.env.PAGUS_VAPID_SUBJECT ?? 'mailto:pagus@vtn-game.com';
+    const pub = config.vapidPublic;
+    const priv = config.vapidPrivate;
+    const subject = config.vapidSubject.length > 0 ? config.vapidSubject : 'mailto:pagus@vtn-game.com';
     if (!pub || !priv) {
       // 有効化を指示したのに鍵が無い = 設定不備 → 即エラー (RULE_CODE §7.1)。
       throw new Error(
-        'PAGUS_PUSH=1 だが VAPID 鍵が未設定。PAGUS_VAPID_PUBLIC / PAGUS_VAPID_PRIVATE を設定せよ ' +
-          '(生成: npx web-push generate-vapid-keys)',
+        'push.enabled=true だが VAPID 鍵が未設定。config の push.vapidPublic / push.vapidPrivate を設定せよ ' +
+          '(生成: npx web-push generate-vapid-keys → pnpm pagus:config set)',
       );
     }
     webpush.setVapidDetails(subject, pub, priv);
