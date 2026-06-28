@@ -50,6 +50,8 @@ export class DailyEngine {
   private forced = false;
   /** プレイヤーの対象指定扇動: この id の自由行動で (周囲がいれば) 必ず事件化する (§4.2)。 */
   private forcedTargetId: string | null = null;
+  /** 戒厳令 surge (§v1.3-C ⑨): 事件化閾値をこの分だけ下げる (0 = 平時)。 */
+  private surgeBonus = 0;
 
   constructor(opts: DailyEngineOptions = {}) {
     this.rng = opts.rng ?? Math.random;
@@ -60,6 +62,14 @@ export class DailyEngine {
   /** 評価に使うルールを差し替える (TermMachine が world.behaviorRules を流し込む)。 */
   setRules(rules: BehaviorRule[]): void {
     this.rules = rules;
+  }
+
+  /**
+   * 戒厳令 surge の閾値ボーナスを設定する (§v1.3-C ⑨)。bonus>0 で自由行動の事件化閾値が下がり多発する。
+   * TermMachine が kishoTick で world.martial に応じて毎回設定する (surge 解除で 0 に戻る)。
+   */
+  setSurge(bonus: number): void {
+    this.surgeBonus = Math.max(0, bonus);
   }
 
   /** カテゴリでルール評価し、base 感情に効果を反映した感情・flavor を返す。 */
@@ -97,7 +107,8 @@ export class DailyEngine {
     const exposure = villager.eventParams[REACTION_EXPOSURE] ?? 0;
     // ルールの triggerWeight (wander カテゴリで評価) も閾値を下げる (§2.1)。
     const ruleTriggerWeight = evaluateRules(this.rules, { villager, env, category: 'wander' }).triggerWeight;
-    const threshold = Math.max(1, this.triggerAfter - exposure - ruleTriggerWeight);
+    // 戒厳令 surge (§v1.3-C ⑨) は閾値を surgeBonus だけ下げて事件を多発させる。
+    const threshold = Math.max(1, this.triggerAfter - exposure - ruleTriggerWeight - this.surgeBonus);
     // 対象指定扇動: この個体が指名されていれば即事件化を促す。
     const targeted = this.forcedTargetId === villager.id;
     const trigger = hasNeighbor && (this.forced || targeted || this.actionCount >= threshold);

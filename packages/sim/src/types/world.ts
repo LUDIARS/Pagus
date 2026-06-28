@@ -5,6 +5,8 @@ import type { VirtueVector } from '../virtue.js';
 import type { PersonalityAxis } from '../personality.js';
 import type { BehaviorRule } from '../behavior-rules.js';
 
+export type MartialMode = 'freeze' | 'surge';
+
 /** ターム内の進行フェーズ (起承転結 + 後処理)。 */
 export type Phase =
   | 'idle'
@@ -96,6 +98,13 @@ export interface VillageRule {
   text: string;
 }
 
+/** 戒厳令の発動状態 (§v1.3-C ⑨)。freeze=月次事件を凍結 / surge=日常事件を多発させる。 */
+export interface MartialState {
+  mode: MartialMode;
+  /** この term を超えたら失効 (日末に掃除)。term <= untilTerm の間だけ有効。 */
+  untilTerm: number;
+}
+
 export interface WorldConfig {
   gridWidth: number;
   gridHeight: number;
@@ -126,4 +135,9 @@ export interface World {
   villageRules: VillageRule[];
   /** ふるまいの法則 (§2.1)。日常の感情/行動を決めるルール群。Haiku が日末に増やす。 */
   behaviorRules: BehaviorRule[];
+  /**
+   * 戒厳令 (§v1.3-C ⑨)。発動中のみキーを持つ (exactOptionalPropertyTypes)。
+   * freeze=fireScheduledIncident を抑止 / surge=DailyEngine の事件化閾値を下げる。
+   */
+  martial?: MartialState;
 }

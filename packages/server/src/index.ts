@@ -8,6 +8,7 @@ import { GameWsServer } from './ws-server.js';
 import { PlayerState } from './player-state.js';
 import { BetPool } from './bet-pool.js';
 import { AuctionManager } from './auction.js';
+import { Governance } from './governance.js';
 import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, CostLog, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND, type CostSink } from './llm/index.js';
 import { createServer } from 'node:http';
 import { SessionLog } from './session-log.js';
@@ -150,6 +151,7 @@ function main(): void {
     marriageChance: numEnv('PAGUS_MARRIAGE', 0.12), // 日末の結婚確率
     birthChance: numEnv('PAGUS_BIRTH', 0.1), // 日末の出産確率
     rulesMax: numEnv('PAGUS_RULES_MAX', 40), // ふるまいの法則の上限 (§2.1)
+    martialSurgeBonus: numEnv('PAGUS_MARTIAL_SURGE', 4), // 戒厳令 surge の事件化閾値ボーナス (§v1.3-C ⑨)
     bornCount: restored?.bornCount ?? 0, // 出生 id の通し番号を引き継ぐ
     incidentCount: restored?.incidentCount ?? 0, // 事件用キャラ id の通し番号を引き継ぐ
     ruleCount: restored?.ruleCount ?? 0, // ふるまいの法則 id の通し番号を引き継ぐ
@@ -233,6 +235,13 @@ function main(): void {
   let loop: TermLoop;
   let ws: GameWsServer;
   let auction: AuctionManager;
+  let governance: Governance;
+
+  // 政治パック (§v1.3-C) の env。
+  const REVOLT_THRESHOLD = numEnv('PAGUS_REVOLT_THRESHOLD', 0.7); // 蜂起の悪辣しきい値 (⑧)
+  const MARTIAL_DAYS = numEnv('PAGUS_MARTIAL_DAYS', 2); // 戒厳令の有効日数 (⑨)
+  // 戒厳令の発動と日末の期限切れ検知 (term 進行ベース)。
+  let lastGovTerm = tm.world.term;
 
   /** その userId の現状態を本人の全接続へ push (推し名は world から補完, §1)。 */
   const pushState = (userId: string): void => {
@@ -451,7 +460,9 @@ function main(): void {
         ws.sendRejected(userId, 'しきたりが上限に達している');
         return;
       }
-      if (!ps.spend(userId, RULE_ADD_COST)) {
+      // 村長特典 (§v1.3-C ⑥): 任期 1 回は無料。使えなければ通常どおり課金。
+      const mayorFree = governance.tryMayorFreeRule(userId);
+      if (!mayorFree && !ps.spend(userId, RULE_ADD_COST)) {
         ws.sendRejected(userId, 'カルマが足りない');
         return;
       }
@@ -809,6 +820,32 @@ function main(): void {
       ws.broadcastSnapshot(w);
       pushState(userId);
     },
+    // --- 政治パック (§v1.3-C) ---------------------------------------------------
+    onVoteMayor: (target, userId) => {
+      knownUsers.add(userId);
+      const res = governance.voteMayor(userId, target);
+      if (!res.ok) ws.sendRejected(userId, res.reason);
+    },
+    onProposeLaw: (text, userId) => {
+      knownUsers.add(userId);
+      const res = governance.proposeLaw(userId, text, Date.now());
+      if (!res.ok) ws.sendRejected(userId, res.reason);
+    },
+    onVoteLaw: (lawId, approve, userId) => {
+      knownUsers.add(userId);
+      const res = governance.voteLaw(userId, lawId, approve, Date.now());
+      if (!res.ok) ws.sendRejected(userId, res.reason);
+    },
+    onRevolt: (side, userId) => {
+      knownUsers.add(userId);
+      const res = governance.revolt(userId, side, Date.now());
+      if (!res.ok) ws.sendRejected(userId, res.reason);
+    },
+    onMartial: (mode, userId) => {
+      knownUsers.add(userId);
+      const res = governance.martial(userId, mode, Date.now());
+      if (!res.ok) ws.sendRejected(userId, res.reason);
+    },
   });
   ws.setLlmInfo(llmInfo);
   ws.updateChronicle(chronicle.recent()); // 既存の歴史を初期配信対象に。
@@ -839,6 +876,67 @@ function main(): void {
   );
   ws.broadcastAuction(auction.view(Date.now())); // 初回 (接続前の現値を ws に保持させる)
 
+  // 政治パック (§v1.3-C): 村長/法案/革命/戒厳令/税。状態と時間管理は Governance、副作用はここ。
+  governance = new Governance(
+    {
+      mayorPeriodMs: numEnv('PAGUS_MAYOR_PERIOD_MS', 180000),
+      lawDeposit: numEnv('PAGUS_LAW_DEPOSIT', 20),
+      lawVoteMs: numEnv('PAGUS_LAW_VOTE_MS', 60000),
+      revoltThreshold: REVOLT_THRESHOLD,
+      revoltStake: numEnv('PAGUS_REVOLT_STAKE', 10),
+      revoltWindowMs: numEnv('PAGUS_REVOLT_WINDOW_MS', 60000),
+      martialStake: numEnv('PAGUS_MARTIAL_STAKE', 25),
+      martialCost: numEnv('PAGUS_MARTIAL_COST', 100),
+      martialDays: MARTIAL_DAYS,
+      taxPeriodMs: numEnv('PAGUS_TAX_PERIOD_MS', 180000),
+      taxAmount: numEnv('PAGUS_TAX_AMOUNT', 5),
+      fundThreshold: numEnv('PAGUS_FUND_THRESHOLD', 100),
+    },
+    {
+      spend: (uid, amt) => ps.spend(uid, amt),
+      refund: (uid, amt) => ps.addKarma(uid, amt),
+      take: (uid, amt) => {
+        const bal = ps.get(uid).karma;
+        const taken = Math.min(bal, amt);
+        if (taken > 0) ps.spend(uid, taken);
+        return taken;
+      },
+      pushState: (uid) => pushState(uid),
+      knownUserIds: () => [...knownUsers],
+      enactLaw: (text) => {
+        const rule = addVillageRule(tm.world, text, VILLAGE_RULES_MAX);
+        if (rule) ws.broadcastSnapshot(tm.world);
+        return rule !== null;
+      },
+      applyRevolt: (side) => {
+        tm.applyRevolt(side);
+        ws.broadcastSnapshot(tm.world);
+        scheduleLeaderboard(); // 徳目綱引きは reputation 由来
+      },
+      activateMartial: (mode, days) => {
+        tm.setMartial(mode, days);
+        ws.broadcastSnapshot(tm.world);
+      },
+      fundEvent: (kind) => {
+        tm.villageFundEvent(kind);
+        ws.broadcastSnapshot(tm.world);
+        scheduleLeaderboard();
+      },
+      chronicle: (text) => {
+        const cal = tm.world.calendar;
+        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, text, 'other');
+        ws.updateChronicle(chronicle.recent());
+      },
+      broadcastMayor: (uid, endsInMs) => ws.broadcastMayor(uid, endsInMs),
+      broadcastLaws: (items) => ws.broadcastLaws(items),
+      broadcastRevolt: (active, incite, suppress, endsInMs) => ws.broadcastRevolt(active, incite, suppress, endsInMs),
+      broadcastMartial: (mode, endsInMs) => ws.broadcastMartial(mode, endsInMs),
+      broadcastFund: (amount, threshold) => ws.broadcastFund(amount, threshold),
+    },
+    Date.now(),
+  );
+  governance.broadcastAll(Date.now()); // 初回 (接続前の現値を ws に保持させる)
+
   loop = new TermLoop(tm, pace, incidentStepMs, {
     onSnapshot: (w) => {
       // 日末 (term 進行) を検知して銀行利子付与 + 保険の期限切れ掃除 (§v1.3-B ③④)。
@@ -847,6 +945,19 @@ function main(): void {
         ps.applyInterest(BANK_INTEREST);
         ps.pruneExpiredInsurance(w.term);
         for (const uid of knownUsers) pushState(uid);
+      }
+      // 政治パック (§v1.3-C) の日末処理: 戒厳令の期限切れ解除 + 革命の蜂起判定。
+      if (w.term > lastGovTerm) {
+        lastGovTerm = w.term;
+        const expired = tm.pruneExpiredMartial();
+        if (expired) {
+          const cal = w.calendar;
+          chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, '🛡 戒厳令が解かれた', 'other');
+          ws.updateChronicle(chronicle.recent());
+          ws.broadcastMartial(null, 0);
+        }
+        // 悪辣が閾値を超えていたら蜂起ウィンドウを開く (⑧)。
+        governance.maybeStartRevolt(w.reputation.malice, Date.now());
       }
       const mourned = detectChampionDeaths(w); // 推しの死 → 弔い (world/chronicle を変えうる)
       const settled = detectBetSettlement(w); // ベット決済 (§3, chronicle を変えうる)
@@ -949,11 +1060,15 @@ function main(): void {
   // オークション (§v1.3-B ②): 1 秒ごとに締切判定。期限到来で落札 → 次ロットへローテ + broadcast。
   const auctionTimer = setInterval(() => auction.tick(Date.now()), 1000);
 
+  // 政治パック (§v1.3-C): 1 秒ごとに任期更新 / 法案締切 / 蜂起決着 / 課税を回す。
+  const govTimer = setInterval(() => governance.tick(Date.now()), 1000);
+
   // Ctrl-C でループを止めログを flush してから抜ける。
   const shutdown = (): void => {
     clearInterval(stateTimer);
     clearInterval(sysTimer);
     clearInterval(auctionTimer);
+    clearInterval(govTimer);
     if (sysPending) clearTimeout(sysPending);
     if (lbPending) clearTimeout(lbPending);
     loop.stop();

@@ -1,6 +1,6 @@
 // WS 接続。server からの snapshot/log を受け、扇動/沈静化コマンドを送る。自動再接続。
 
-import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView } from '@pagus/sim';
+import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView, LawView, MartialMode } from '@pagus/sim';
 
 /** 裁判ベットのプール状態 (§3 betState 受信ペイロード)。 */
 export interface BetStateView {
@@ -46,6 +46,16 @@ export interface WsHandlers {
   onLeaderboard?(s: LeaderboardView): void;
   /** オークションのロット状態 (§v1.3-B ②)。 */
   onAuction?(lots: AuctionLotView[]): void;
+  /** 村長 (§v1.3-C ⑥)。 */
+  onMayor?(userId: string | null, endsInMs: number): void;
+  /** 投票中の法案一覧 (§v1.3-C ⑦)。 */
+  onLaws?(items: LawView[]): void;
+  /** 蜂起状態 (§v1.3-C ⑧)。 */
+  onRevolt?(active: boolean, incite: number, suppress: number, endsInMs: number): void;
+  /** 戒厳令状態 (§v1.3-C ⑨)。 */
+  onMartial?(mode: MartialMode | null, endsInMs: number): void;
+  /** 村基金残高 (§v1.3-C ⑩)。 */
+  onFund?(amount: number, threshold: number): void;
 }
 
 export interface Conn {
@@ -101,7 +111,11 @@ export function connect(url: string, h: WsHandlers): Conn {
         h.onBetState?.({ incidentId: msg.incidentId, pool: msg.pool, yourBet: msg.yourBet });
       } else if (msg.t === 'leaderboard') {
         h.onLeaderboard?.({ players: msg.players, factions: msg.factions });
-      }
+      } else if (msg.t === 'mayor') h.onMayor?.(msg.userId, msg.endsInMs);
+      else if (msg.t === 'laws') h.onLaws?.(msg.items);
+      else if (msg.t === 'revolt') h.onRevolt?.(msg.active, msg.incite, msg.suppress, msg.endsInMs);
+      else if (msg.t === 'martial') h.onMartial?.(msg.mode, msg.endsInMs);
+      else if (msg.t === 'fund') h.onFund?.(msg.amount, msg.threshold);
     };
   };
   open();

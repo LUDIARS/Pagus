@@ -19,6 +19,8 @@ import {
   type CardName,
   type MarketItem,
   type AuctionLotView,
+  type LawView,
+  type MartialMode,
 } from '@pagus/sim';
 import type { PlayerStateSnapshot } from './player-state.js';
 
@@ -58,6 +60,12 @@ export interface WsHandlers {
   onInsure(targetId: string, premium: number, userId: string): void;
   onBuyMarket(item: MarketItem, args: MarketArgs, userId: string): void;
   onBid(lotId: string, amount: number, userId: string): void;
+  // 政治パック (§v1.3-C)。
+  onVoteMayor(target: string, userId: string): void;
+  onProposeLaw(text: string, userId: string): void;
+  onVoteLaw(lawId: string, approve: boolean, userId: string): void;
+  onRevolt(side: 'incite' | 'suppress', userId: string): void;
+  onMartial(mode: MartialMode, userId: string): void;
 }
 
 export class GameWsServer {
@@ -72,6 +80,12 @@ export class GameWsServer {
   private sysStatus: SysStatusMessage | null = null;
   /** オークション (§v1.3-B ②) の最新ロット状態。接続時に現値を送る。 */
   private auction: Extract<ServerMessage, { t: 'auction' }> | null = null;
+  /** 政治パック (§v1.3-C) の最新状態 (村長/法案/革命/戒厳令/基金)。接続時に現値を送る。 */
+  private mayor: Extract<ServerMessage, { t: 'mayor' }> | null = null;
+  private laws: Extract<ServerMessage, { t: 'laws' }> | null = null;
+  private revolt: Extract<ServerMessage, { t: 'revolt' }> | null = null;
+  private martial: Extract<ServerMessage, { t: 'martial' }> | null = null;
+  private fund: Extract<ServerMessage, { t: 'fund' }> | null = null;
   /** 接続 → その接続を名乗った userId。per-connection 配信の宛先解決に使う。 */
   private readonly connUser = new Map<WebSocket, string>();
 
@@ -103,6 +117,11 @@ export class GameWsServer {
     if (this.sysStatus) ws.send(JSON.stringify(this.sysStatus));
     if (this.leaderboard) ws.send(JSON.stringify(this.leaderboard));
     if (this.auction) ws.send(JSON.stringify(this.auction));
+    if (this.mayor) ws.send(JSON.stringify(this.mayor));
+    if (this.laws) ws.send(JSON.stringify(this.laws));
+    if (this.revolt) ws.send(JSON.stringify(this.revolt));
+    if (this.martial) ws.send(JSON.stringify(this.martial));
+    if (this.fund) ws.send(JSON.stringify(this.fund));
     this.broadcastPlayers();
     ws.on('close', () => {
       this.connUser.delete(ws);
@@ -187,6 +206,21 @@ export class GameWsServer {
     } else if (msg.t === 'bid') {
       this.bind(ws, msg.userId);
       this.h.onBid(msg.lotId, msg.amount, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'voteMayor') {
+      this.bind(ws, msg.userId);
+      this.h.onVoteMayor(msg.target, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'proposeLaw') {
+      this.bind(ws, msg.userId);
+      this.h.onProposeLaw(msg.text, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'voteLaw') {
+      this.bind(ws, msg.userId);
+      this.h.onVoteLaw(msg.lawId, msg.approve, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'revolt') {
+      this.bind(ws, msg.userId);
+      this.h.onRevolt(msg.side, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'martial') {
+      this.bind(ws, msg.userId);
+      this.h.onMartial(msg.mode, this.resolveUser(ws, msg.userId));
     }
   }
 
@@ -229,6 +263,41 @@ export class GameWsServer {
   broadcastAuction(lots: AuctionLotView[]): void {
     const msg: Extract<ServerMessage, { t: 'auction' }> = { t: 'auction', lots };
     this.auction = msg;
+    this.fanout(JSON.stringify(msg));
+  }
+
+  /** 村長 (§v1.3-C ⑥) を更新し全クライアントへ配る。接続時にも現値を送る。 */
+  broadcastMayor(userId: string | null, endsInMs: number): void {
+    const msg: Extract<ServerMessage, { t: 'mayor' }> = { t: 'mayor', userId, endsInMs };
+    this.mayor = msg;
+    this.fanout(JSON.stringify(msg));
+  }
+
+  /** 投票中の法案一覧 (§v1.3-C ⑦) を更新し全クライアントへ配る。接続時にも現値を送る。 */
+  broadcastLaws(items: LawView[]): void {
+    const msg: Extract<ServerMessage, { t: 'laws' }> = { t: 'laws', items };
+    this.laws = msg;
+    this.fanout(JSON.stringify(msg));
+  }
+
+  /** 蜂起状態 (§v1.3-C ⑧) を更新し全クライアントへ配る。接続時にも現値を送る。 */
+  broadcastRevolt(active: boolean, incite: number, suppress: number, endsInMs: number): void {
+    const msg: Extract<ServerMessage, { t: 'revolt' }> = { t: 'revolt', active, incite, suppress, endsInMs };
+    this.revolt = msg;
+    this.fanout(JSON.stringify(msg));
+  }
+
+  /** 戒厳令状態 (§v1.3-C ⑨) を更新し全クライアントへ配る。接続時にも現値を送る。 */
+  broadcastMartial(mode: MartialMode | null, endsInMs: number): void {
+    const msg: Extract<ServerMessage, { t: 'martial' }> = { t: 'martial', mode, endsInMs };
+    this.martial = msg;
+    this.fanout(JSON.stringify(msg));
+  }
+
+  /** 村基金残高 (§v1.3-C ⑩) を更新し全クライアントへ配る。接続時にも現値を送る。 */
+  broadcastFund(amount: number, threshold: number): void {
+    const msg: Extract<ServerMessage, { t: 'fund' }> = { t: 'fund', amount, threshold };
+    this.fund = msg;
     this.fanout(JSON.stringify(msg));
   }
 
