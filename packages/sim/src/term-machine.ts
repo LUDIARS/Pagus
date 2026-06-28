@@ -2,7 +2,7 @@
 // 1 日 = 1 ターム = 12 セグメント。時間制御 (segmentRealMs のペース) は server が所有し、
 // 本クラスは純粋な遷移ロジックを提供する。
 
-import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign, InfoItem } from './types/index.js';
+import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign, InfoItem, MartialMode } from './types/index.js';
 import type { Brain, ActionDecision } from './brain.js';
 import { aliveVillagers, awakeVillagers, environmentView, clampPos, bumpEventParam } from './world.js';
 import { DailyEngine, REACTION_EXPOSURE, type DailyEngineOptions } from './daily-engine.js';
@@ -66,6 +66,8 @@ export interface TermMachineOptions {
   ruleCount?: number;
   /** ふるまいの法則の上限 (§2.1)。超えたら古い haiku ルールを 1 件間引く。既定 40。 */
   rulesMax?: number;
+  /** 戒厳令 surge (§v1.3-C ⑨) 中に日常事件の閾値を下げる量。既定 4。 */
+  martialSurgeBonus?: number;
 }
 
 /** 日末の生活イベント (結婚/出産)。server がログ表示する。 */
@@ -128,6 +130,8 @@ export class TermMachine {
   private ruleCount: number;
   /** ふるまいの法則の上限 (§2.1)。 */
   private readonly rulesMax: number;
+  /** 戒厳令 surge (§v1.3-C ⑨) の閾値ボーナス。 */
+  private readonly martialSurgeBonus: number;
   /** その日の裁判結末。applyReform が incident/trial を null にする前に ketsuStep で捕捉する。 */
   private dayOutcome: { incident: Incident; verdict: Verdict; defendantId: VillagerId } | null = null;
 
@@ -154,6 +158,7 @@ export class TermMachine {
     this.incidentCount = opts.incidentCount ?? 0;
     this.ruleCount = opts.ruleCount ?? 0;
     this.rulesMax = opts.rulesMax ?? 40;
+    this.martialSurgeBonus = opts.martialSurgeBonus ?? 4;
   }
 
   /** スナップショット保存用: 出生通し番号 (born_N が再起動後も衝突しないよう保持する)。 */
@@ -398,6 +403,68 @@ export class TermMachine {
     return true;
   }
 
+  // --- 政治パック (§v1.3-C) ------------------------------------------------------
+
+  /**
+   * 戒厳令を発動する (§v1.3-C ⑨)。world.martial = {mode, untilTerm: term + days} を立てる。
+   * days は 1 以上 (それ未満なら 1 にクランプ)。再発動は上書き。
+   */
+  setMartial(mode: MartialMode, days: number): void {
+    const span = Math.max(1, Math.floor(days));
+    this.world.martial = { mode, untilTerm: this.world.term + span };
+  }
+
+  /** 戒厳令が発動中か (mode 指定時はその mode のみ)。term <= untilTerm の間だけ有効。 */
+  martialActive(mode?: MartialMode): boolean {
+    const m = this.world.martial;
+    if (!m || m.untilTerm < this.world.term) return false;
+    return mode === undefined || m.mode === mode;
+  }
+
+  /**
+   * 失効した戒厳令 (untilTerm < world.term) を解除する (§v1.3-C ⑨, 日末)。
+   * server が advanceDay 後に呼ぶ。解除した mode を返す (発動なし/未失効なら null)。
+   */
+  pruneExpiredMartial(): MartialMode | null {
+    const m = this.world.martial;
+    if (!m || m.untilTerm >= this.world.term) return null;
+    delete this.world.martial;
+    return m.mode;
+  }
+
+  /**
+   * 革命の決着を村の評判へ反映する (§v1.3-C ⑧)。incite 勝利は悪辣↑秩序↓ (混乱)、
+   * suppress 勝利は悪辣↓秩序↑ (鎮静)。適用後 0..1 にクランプし、変化後の reputation を返す。
+   */
+  applyRevolt(side: 'incite' | 'suppress'): { malice: number; order: number } {
+    const rep = this.world.reputation;
+    if (side === 'incite') {
+      rep.malice = clamp01(rep.malice + 0.2);
+      rep.order = clamp01(rep.order - 0.15);
+    } else {
+      rep.malice = clamp01(rep.malice - 0.2);
+      rep.order = clamp01(rep.order + 0.15);
+    }
+    return { malice: rep.malice, order: rep.order };
+  }
+
+  /**
+   * 村基金イベントを発火する (§v1.3-C ⑩)。festival=祝祭で活気↑ / relief=救済で全住民の stress を下げる。
+   * 影響を受けた人数 (relief) または 0 (festival) を返す。
+   */
+  villageFundEvent(kind: 'festival' | 'relief'): number {
+    if (kind === 'festival') {
+      this.world.reputation.vitality = clamp01(this.world.reputation.vitality + 0.15);
+      return 0;
+    }
+    let n = 0;
+    for (const v of aliveVillagers(this.world)) {
+      v.stress = Math.max(0, v.stress - 2);
+      n += 1;
+    }
+    return n;
+  }
+
   // --- 月次事件のライフサイクル (§12.3) ----------------------------------------
 
   /**
@@ -506,6 +573,8 @@ export class TermMachine {
     if (this.world.calendar.dayOfMonth !== sched.dayOfMonth) return false;
     if (this.world.phase !== 'kisho' && this.world.phase !== 'idle') return false;
     if (this.world.incident) return false;
+    // 戒厳令 freeze (§v1.3-C ⑨): 月次スケジュール事件を一時凍結する (発火させない)。
+    if (this.martialActive('freeze')) return false;
 
     const design = sched.design;
     if (design.perpetratorId === null) {
@@ -538,6 +607,8 @@ export class TermMachine {
     if (this.world.phase !== 'kisho') throw new Error(`kishoTick in phase ${this.world.phase}`);
     // 日常エンジンに現在の ふるまいの法則 を流し込む (Haiku 増殖が即反映される, §2.1)。
     this.daily.setRules(this.world.behaviorRules);
+    // 戒厳令 surge (§v1.3-C ⑨): 発動中だけ事件化閾値を下げる (解除で 0 に戻る)。
+    this.daily.setSurge(this.martialActive('surge') ? this.martialSurgeBonus : 0);
     const actions: KishoTickResult['actions'] = [];
 
     if (this.director) {

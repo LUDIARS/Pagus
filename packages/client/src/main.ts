@@ -13,6 +13,7 @@ import { StatusPanel } from './status-panel.js';
 import { PlayerControls, type ActionType } from './player-controls.js';
 import { CardPanel } from './card-panel.js';
 import { EconomyPanel } from './economy-panel.js';
+import { GovernancePanel } from './governance-panel.js';
 import { BetPanel } from './bet-panel.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
 import { connect, type Conn } from './ws-client.js';
@@ -86,6 +87,15 @@ async function main(): Promise<void> {
     onBid: (lotId, amount) => conn.send({ t: 'bid', lotId, amount, userId }),
   });
 
+  // 政治パネル (§v1.3-C): 村長 / 法案 / 革命 / 戒厳令 / 村基金。
+  const governance = new GovernancePanel(el('governance'), userId, {
+    onVoteMayor: (target) => conn.send({ t: 'voteMayor', target, userId }),
+    onProposeLaw: (text) => conn.send({ t: 'proposeLaw', text, userId }),
+    onVoteLaw: (lawId, approve) => conn.send({ t: 'voteLaw', lawId, approve, userId }),
+    onRevolt: (side) => conn.send({ t: 'revolt', side, userId }),
+    onMartial: (mode) => conn.send({ t: 'martial', mode, userId }),
+  });
+
   const verdict = el('verdict');
   // 死刑/教育ボタンは「殺す/活かす」を決める fate 段階でのみ出す (foolish=被告選びは右パネル)。
   const showVerdict = (world: { phase: string; trial: { stage: string } | null }): boolean =>
@@ -128,6 +138,11 @@ async function main(): Promise<void> {
     onBetState: (s) => betPanel.setBetState(s),
     onLeaderboard: (s) => leaderboard.setLeaderboard(s),
     onAuction: (lots) => economy.setAuction(lots),
+    onMayor: (mayorId, endsInMs) => governance.setMayor(mayorId, endsInMs),
+    onLaws: (items) => governance.setLaws(items),
+    onRevolt: (active, incite, suppress, endsInMs) => governance.setRevolt(active, incite, suppress, endsInMs),
+    onMartial: (mode) => governance.setMartial(mode),
+    onFund: (amount, threshold) => governance.setFund(amount, threshold),
   });
 
   // 裁判の票は中央の 死刑/教育 に一本化 (沈静化は廃止 §4.1)。

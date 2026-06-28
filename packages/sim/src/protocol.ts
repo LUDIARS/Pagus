@@ -1,7 +1,7 @@
 // WS 配線契約。World は Map を持ち JSON 化できないので、villagers を配列にした
 // WireWorld を介して server→client へ送る。client もこの型だけ見れば描画できる。
 
-import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule } from './types/index.js';
+import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule, MartialState, MartialMode } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 import { defaultBehaviorRules, type BehaviorRule } from './behavior-rules.js';
 
@@ -17,10 +17,12 @@ export interface WireWorld {
   scheduledIncident: ScheduledIncident | null;
   villageRules: VillageRule[];
   behaviorRules: BehaviorRule[];
+  /** 戒厳令 (§v1.3-C ⑨)。発動中のみ。 */
+  martial?: MartialState;
 }
 
 export function toWire(world: World): WireWorld {
-  return {
+  const wire: WireWorld = {
     config: world.config,
     term: world.term,
     calendar: world.calendar,
@@ -33,11 +35,14 @@ export function toWire(world: World): WireWorld {
     villageRules: world.villageRules,
     behaviorRules: world.behaviorRules,
   };
+  // exactOptionalPropertyTypes: 戒厳令は発動中のみキーを足す (§v1.3-C ⑨)。
+  if (world.martial !== undefined) wire.martial = world.martial;
+  return wire;
 }
 
 /** toWire の逆。配列で持つ villagers を Map に戻して World を再構築する (スナップショット復元)。 */
 export function fromWire(wire: WireWorld): World {
-  return {
+  const world: World = {
     config: wire.config,
     term: wire.term,
     calendar: wire.calendar,
@@ -50,11 +55,14 @@ export function fromWire(wire: WireWorld): World {
     villageRules: wire.villageRules ?? [],
     behaviorRules: wire.behaviorRules ?? defaultBehaviorRules(),
   };
+  if (wire.martial !== undefined) world.martial = wire.martial;
+  return world;
 }
 
 /** 現スナップショット形式のバージョン。型が壊れる変更時に増やし、古い snapshot を破棄する。 */
 // v5: BehaviorRule.expiresAtTerm/source='card' + Villager.hiddenUntilTerm (§v1.3-A カードパック)。
-export const WORLD_SNAPSHOT_VERSION = 5;
+// v6: World.martial (§v1.3-C 政治パック 戒厳令)。
+export const WORLD_SNAPSHOT_VERSION = 6;
 
 /**
  * 永続化する world スナップショット。WireWorld (JSON 化可能な world) に加え、
@@ -139,6 +147,18 @@ export interface AuctionLotView {
   highBid: number;
   /** 現在の最高入札者 userId。未入札は null。 */
   highUserId: string | null;
+  /** 締切までの残りミリ秒。 */
+  endsInMs: number;
+}
+
+/** 法案 (§v1.3-C ⑦) の配信形。投票中の 1 件。 */
+export interface LawView {
+  id: string;
+  text: string;
+  /** 賛成票数。 */
+  yes: number;
+  /** 反対票数。 */
+  no: number;
   /** 締切までの残りミリ秒。 */
   endsInMs: number;
 }
@@ -269,7 +289,13 @@ export type ServerMessage =
       term: number;
       /** LLM コストログ集計。 */
       cost: CostSummary;
-    };
+    }
+  // --- 政治パック (§v1.3-C) ---
+  | { t: 'mayor'; userId: string | null; endsInMs: number } // 村長 (⑥, broadcast)
+  | { t: 'laws'; items: LawView[] } // 投票中の法案一覧 (⑦, broadcast)
+  | { t: 'revolt'; active: boolean; incite: number; suppress: number; endsInMs: number } // 革命の蜂起状態 (⑧, broadcast)
+  | { t: 'martial'; mode: MartialMode | null; endsInMs: number } // 戒厳令の発動状態 (⑨, broadcast)
+  | { t: 'fund'; amount: number; threshold: number }; // 村基金の残高 (⑩, broadcast)
 
 /** カードパック (§v1.3-A) の 5 種。 */
 export type CardName = 'disaster' | 'spiritAway' | 'swap' | 'awaken' | 'falseProphecy';
@@ -298,4 +324,10 @@ export type ClientMessage =
   | { t: 'withdraw'; amount: number; userId?: string } // 銀行から引出 (§v1.3-B ④)
   | { t: 'insure'; targetId: string; premium: number; userId?: string } // 推し保険を掛ける (§v1.3-B ③)
   | { t: 'buyMarket'; item: MarketItem; targetId?: string; targetId2?: string; kind?: string; userId?: string } // 闇市で購入 (§v1.3-B ⑤)
-  | { t: 'bid'; lotId: string; amount: number; userId?: string }; // オークション入札 (§v1.3-B ②)
+  | { t: 'bid'; lotId: string; amount: number; userId?: string } // オークション入札 (§v1.3-B ②)
+  // 政治パック (§v1.3-C): 統治。
+  | { t: 'voteMayor'; target: string; userId?: string } // 村長選挙の 1 票 (⑥)
+  | { t: 'proposeLaw'; text: string; userId?: string } // 法案を供託カルマ付きで提案 (⑦)
+  | { t: 'voteLaw'; lawId: string; approve: boolean; userId?: string } // 法案へ賛成/反対 (⑦)
+  | { t: 'revolt'; side: 'incite' | 'suppress'; userId?: string } // 蜂起にカルマを投じる (⑧)
+  | { t: 'martial'; mode: MartialMode; userId?: string }; // 戒厳令にカルマを投じる (⑨)
