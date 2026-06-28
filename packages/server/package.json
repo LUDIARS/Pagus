@@ -8,9 +8,11 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js",
+    "pagus:config": "node dist/config/config-cli.js",
     "test": "vitest run"
   },
   "dependencies": {
+    "@ludiars/encrypted-config": "^0.1.0",
     "@ludiars/llm-gateway": "^0.1.0",
     "@pagus/sim": "workspace:*",
     "web-push": "^3.6.7",

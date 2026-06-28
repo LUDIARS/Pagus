@@ -27,9 +27,10 @@ LLM 駆動で村人が自律行動し、事件 → 裁判 → 教育(改変) を
 
 - game server: `PAGUS_BRAIN=llm node packages/server/dist/index.js` → WS **4310**。`stub` で決定的観戦。
 - client: `pnpm --filter @pagus/client dev` → **4320** (Memoria 5180 と分離)。WS は同一オリジン `/ws` を 4310 へ proxy (Tunnel 対応)。
-- 主な env: `PAGUS_RECONCILE`(和解0.15) / `PAGUS_SECONDARY`(二次被害0.18) / `PAGUS_STRESS_K`(耐性0.06) / `PAGUS_MARRIAGE`(結婚0.12) / `PAGUS_BIRTH`(出産0.1) / `PAGUS_DISABLE_CODEX`(codex を外す) / `PAGUS_CLI_RETRIES`(CLI リトライ既定2) / `PAGUS_ACCEL`(dev加速) / `PAGUS_LOG_STDOUT` / `PAGUS_FRESH`(world.json を無視し新規開始) / `PAGUS_PUSH`(WebPush 有効化, 要 VAPID 鍵)。
+- 設定 (暗号化 config): チューニング値 (和解/二次被害/カルマ/カード/経済/政治/演出…) と秘密 (VAPID) は **LUDIARS 正本の共有パッケージ `@ludiars/encrypted-config` (Lapilli, AES-256-GCM + scrypt)** による単一 config に集約する (旧 `PAGUS_*` env ~70 個を統合、ローダ実装 = `server/src/config/`)。形式は `{ plain: {<dotkey>: 文字列}, secrets: {<dotkey>: EncryptedBlob} }`: 非シークレットは dot-path キー (例 `karma.rate`) で**平文**、VAPID 秘密鍵 (`push.vapidPrivate`) だけ暗号化。`pnpm pagus:config init` で `data/runtime/pagus.config.json` を既定値から作成し、`pnpm pagus:config set <dotpath> <value>`(例 `karma.rate 0.9`)/`show`/`import <file.json>` で編集する。**master secret は env `PAGUS_MASTER_KEY`、無ければマシン束縛値 `pagus:hostname:user`** (別マシンへ持ち出すなら `PAGUS_MASTER_KEY` を共有)。config ファイルはコミットしない (`data/runtime/` gitignore)。スキーマ参考は平文 `data/config/pagus.config.example.json`。config が無ければ既定値で起動し warn (型不正は fail-fast で throw)。値の env フォールバックは撤去済。
+  - env のまま残す例外 (launch/operational): `PAGUS_MASTER_KEY`(マスター鍵) / `PAGUS_CONFIG_PATH`(config パス override) / `PAGUS_FRESH`(その起動だけ world.json 無視) / `PAGUS_BRAIN`(stub|llm 起動モード) / `PAGUS_DATA_DIR`(config 自体の置き場解決)。
 - 永続化: world スナップショットは `data/runtime/world.json` (どうぶつ状態・評判・暦・進行中の事件/裁判を JSON 保存→再起動で復元、`server/world-store.ts`)。WebPush 購読は `data/runtime/push-subscriptions.json`。
-- 通知投票 (§4.8): 裁判が開くと接続を閉じた端末へ WebPush。`userId` ごと 1 席の重み合算投票 (WS / HTTP `/api/vote`)。VAPID 鍵は秘密で env から、未設定時は push 無効 (`PAGUS_PUSH=1` で鍵欠落なら即エラー)。`server/{push-service,http-api}.ts` / `client/{push-client,public/sw.js}`。
+- 通知投票 (§4.8): 裁判が開くと接続を閉じた端末へ WebPush。`userId` ごと 1 席の重み合算投票 (WS / HTTP `/api/vote`)。VAPID 鍵は秘密で暗号化 config (`push.vapidPublic/vapidPrivate`) から、未設定時は push 無効 (`push.enabled=true` で鍵欠落なら即エラー)。`server/{push-service,http-api}.ts` / `client/{push-client,public/sw.js}`。
 - 創発・生活メカニクスと観戦UIの仕様は `spec/SPEC.md` §5.3 / §6 / §8B、実装索引は `spec/feature/emergent-and-life.md`。
 
 ## branch 運用

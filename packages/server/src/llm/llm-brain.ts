@@ -23,7 +23,7 @@ import type {
 import { estimateTokens } from '@ludiars/llm-gateway';
 
 import type { LlmClient } from './llm-client.js';
-import { CliLlmClient } from './cli-llm-client.js';
+import { CliLlmClient, type CliLlmClientOptions } from './cli-llm-client.js';
 import { BackendRegistry } from './backend-registry.js';
 import type { Backend } from './backend-registry.js';
 import type { CostSink } from './cost-log.js';
@@ -52,6 +52,8 @@ export interface LlmBrainOptions {
   createClient?: (backend: Backend) => LlmClient;
   /** invoke タイムアウト ms。 */
   timeoutMs?: number;
+  /** CLI の一過性失敗リトライ回数 (PagusConfig.llm.cliRetries)。 */
+  retries?: number;
   /** LLM 呼び出しごとのコスト計上フック (§7)。未指定なら計上しない。 */
   costSink?: CostSink;
 }
@@ -68,14 +70,15 @@ export class LlmBrain implements Brain {
     this.registry = registry;
     this.costSink = opts.costSink;
     const timeoutMs = opts.timeoutMs;
+    const retries = opts.retries;
     this.createClient =
       opts.createClient ??
-      ((backend: Backend): LlmClient =>
-        new CliLlmClient(
-          timeoutMs === undefined
-            ? { provider: backend.provider, model: backend.model }
-            : { provider: backend.provider, model: backend.model, timeoutMs },
-        ));
+      ((backend: Backend): LlmClient => {
+        const o: CliLlmClientOptions = { provider: backend.provider, model: backend.model };
+        if (timeoutMs !== undefined) o.timeoutMs = timeoutMs;
+        if (retries !== undefined) o.retries = retries;
+        return new CliLlmClient(o);
+      });
   }
 
   /** プレイヤーの扇動 (TermLoop.incite から呼ばれる)。次の自由行動で事件化を促す。 */

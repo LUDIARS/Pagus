@@ -1,8 +1,14 @@
 // Pagus server エントリ。data からワールドを起こし、TermLoop と WS を配線する。
 // 思考は PAGUS_BRAIN で切替: 'stub'(既定/決定的) | 'llm'(実 LLM = claude/codex CLI)。
+//
+// チューニング値・秘密 (旧 PAGUS_* env) は暗号化 config (loadPagusConfig) に集約し、
+// ここで 1 回読んで各モジュールへコンストラクタ注入する (各モジュールは env を読まない)。
+// 例外で env 維持: PAGUS_CONFIG_KEY (マスター鍵) / PAGUS_FRESH (その起動だけ world.json 無視) /
+// PAGUS_BRAIN (stub|llm の起動モード) / PAGUS_DATA_DIR (config 自体の置き場を解決するため)。
 
 import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
+import { loadPagusConfig, type PagusConfig } from './config/pagus-config.js';
 import { TermLoop } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
 import { PlayerState } from './player-state.js';
@@ -53,43 +59,37 @@ function classifyKind(text: string): ChronicleKind {
   return 'other';
 }
 
-function numEnv(name: string, fallback: number): number {
-  const v = process.env[name];
-  if (v === undefined || v === '') return fallback;
-  const n = Number(v);
-  if (Number.isNaN(n)) throw new Error(`環境変数 ${name} が数値ではありません: ${v}`);
-  return n;
-}
-
 /**
  * PAGUS_BRAIN で 個体 Brain と 世界側 WorldBrain を一括で選ぶ (既定 'stub')。
  * 'llm' は claude/codex CLI 駆動。両者で同一 BackendRegistry を共有する。
+ * チューニング (triggerAfter / disableCodex / cliRetries) は config から受ける。
  * 不正値は無言フォールバックせず即エラー (RULE_CODE §7.1)。
  */
-function selectBrains(costSink: CostSink): {
+function selectBrains(costSink: CostSink, cfg: PagusConfig): {
   brain: Brain;
   worldBrain: WorldBrain;
   registry: BackendRegistry | null;
 } {
-  const mode = process.env.PAGUS_BRAIN ?? 'stub';
+  const mode = process.env.PAGUS_BRAIN ?? 'stub'; // 起動モードは env 維持 (launch behavior)
   if (mode === 'stub') {
     // stub モードは LLM を呼ばないのでコスト計上なし。
     return {
-      brain: new StubBrain({ triggerAfter: numEnv('PAGUS_TRIGGER_AFTER', 6), damagePerStep: 4 }),
+      brain: new StubBrain({ triggerAfter: cfg.sim.triggerAfter, damagePerStep: 4 }),
       worldBrain: new StubWorldBrain(),
       registry: null,
     };
   }
   if (mode === 'llm') {
     // codex(gpt-5.5) は既定キャストに合流済 (一過性 exit 1 は CLI レベルのリトライで吸収、
-    // PAGUS_CLI_RETRIES で調整)。PAGUS_DISABLE_CODEX=1 で外せる。
-    const disableCodex = (process.env.PAGUS_DISABLE_CODEX ?? '') === '1';
+    // config.llm.cliRetries で調整)。config.llm.disableCodex=true で外せる。
+    const disableCodex = cfg.llm.disableCodex;
+    const retries = cfg.llm.cliRetries;
     const cast = disableCodex ? DEFAULT_CAST : [...DEFAULT_CAST, GPT_BACKEND];
     const strong = disableCodex ? DEFAULT_STRONG : [...DEFAULT_STRONG, GPT_BACKEND];
     const registry = new BackendRegistry({ cast, strong });
     return {
-      brain: new LlmBrain(registry, { costSink }),
-      worldBrain: new LlmWorldBrain(registry, { costSink }),
+      brain: new LlmBrain(registry, { costSink, retries }),
+      worldBrain: new LlmWorldBrain(registry, { costSink, retries }),
       registry,
     };
   }
@@ -109,6 +109,7 @@ function buildLlmInfo(registry: BackendRegistry | null, villagers: { id: string 
 
 function main(): void {
   const startedAt = Date.now(); // 状態パネル (§7) の稼働開始時刻
+  const cfg = loadPagusConfig(); // 暗号化 config (旧 PAGUS_* env の集約先) を 1 回ロード
   const config = loadConfig();
 
   // world スナップショット (data/runtime/world.json) があれば復元。PAGUS_FRESH=1 で無視して新規開始。
@@ -139,65 +140,83 @@ function main(): void {
   const { brain, worldBrain, registry } = selectBrains((e) => {
     costLog.record(e);
     scheduleSysStatus();
-  });
+  }, cfg);
   const llmInfo = buildLlmInfo(registry, villagers);
-  const director = new EventDirector({ maxRepsPerSegment: numEnv('PAGUS_REPS', 3) });
+  const director = new EventDirector({ maxRepsPerSegment: cfg.sim.reps });
   const tm = new TermMachine(world, brain, {
     director,
-    dailyTriggerAfter: numEnv('PAGUS_TRIGGER_AFTER', 6), // 日常エンジンが自由行動を事件化する閾値 (§12.2)
+    dailyTriggerAfter: cfg.sim.triggerAfter, // 日常エンジンが自由行動を事件化する閾値 (§12.2)
     worldBrain,
-    reconcileChance: numEnv('PAGUS_RECONCILE', 0.15), // 事件が和解で収まる基礎確率
-    secondaryChance: numEnv('PAGUS_SECONDARY', 0.18), // 二次被害の確率
-    stressFizzleK: numEnv('PAGUS_STRESS_K', 0.06), // ストレス耐性で嫌がらせを受け流す効き
-    marriageChance: numEnv('PAGUS_MARRIAGE', 0.12), // 日末の結婚確率
-    birthChance: numEnv('PAGUS_BIRTH', 0.1), // 日末の出産確率
-    rulesMax: numEnv('PAGUS_RULES_MAX', 40), // ふるまいの法則の上限 (§2.1)
-    martialSurgeBonus: numEnv('PAGUS_MARTIAL_SURGE', 4), // 戒厳令 surge の事件化閾値ボーナス (§v1.3-C ⑨)
+    reconcileChance: cfg.sim.reconcileChance, // 事件が和解で収まる基礎確率
+    secondaryChance: cfg.sim.secondaryChance, // 二次被害の確率
+    stressFizzleK: cfg.sim.stressFizzleK, // ストレス耐性で嫌がらせを受け流す効き
+    marriageChance: cfg.sim.marriageChance, // 日末の結婚確率
+    birthChance: cfg.sim.birthChance, // 日末の出産確率
+    rulesMax: cfg.sim.rulesMax, // ふるまいの法則の上限 (§2.1)
+    martialSurgeBonus: cfg.sim.martialSurgeBonus, // 戒厳令 surge の事件化閾値ボーナス (§v1.3-C ⑨)
     bornCount: restored?.bornCount ?? 0, // 出生 id の通し番号を引き継ぐ
     incidentCount: restored?.incidentCount ?? 0, // 事件用キャラ id の通し番号を引き継ぐ
     ruleCount: restored?.ruleCount ?? 0, // ふるまいの法則 id の通し番号を引き継ぐ
   });
 
-  const port = numEnv('PAGUS_WS_PORT', 4310);
-  const pace = { accel: numEnv('PAGUS_ACCEL', 600), minMs: numEnv('PAGUS_MIN_MS', 400) };
-  const incidentStepMs = numEnv('PAGUS_INCIDENT_MS', 700);
+  const port = cfg.server.wsPort;
+  const pace = { accel: cfg.server.accel, minMs: cfg.server.minMs };
+  const incidentStepMs = cfg.server.incidentStepMs;
 
   // 住民の動きを stdout へ流しつつ JSONL へ永続化する (後から振り返れる)。
-  const sessionLog = new SessionLog();
+  const sessionLog = new SessionLog({
+    logStdout: cfg.server.logStdout,
+    logFile: cfg.server.logFile,
+    logDir: cfg.server.logDir,
+  });
 
   // 裁判の糾弾セリフ: llm モードでは Haiku 生成 (65%) + レパートリー蓄積。
   const llmMode = (process.env.PAGUS_BRAIN ?? 'stub') === 'llm';
   const narrator = new TrialNarrator(
-    llmMode ? { client: new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5' }) } : {},
+    llmMode
+      ? { client: new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: cfg.llm.cliRetries }) }
+      : {},
   );
 
   // 村の歴史 (節目を記録・永続化)。
   const chronicle = new Chronicle();
 
-  // WebPush 通知 (§4.8)。VAPID 未設定なら無効 (PAGUS_PUSH=1 + 鍵で有効化)。
-  const push = new PushService();
+  // WebPush 通知 (§4.8)。VAPID 未設定なら無効 (config push.enabled=true + 鍵で有効化)。
+  const push = new PushService({
+    enabled: cfg.push.enabled,
+    vapidPublic: cfg.push.vapidPublic,
+    vapidPrivate: cfg.push.vapidPrivate,
+    vapidSubject: cfg.push.vapidSubject,
+  });
 
   // プレイヤーのカルマ/善性 (userId ごと, §4.4)。1 秒間隔で accrue する。
-  const ps = new PlayerState();
+  const ps = new PlayerState({
+    rate: cfg.karma.rate,
+    max: cfg.karma.max,
+    inciteCost: cfg.karma.inciteCost,
+    sanctionCost: cfg.karma.sanctionCost,
+    sanctionVirtueK: cfg.karma.sanctionVirtueK,
+    cheerIntervalMs: cfg.karma.cheerIntervalMs,
+    cheerVirtue: cfg.karma.cheerVirtue,
+    championKarmaMult: cfg.karma.championKarmaMult,
+    championDeathPenalty: cfg.karma.championDeathPenalty,
+    transferFeePct: cfg.karma.transferFeePct,
+    cardCooldownMs: cfg.karma.cardCooldownMs,
+  });
   const knownUsers = new Set<string>();
 
-  // 課金モック (§v1.3-F): 許可する固定パック値。PAGUS_TOPUP_PACKS 既定 "100,500,1000"。
+  // 課金モック (§v1.3-F): 許可する固定パック値 (config economy.topupPacks 既定 [100,500,1000])。
   // 不正値 (非正/非整数) は無言フォールバックせず即エラー (RULE_CODE §7.1)。
   const TOPUP_PACKS = new Set<number>(
-    (process.env.PAGUS_TOPUP_PACKS ?? '100,500,1000')
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-      .map((s) => {
-        const n = Number(s);
-        if (!Number.isInteger(n) || n <= 0) throw new Error(`環境変数 PAGUS_TOPUP_PACKS の値が正の整数ではありません: ${s}`);
-        return n;
-      }),
+    cfg.economy.topupPacks.map((n) => {
+      if (!Number.isInteger(n) || n <= 0) throw new Error(`config economy.topupPacks の値が正の整数ではありません: ${n}`);
+      return n;
+    }),
   );
 
   // 裁判ベット (§3): 現裁判 (incidentId) ごとのプール。
   const betPool = new BetPool();
-  const BET_MIN = numEnv('PAGUS_BET_MIN', 1);
+  const BET_MIN = cfg.economy.betMin;
   // 決済済みの裁判 incidentId (多重清算防止, §3)。
   const settledBets = new Set<string>();
   // fate 段階の betState を最後に初期配信した incidentId (重複初期配信の抑制)。
@@ -205,24 +224,24 @@ function main(): void {
 
   // カードパック (§v1.3-A) の card 別コストと効果日数。
   const CARD_COSTS: Record<CardName, number> = {
-    disaster: numEnv('PAGUS_CARD_DISASTER_COST', 40),
-    spiritAway: numEnv('PAGUS_CARD_SPIRITAWAY_COST', 35),
-    swap: numEnv('PAGUS_CARD_SWAP_COST', 30),
-    awaken: numEnv('PAGUS_CARD_AWAKEN_COST', 25),
-    falseProphecy: numEnv('PAGUS_CARD_PROPHECY_COST', 20),
+    disaster: cfg.cards.disasterCost,
+    spiritAway: cfg.cards.spiritAwayCost,
+    swap: cfg.cards.swapCost,
+    awaken: cfg.cards.awakenCost,
+    falseProphecy: cfg.cards.prophecyCost,
   };
-  const DISASTER_DAYS = numEnv('PAGUS_DISASTER_DAYS', 3);
-  const SPIRITAWAY_DAYS = numEnv('PAGUS_SPIRITAWAY_DAYS', 2);
+  const DISASTER_DAYS = cfg.cards.disasterDays;
+  const SPIRITAWAY_DAYS = cfg.cards.spiritAwayDays;
   // 天災カードルールの通し番号 (id 衝突回避)。
   let cardRuleCount = 0;
 
-  // 経済パック (§v1.3-B) の env。
-  const BANK_INTEREST = numEnv('PAGUS_BANK_INTEREST', 0.02); // 銀行預金の日末利子 (④)
-  const INSURE_DAYS = numEnv('PAGUS_INSURE_DAYS', 5); // 推し保険の有効日数 (③)
-  const INSURE_MULT = numEnv('PAGUS_INSURE_MULT', 3); // 保険の払戻倍率 (③)
-  const REVIVE_COST = numEnv('PAGUS_REVIVE_COST', 80); // 闇市の復活コスト (⑤)
-  const AUCTION_PERIOD_MS = numEnv('PAGUS_AUCTION_PERIOD_MS', 120000); // オークション締切間隔 (②)
-  const MARKET_PREMIUM = numEnv('PAGUS_MARKET_PREMIUM', 1.5); // 闇市カードのプレミアム倍率 (⑤)
+  // 経済パック (§v1.3-B) の設定。
+  const BANK_INTEREST = cfg.economy.bankInterest; // 銀行預金の日末利子 (④)
+  const INSURE_DAYS = cfg.economy.insureDays; // 推し保険の有効日数 (③)
+  const INSURE_MULT = cfg.economy.insureMult; // 保険の払戻倍率 (③)
+  const REVIVE_COST = cfg.economy.reviveCost; // 闇市の復活コスト (⑤)
+  const AUCTION_PERIOD_MS = cfg.economy.auctionPeriodMs; // オークション締切間隔 (②)
+  const MARKET_PREMIUM = cfg.economy.marketPremium; // 闇市カードのプレミアム倍率 (⑤)
   // 闇市の card_* → カードパック (A) の種別。
   const MARKET_CARD: Partial<Record<MarketItem, CardName>> = {
     card_disaster: 'disaster',
@@ -237,9 +256,9 @@ function main(): void {
   let lastEconomyTerm = tm.world.term;
 
   // しきたり改定 (§2) のコスト/上限。
-  const RULE_ADD_COST = numEnv('PAGUS_RULE_ADD_COST', 15);
-  const RULE_REMOVE_COST = numEnv('PAGUS_RULE_REMOVE_COST', 25);
-  const VILLAGE_RULES_MAX = numEnv('PAGUS_VILLAGE_RULES_MAX', 12);
+  const RULE_ADD_COST = cfg.economy.ruleAddCost;
+  const RULE_REMOVE_COST = cfg.economy.ruleRemoveCost;
+  const VILLAGE_RULES_MAX = cfg.economy.villageRulesMax;
   // 推しの死の検知 (§1): 前回 alive だった villager id 集合。初回 snapshot で現状を seed する。
   const prevAliveIds = new Set<string>();
   let aliveInitialized = false;
@@ -254,15 +273,15 @@ function main(): void {
   let spectacle: SpectacleManager;
   let raid: RaidManager;
 
-  // 演出・協力パック (§v1.3-D) の env。
-  const RAID_CHANCE = numEnv('PAGUS_RAID_CHANCE', 0.05); // 日末にレイドが出現する確率 (㉙)
+  // 演出・協力パック (§v1.3-D) の設定。
+  const RAID_CHANCE = cfg.spectacle.raidChance; // 日末にレイドが出現する確率 (㉙)
   // 月替わり検知 (MVP集計 / シーズン進行 / 予測リセット) と事件発火検知 (予測判定) の基準。
   let lastMonthKey = tm.world.calendar.year * 12 + tm.world.calendar.month;
   let lastScheduledFired = tm.world.scheduledIncident?.fired ?? false;
 
-  // 政治パック (§v1.3-C) の env。
-  const REVOLT_THRESHOLD = numEnv('PAGUS_REVOLT_THRESHOLD', 0.7); // 蜂起の悪辣しきい値 (⑧)
-  const MARTIAL_DAYS = numEnv('PAGUS_MARTIAL_DAYS', 2); // 戒厳令の有効日数 (⑨)
+  // 政治パック (§v1.3-C) の設定。
+  const REVOLT_THRESHOLD = cfg.politics.revoltThreshold; // 蜂起の悪辣しきい値 (⑧)
+  const MARTIAL_DAYS = cfg.politics.martialDays; // 戒厳令の有効日数 (⑨)
   // 戒厳令の発動と日末の期限切れ検知 (term 進行ベース)。
   let lastGovTerm = tm.world.term;
 
@@ -959,18 +978,18 @@ function main(): void {
   // 政治パック (§v1.3-C): 村長/法案/革命/戒厳令/税。状態と時間管理は Governance、副作用はここ。
   governance = new Governance(
     {
-      mayorPeriodMs: numEnv('PAGUS_MAYOR_PERIOD_MS', 180000),
-      lawDeposit: numEnv('PAGUS_LAW_DEPOSIT', 20),
-      lawVoteMs: numEnv('PAGUS_LAW_VOTE_MS', 60000),
+      mayorPeriodMs: cfg.politics.mayorPeriodMs,
+      lawDeposit: cfg.politics.lawDeposit,
+      lawVoteMs: cfg.politics.lawVoteMs,
       revoltThreshold: REVOLT_THRESHOLD,
-      revoltStake: numEnv('PAGUS_REVOLT_STAKE', 10),
-      revoltWindowMs: numEnv('PAGUS_REVOLT_WINDOW_MS', 60000),
-      martialStake: numEnv('PAGUS_MARTIAL_STAKE', 25),
-      martialCost: numEnv('PAGUS_MARTIAL_COST', 100),
+      revoltStake: cfg.politics.revoltStake,
+      revoltWindowMs: cfg.politics.revoltWindowMs,
+      martialStake: cfg.politics.martialStake,
+      martialCost: cfg.politics.martialCost,
       martialDays: MARTIAL_DAYS,
-      taxPeriodMs: numEnv('PAGUS_TAX_PERIOD_MS', 180000),
-      taxAmount: numEnv('PAGUS_TAX_AMOUNT', 5),
-      fundThreshold: numEnv('PAGUS_FUND_THRESHOLD', 100),
+      taxPeriodMs: cfg.politics.taxPeriodMs,
+      taxAmount: cfg.politics.taxAmount,
+      fundThreshold: cfg.politics.fundThreshold,
     },
     {
       spend: (uid, amt) => ps.spend(uid, amt),
@@ -1021,11 +1040,11 @@ function main(): void {
   const seasonStore = new SeasonStore();
   spectacle = new SpectacleManager(
     {
-      predictReward: numEnv('PAGUS_PREDICT_REWARD', 30),
-      prayWindowMs: numEnv('PAGUS_PRAY_WINDOW_MS', 30000),
-      prayNeeded: numEnv('PAGUS_PRAY_NEEDED', 3),
-      seasonMonths: numEnv('PAGUS_SEASON_MONTHS', 3),
-      seasonReward: numEnv('PAGUS_SEASON_REWARD', 50),
+      predictReward: cfg.spectacle.predictReward,
+      prayWindowMs: cfg.spectacle.prayWindowMs,
+      prayNeeded: cfg.spectacle.prayNeeded,
+      seasonMonths: cfg.spectacle.seasonMonths,
+      seasonReward: cfg.spectacle.seasonReward,
     },
     {
       addKarma: (uid, amt) => ps.addKarma(uid, amt),
@@ -1048,9 +1067,9 @@ function main(): void {
   let raidNameIdx = 0;
   raid = new RaidManager(
     {
-      hp: numEnv('PAGUS_RAID_HP', 100),
-      windowMs: numEnv('PAGUS_RAID_WINDOW_MS', 120000),
-      reward: numEnv('PAGUS_RAID_REWARD', 50),
+      hp: cfg.spectacle.raidHp,
+      windowMs: cfg.spectacle.raidWindowMs,
+      reward: cfg.spectacle.raidReward,
       chance: RAID_CHANCE,
     },
     {
@@ -1207,9 +1226,9 @@ function main(): void {
         .catch((e) => console.error('[pagus] 糾弾生成エラー', e));
     },
   }, {
-    // ふるまいの法則の Haiku 増殖 (§2.1)。PAGUS_RULEGEN=0 で無効化 (既定有効)。
-    enabled: (process.env.PAGUS_RULEGEN ?? '1') !== '0',
-    chance: numEnv('PAGUS_RULEGEN_CHANCE', 0.15),
+    // ふるまいの法則の Haiku 増殖 (§2.1)。config sim.rulegenEnabled で切替 (既定有効)。
+    enabled: cfg.sim.rulegenEnabled,
+    chance: cfg.sim.rulegenChance,
   });
   loop.start();
 

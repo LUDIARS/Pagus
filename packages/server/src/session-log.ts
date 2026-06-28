@@ -3,10 +3,8 @@
 //   2) JSONL ファイルへ追記 (後から振り返る)
 // の 2 系統へ流す。描画にもゲームロジックにも依存しない純粋な I/O。
 //
-// env:
-//   PAGUS_LOG_STDOUT  '0' で stdout エコーを止める (既定 on)
-//   PAGUS_LOG_FILE    '0' でファイル永続化を止める (既定 on)
-//   PAGUS_LOG_DIR     出力先ディレクトリ (既定 <repo>/logs)
+// 設定 (PagusConfig.server.{logStdout,logFile,logDir}) は index がコンストラクタ注入する。
+// 自前で env を読まない。
 
 import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -15,16 +13,25 @@ import type { World } from '@pagus/sim';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** env フラグ。未設定は既定 on、'0'/'false' で off。 */
-function flag(name: string, fallback: boolean): boolean {
-  const v = process.env[name];
-  if (v === undefined || v === '') return fallback;
-  return v !== '0' && v.toLowerCase() !== 'false';
+/** SessionLog の設定 (PagusConfig.server 相当)。 */
+export interface SessionLogConfig {
+  /** stdout エコー (既定 on)。 */
+  logStdout: boolean;
+  /** JSONL 永続化 (既定 on)。 */
+  logFile: boolean;
+  /** 出力先ディレクトリ。空文字は既定 (<repo>/logs)。 */
+  logDir: string;
 }
 
-function logDir(): string {
-  const env = process.env.PAGUS_LOG_DIR;
-  if (env && env.length > 0) return env;
+/** 既定 (旧 env 既定と一致)。 */
+export const DEFAULT_SESSION_LOG_CONFIG: SessionLogConfig = {
+  logStdout: true,
+  logFile: true,
+  logDir: '',
+};
+
+function resolveLogDir(dir: string): string {
+  if (dir.length > 0) return dir;
   // packages/server/{src|dist} → ../../../logs
   return resolve(here, '../../../logs');
 }
@@ -55,10 +62,10 @@ export class SessionLog {
   private readonly path: string | null;
   private lastPhase: World['phase'] | null = null;
 
-  constructor() {
-    this.toStdout = flag('PAGUS_LOG_STDOUT', true);
-    if (flag('PAGUS_LOG_FILE', true)) {
-      const dir = logDir();
+  constructor(config: SessionLogConfig = DEFAULT_SESSION_LOG_CONFIG) {
+    this.toStdout = config.logStdout;
+    if (config.logFile) {
+      const dir = resolveLogDir(config.logDir);
       mkdirSync(dir, { recursive: true });
       this.path = join(dir, `pagus-${stamp(new Date())}.jsonl`);
       this.stream = createWriteStream(this.path, { flags: 'a' });
