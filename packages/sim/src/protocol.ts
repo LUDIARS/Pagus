@@ -53,7 +53,8 @@ export function fromWire(wire: WireWorld): World {
 }
 
 /** 現スナップショット形式のバージョン。型が壊れる変更時に増やし、古い snapshot を破棄する。 */
-export const WORLD_SNAPSHOT_VERSION = 4;
+// v5: BehaviorRule.expiresAtTerm/source='card' + Villager.hiddenUntilTerm (§v1.3-A カードパック)。
+export const WORLD_SNAPSHOT_VERSION = 5;
 
 /**
  * 永続化する world スナップショット。WireWorld (JSON 化可能な world) に加え、
@@ -251,6 +252,9 @@ export type ServerMessage =
       cost: CostSummary;
     };
 
+/** カードパック (§v1.3-A) の 5 種。 */
+export type CardName = 'disaster' | 'spiritAway' | 'swap' | 'awaken' | 'falseProphecy';
+
 /** client → server。 */
 export type ClientMessage =
   | { t: 'hello'; userId: string } // 接続とユーザを紐付け (per-user カルマ push 用)
@@ -262,4 +266,7 @@ export type ClientMessage =
   | { t: 'addRule'; text: string; userId?: string } // カルマを払って村のしきたりを 1 件追加 (§2)
   | { t: 'removeRule'; ruleId: string; userId?: string } // カルマを払って村のしきたりを 1 件廃する (§2)
   | { t: 'bet'; pick: 'death' | 'educate'; amount: number; userId?: string } // 裁判の運命段階で結果に賭ける (§3)
-  | { t: 'faction'; side: 'guide' | 'incite'; userId?: string }; // 二大陣営を明示選択 (§4.3)
+  | { t: 'faction'; side: 'guide' | 'incite'; userId?: string } // 二大陣営を明示選択 (§4.3)
+  // カードパック (§v1.3-A): カルマで切る一発介入。card 別に必要な引数だけ伴う。
+  // disaster=kind / spiritAway=targetId / swap=targetId(a)+targetId2(b) / awaken=targetId / falseProphecy=text?
+  | { t: 'card'; card: CardName; targetId?: string; targetId2?: string; kind?: string; text?: string; userId?: string };

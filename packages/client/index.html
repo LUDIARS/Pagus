@@ -109,6 +109,12 @@
       /* 操作パネル (§4): 対象選択 + 扇動/制裁/応援。 */
       #controls { background: #11151b; border: 1px solid #2a3346; border-radius: 8px; padding: 10px; }
       #controls h3 { color: #f2c94c; }
+
+      /* カードパネル (§v1.3-A)。 */
+      #cards { background: #131019; border: 1px solid #4a3a5a; border-radius: 8px; padding: 10px; }
+      #cards h3 { color: #c79bf2; }
+      .card-btn { width: 100%; margin: 4px 0 2px; border-color: #8a6fcf; color: #e0d0f2; }
+      .card-btn:disabled { opacity: 0.4; cursor: not-allowed; }
       .ctl-state { margin-bottom: 6px; }
       .target-select { width: 100%; margin: 4px 0 8px; background: #0e121b; color: #cdd6e4;
         border: 1px solid #38405a; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
@@ -257,6 +263,7 @@
       <div id="right" class="col">
         <canvas id="radar" width="316" height="250"></canvas>
         <div id="controls"></div>
+        <div id="cards"></div>
         <div id="trial"></div>
         <div id="bet"></div>
         <div id="vstatus"></div>

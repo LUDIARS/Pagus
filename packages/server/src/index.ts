@@ -1,7 +1,7 @@
 // Pagus server エントリ。data からワールドを起こし、TermLoop と WS を配線する。
 // 思考は PAGUS_BRAIN で切替: 'stub'(既定/決定的) | 'llm'(実 LLM = claude/codex CLI)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
 import { TermLoop } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
@@ -184,6 +184,19 @@ function main(): void {
   const settledBets = new Set<string>();
   // fate 段階の betState を最後に初期配信した incidentId (重複初期配信の抑制)。
   let lastBetIncident: string | null = null;
+
+  // カードパック (§v1.3-A) の card 別コストと効果日数。
+  const CARD_COSTS: Record<CardName, number> = {
+    disaster: numEnv('PAGUS_CARD_DISASTER_COST', 40),
+    spiritAway: numEnv('PAGUS_CARD_SPIRITAWAY_COST', 35),
+    swap: numEnv('PAGUS_CARD_SWAP_COST', 30),
+    awaken: numEnv('PAGUS_CARD_AWAKEN_COST', 25),
+    falseProphecy: numEnv('PAGUS_CARD_PROPHECY_COST', 20),
+  };
+  const DISASTER_DAYS = numEnv('PAGUS_DISASTER_DAYS', 3);
+  const SPIRITAWAY_DAYS = numEnv('PAGUS_SPIRITAWAY_DAYS', 2);
+  // 天災カードルールの通し番号 (id 衝突回避)。
+  let cardRuleCount = 0;
 
   // しきたり改定 (§2) のコスト/上限。
   const RULE_ADD_COST = numEnv('PAGUS_RULE_ADD_COST', 15);
@@ -483,6 +496,100 @@ function main(): void {
       }
       ps.setFaction(userId, side);
       scheduleLeaderboard();
+    },
+    onCard: (card, args, userId) => {
+      knownUsers.add(userId);
+      const w = tm.world;
+      const cost = CARD_COSTS[card];
+      if (cost === undefined) {
+        ws.sendRejected(userId, '不明なカード');
+        return;
+      }
+      const now = Date.now();
+      if (!ps.canUseCard(userId, now)) {
+        ws.sendRejected(userId, 'カードはクールダウン中');
+        return;
+      }
+      const cal = w.calendar;
+      const date = `${cal.month}月${cal.dayOfMonth}日`;
+      // 効果テキスト (chronicle 用)。入力検証 → カルマ → spend+markCard → 操作 の順で各 card を処理する。
+      let chronicleText: string;
+      if (card === 'disaster') {
+        const kind = args.kind;
+        if (kind !== 'drought' && kind !== 'storm' && kind !== 'plague') {
+          ws.sendRejected(userId, '天災の種別が不正 (drought/storm/plague)');
+          return;
+        }
+        if (!ps.spend(userId, cost)) {
+          ws.sendRejected(userId, 'カルマが足りない');
+          return;
+        }
+        ps.markCard(userId, now);
+        cardRuleCount += 1;
+        tm.addCardRule(makeDisasterRule(kind as DisasterKind, w.term + DISASTER_DAYS, `card_disaster_${cardRuleCount}`));
+        // 疫病は感情だけでなくストレスも上げる (§v1.3-A ⑯)。
+        if (kind === 'plague') for (const v of aliveVillagers(w)) v.stress += 1;
+        const label = kind === 'drought' ? '干ばつ' : kind === 'storm' ? '嵐' : '疫病';
+        chronicleText = `🃏 天災: ${label}が村を襲う (${DISASTER_DAYS}日)`;
+      } else if (card === 'spiritAway') {
+        const targetId = args.targetId;
+        const target = targetId ? w.villagers.get(targetId) : undefined;
+        if (!targetId || !target || !target.alive) {
+          ws.sendRejected(userId, '神隠しの対象が不正 (生存どうぶつのみ)');
+          return;
+        }
+        if (!ps.spend(userId, cost)) {
+          ws.sendRejected(userId, 'カルマが足りない');
+          return;
+        }
+        ps.markCard(userId, now);
+        tm.spiritAway(targetId, SPIRITAWAY_DAYS);
+        chronicleText = `🃏 神隠し: ${target.name} が忽然と姿を消した`;
+      } else if (card === 'swap') {
+        const aId = args.targetId;
+        const bId = args.targetId2;
+        const a = aId ? w.villagers.get(aId) : undefined;
+        const b = bId ? w.villagers.get(bId) : undefined;
+        if (!aId || !bId || aId === bId || !a || !a.alive || !b || !b.alive) {
+          ws.sendRejected(userId, '入れ替えの対象が不正 (異なる生存どうぶつ2体)');
+          return;
+        }
+        if (!ps.spend(userId, cost)) {
+          ws.sendRejected(userId, 'カルマが足りない');
+          return;
+        }
+        ps.markCard(userId, now);
+        tm.swapVillagers(aId, bId);
+        chronicleText = `🃏 入れ替え: ${a.name} と ${b.name}`;
+      } else if (card === 'awaken') {
+        const targetId = args.targetId;
+        const target = targetId ? w.villagers.get(targetId) : undefined;
+        if (!targetId || !target || !target.alive) {
+          ws.sendRejected(userId, '覚醒の対象が不正 (生存どうぶつのみ)');
+          return;
+        }
+        if (!ps.spend(userId, cost)) {
+          ws.sendRejected(userId, 'カルマが足りない');
+          return;
+        }
+        ps.markCard(userId, now);
+        const res = tm.awaken(targetId);
+        const axisLabel = res ? (PERSONALITY_LABELS[res.axis] ?? res.axis) : '気質';
+        chronicleText = `🃏 覚醒: ${target.name} の${axisLabel}が目覚めた`;
+      } else {
+        // falseProphecy
+        if (!ps.spend(userId, cost)) {
+          ws.sendRejected(userId, 'カルマが足りない');
+          return;
+        }
+        ps.markCard(userId, now);
+        const n = tm.falseProphecy(args.text);
+        chronicleText = `🃏 偽予言: 不吉な噂が ${n}体に広がった`;
+      }
+      chronicle.add(date, chronicleText, 'other');
+      ws.updateChronicle(chronicle.recent());
+      ws.broadcastSnapshot(w);
+      pushState(userId);
     },
   });
   ws.setLlmInfo(llmInfo);

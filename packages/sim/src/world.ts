@@ -60,8 +60,13 @@ export function bumpEventParam(villager: Villager, tag: string, amount = 1): voi
   villager.eventParams[tag] = (villager.eventParams[tag] ?? 0) + amount;
 }
 
+/** 神隠し (§v1.3-A ⑰) で一時退避中か。hiddenUntilTerm > 現ターム の間は村から消えて見える。 */
+function isHidden(world: World, v: Villager): boolean {
+  return v.hiddenUntilTerm !== undefined && v.hiddenUntilTerm > world.term;
+}
+
 export function aliveVillagers(world: World): Villager[] {
-  return [...world.villagers.values()].filter((v) => v.alive);
+  return [...world.villagers.values()].filter((v) => v.alive && !isHidden(world, v));
 }
 
 /** いま起きている (行動できる) どうぶつ。 */
