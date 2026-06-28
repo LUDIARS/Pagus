@@ -154,11 +154,18 @@ export class CardPanel {
     this.stateBox.appendChild(kv('💠 カルマ', this.karma.toFixed(1)));
     const cd = Math.max(0, this.cooldownUntil - Date.now());
     this.stateBox.appendChild(kv('🃏 クールダウン', cd <= 0 ? 'いま可能' : `あと ${Math.ceil(cd / 1000)}秒`));
-    // カルマ/クールダウンでボタンの可否を更新。
+    // カルマ/クールダウンでボタンの可否を更新し、不可の理由を tooltip に出す (§E)。
     const onCooldown = cd > 0;
     for (const def of CARD_DEFS) {
       const btn = this.buttons.get(def.card);
-      if (btn) btn.disabled = onCooldown || this.karma < def.cost;
+      if (!btn) continue;
+      const insufficient = this.karma < def.cost;
+      btn.disabled = onCooldown || insufficient;
+      btn.title = onCooldown
+        ? `クールダウン中 (あと${Math.ceil(cd / 1000)}秒)`
+        : insufficient
+          ? `カルマ不足 (必要 ${def.cost} / 所持 ${this.karma.toFixed(0)})`
+          : `コスト ${def.cost}`;
     }
   }
 
