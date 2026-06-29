@@ -272,6 +272,8 @@ export type ServerMessage =
       karma: number;
       virtue: number;
       sanctionCost: number;
+      /** いま扇動に必要なカルマ (固定コスト, §4 消費カルマ表示用)。 */
+      inciteCost: number;
       canCheerInMs: number;
       /** 推し (champion) の villager id。未指名は null (§1)。 */
       championId?: string | null;
