@@ -27,8 +27,6 @@ export interface PlayerStateConfig {
   championKarmaMult: number;
   /** 推しの死のカルマ罰 (§1)。 */
   championDeathPenalty: number;
-  /** 送金手数料 (%) (§v1.3-B ①)。 */
-  transferFeePct: number;
   /** カード使用クールダウン ms。 */
   cardCooldownMs: number;
 }
@@ -44,7 +42,6 @@ export const DEFAULT_PLAYER_STATE_CONFIG: PlayerStateConfig = {
   cheerVirtue: 0.05,
   championKarmaMult: 1.5,
   championDeathPenalty: 20,
-  transferFeePct: 0,
   cardCooldownMs: 60000,
 };
 
@@ -122,7 +119,6 @@ export class PlayerState {
   private readonly cheerVirtue: number; // 応援1回の善性上昇
   private readonly championKarmaMult: number; // 推し生存中のカルマ加速倍率 (§1)
   private readonly championDeathPenalty: number; // 推しの死のカルマ罰 (§1)
-  private readonly transferFeePct: number; // 送金手数料 (%) (§v1.3-B ①)
 
   /** チューニング値を注入する (省略時は既定 = 旧 env 既定と一致)。 */
   constructor(config: PlayerStateConfig = DEFAULT_PLAYER_STATE_CONFIG) {
@@ -136,7 +132,6 @@ export class PlayerState {
     this.cheerVirtue = config.cheerVirtue;
     this.championKarmaMult = config.championKarmaMult;
     this.championDeathPenalty = config.championDeathPenalty;
-    this.transferFeePct = config.transferFeePct;
   }
 
   /** 推し保険の契約 (§v1.3-B ③): `${userId}:${villagerId}` → 契約。 */
@@ -281,22 +276,6 @@ export class PlayerState {
   }
 
   // --- 経済パック (§v1.3-B) -----------------------------------------------------
-
-  /**
-   * 送金 (§v1.3-B ①)。from→to へ amount カルマを移す。
-   * from≠to / amount は正の整数 / from の残高内、を満たさなければ false (無言フォールバック禁止)。
-   * 手数料 transferFeePct(%) は焼却 (受取額 = amount × (1 - pct/100), 端数切り捨て)。
-   */
-  transfer(from: string, to: string, amount: number): boolean {
-    if (from === to) return false;
-    if (!Number.isInteger(amount) || amount <= 0) return false;
-    const sender = this.get(from);
-    if (sender.karma < amount) return false;
-    const received = Math.floor(amount * (1 - this.transferFeePct / 100));
-    sender.karma -= amount;
-    this.get(to).karma += received;
-    return true;
-  }
 
   /** 銀行へ預入 (§v1.3-B ④)。amount は正の整数かつカルマ残高内。預金は spend 対象外。 */
   deposit(userId: string, amount: number): boolean {

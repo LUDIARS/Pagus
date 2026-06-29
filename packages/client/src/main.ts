@@ -72,7 +72,7 @@ async function main(): Promise<void> {
     },
   });
 
-  // 操作パネル (§4): 対象を選んで 扇動 / 制裁 / 応援 を送る。
+  // プレイヤー行動パネル (§4): 画面下の独立ドック (#action-dock) に常駐。対象を選んで 扇動 / 制裁 / 応援 を送る。
   // 扇動は noun (悪口の主 rumorAboutId) を任意で伴う (§4.2)。未選択なら省略。
   const sendAction = (type: ActionType, targetId: string, rumorAboutId?: string): void => {
     if (type === 'incite') {
@@ -91,9 +91,8 @@ async function main(): Promise<void> {
     onCard: (card, args) => conn.send({ t: 'card', card, userId, ...args }),
   });
 
-  // 経済パネル (§v1.3-B): 送金 / 銀行 / 保険 / 闇市 / オークション。
+  // 経済パネル (§v1.3-B): 銀行 / 保険 / 闇市 / オークション (人から人への送金は廃止)。
   const economy = new EconomyPanel(el('economy'), {
-    onTransfer: (toUserId, amount) => conn.send({ t: 'transfer', toUserId, amount, userId }),
     onDeposit: (amount) => conn.send({ t: 'deposit', amount, userId }),
     onWithdraw: (amount) => conn.send({ t: 'withdraw', amount, userId }),
     onInsure: (targetId, premium) => conn.send({ t: 'insure', targetId, premium, userId }),
@@ -118,8 +117,9 @@ async function main(): Promise<void> {
     onRaidStrike: (amount) => conn.send({ t: 'raidStrike', amount, userId }),
   });
 
-  // 統合アクションオーバーレイ (§v1.3-E): 上記の操作パネル群を 1 つのタブ式パネルへ集約。
-  // 各パネルは index.html のオーバーレイ内 id に既に mount 済み。ここでは枠 (タブ/ヘッダ/開閉) を起こす。
+  // 統合アクションオーバーレイ (§v1.3-E): 行動ドック以外の操作群 (カード/村/裁判/経済/課金/情報) を
+  // 1 つのタブ式パネルへ集約。各パネルは index.html のオーバーレイ内 id に既に mount 済み。
+  // ここでは枠 (タブ/ヘッダ/開閉) を起こす。課金 (account) は経済とは別タブ。
   const overlay = new ActionOverlay(el('action-overlay'), el('ao-header'), el('ao-tabs'), el('btn-actions'), el('ao-backdrop'));
 
   const verdict = el('verdict');

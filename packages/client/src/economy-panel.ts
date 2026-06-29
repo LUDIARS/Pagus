@@ -1,12 +1,12 @@
 // 経済パネル (§v1.3-B)。カルマ経済の操作 UI:
-//   ① 送金 (toUserId + 額) / ④ 銀行 (預入・引出) / ③ 推し保険 (対象 + 保険料) /
+//   ④ 銀行 (預入・引出) / ③ 推し保険 (対象 + 保険料) /
 //   ⑤ 闇市 (復活 + カード購入) / ② オークション (現ロット表示 + 入札)。
-// 受理可否の最終判定は server (commandRejected はトーストで既出)。ここでは入力を集めて送るだけ。
+// 人から人への送金 (旧 ①) は廃止。受理可否の最終判定は server
+// (commandRejected はトーストで既出)。ここでは入力を集めて送るだけ。
 
 import type { WireWorld, MarketItem, AuctionLotView } from '@pagus/sim';
 
 export interface EconomyHandlers {
-  onTransfer(toUserId: string, amount: number): void;
   onDeposit(amount: number): void;
   onWithdraw(amount: number): void;
   onInsure(targetId: string, premium: number): void;
@@ -27,8 +27,6 @@ export class EconomyPanel {
   private readonly stateBox = document.createElement('div');
   /** 生存どうぶつで作り直す対象セレクタ群。 */
   private readonly selects: HTMLSelectElement[] = [];
-  private readonly transferTo = document.createElement('input');
-  private readonly transferAmt = document.createElement('input');
   private readonly bankAmt = document.createElement('input');
   private readonly insureTarget = document.createElement('select');
   private readonly insurePremium = document.createElement('input');
@@ -47,18 +45,6 @@ export class EconomyPanel {
     this.root.appendChild(heading('💰 経済'));
     this.stateBox.className = 'ctl-state';
     this.root.appendChild(this.stateBox);
-
-    // ① 送金。
-    this.root.appendChild(subLabel('送金 (相手の userId)'));
-    numField(this.transferAmt, '送る額');
-    textField(this.transferTo, '送金先 userId');
-    this.root.appendChild(this.transferTo);
-    this.root.appendChild(this.transferAmt);
-    this.root.appendChild(this.actionBtn('💸 送金', 'eco-transfer', () => {
-      const to = this.transferTo.value.trim();
-      const amt = intVal(this.transferAmt);
-      if (to && amt > 0) this.h.onTransfer(to, amt);
-    }));
 
     // ④ 銀行。
     this.root.appendChild(subLabel('銀行 (預金は操作に使えないが利子が付く)'));
@@ -199,11 +185,6 @@ function numField(input: HTMLInputElement, placeholder: string): void {
   input.type = 'number';
   input.min = '1';
   input.step = '1';
-  input.className = 'target-select';
-  input.placeholder = placeholder;
-}
-function textField(input: HTMLInputElement, placeholder: string): void {
-  input.type = 'text';
   input.className = 'target-select';
   input.placeholder = placeholder;
 }

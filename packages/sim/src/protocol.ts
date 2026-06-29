@@ -348,7 +348,6 @@ export type ClientMessage =
   // disaster=kind / spiritAway=targetId / swap=targetId(a)+targetId2(b) / awaken=targetId / falseProphecy=text?
   | { t: 'card'; card: CardName; targetId?: string; targetId2?: string; kind?: string; text?: string; userId?: string }
   // 経済パック (§v1.3-B): カルマ経済。
-  | { t: 'transfer'; toUserId: string; amount: number; userId?: string } // 自分→他者へカルマ送金 (§v1.3-B ①)
   | { t: 'deposit'; amount: number; userId?: string } // 銀行へ預入 (§v1.3-B ④)
   | { t: 'withdraw'; amount: number; userId?: string } // 銀行から引出 (§v1.3-B ④)
   | { t: 'insure'; targetId: string; premium: number; userId?: string } // 推し保険を掛ける (§v1.3-B ③)

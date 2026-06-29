@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pagus — AI村</title>
     <style>
-      :root { color-scheme: dark; }
+      :root { color-scheme: dark; --dock-h: 84px; }
       * { box-sizing: border-box; }
       html, body { height: 100%; }
       body {
@@ -105,9 +105,30 @@
       #status-body .muted { color: #6b7689; font-size: 11px; }
       #status-body .kv { font-size: 12px; }
 
-      /* 操作パネル (§4): 対象選択 + 扇動/制裁/応援。 */
-      #controls { background: #11151b; border: 1px solid #2a3346; border-radius: 8px; padding: 10px; }
-      #controls h3 { color: #f2c94c; }
+      /* プレイヤー行動ドック (§4): 画面下に独立した横並びバー。PC・モバイル共通。 */
+      #action-dock {
+        flex: 0 0 auto; min-height: var(--dock-h);
+        background: #11151b; border-top: 1px solid #2a3346;
+        padding: 8px 14px; overflow-x: auto;
+      }
+      #controls { width: 100%; }
+      .dock-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 12px; min-height: 60px; }
+      .dock-title { font-size: 14px; font-weight: bold; color: #f2c94c; white-space: nowrap; }
+      .dock-state { display: flex; flex-wrap: wrap; gap: 6px; }
+      .dock-chip { display: flex; gap: 5px; align-items: baseline; white-space: nowrap;
+        background: #141a26; border: 1px solid #2a3346; border-radius: 6px; padding: 4px 9px; font-size: 12px; }
+      .dock-chip-label { color: #8b96ad; }
+      .dock-chip-val { font-weight: bold; color: #e6ebf5; }
+      .dock-field { display: flex; flex-direction: column; gap: 2px; }
+      .dock-field-label { font-size: 10px; color: #8b96ad; }
+      .dock-select { min-width: 140px; max-width: 220px; background: #0e121b; color: #cdd6e4;
+        border: 1px solid #38405a; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+      .dock-actions { display: flex; gap: 6px; margin-left: auto; }
+      .dock-btn { white-space: nowrap; padding: 8px 12px; font-size: 13px; }
+      .dock-btn.btn-incite { border-color: #eb5757; }
+      .dock-btn.btn-sanction { border-color: #f2994a; }
+      .dock-btn.btn-cheer { border-color: #6fcf97; }
+      .dock-btn.btn-champion { border-color: #f2c94c; color: #f2e0a0; }
 
       /* カードパネル (§v1.3-A)。 */
       #cards { background: #131019; border: 1px solid #4a3a5a; border-radius: 8px; padding: 10px; }
@@ -219,7 +240,7 @@
       .logged-out-msg { font-size: 14px; color: #cdd6e4; }
 
       /* コマンド却下トースト。 */
-      #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+      #toast { position: fixed; bottom: calc(var(--dock-h) + 16px); left: 50%; transform: translateX(-50%) translateY(20px);
         z-index: 80; background: rgba(40,16,16,0.95); color: #ffb3b3; border: 1px solid #eb5757;
         border-radius: 8px; padding: 10px 18px; font-size: 14px; opacity: 0; pointer-events: none;
         transition: opacity 0.2s ease, transform 0.2s ease; }
@@ -255,7 +276,7 @@
 
       /* 統合アクションオーバーレイ (§v1.3-E): 全ユーザ操作を 1 つのタブ式パネルへ集約。 */
       #action-overlay {
-        position: fixed; top: 52px; right: 12px; bottom: 12px; z-index: 55;
+        position: fixed; top: 52px; right: 12px; bottom: calc(var(--dock-h) + 8px); z-index: 55;
         width: 384px; max-width: calc(100vw - 24px);
         display: flex; flex-direction: column;
         background: #0e121b; border: 1px solid #2a3346; border-radius: 10px;
@@ -280,30 +301,49 @@
       /* モバイル: 中央を全画面、左右はスライドインのドロワー。 */
       .drawer-toggle { display: none; }
       #backdrop { display: none; }
+      /* タブレット〜モバイル: 中央を全画面、左右はスライドインのドロワー。
+         行動ドックは画面下に残し、ドロワー/オーバーレイ/バックドロップはドックの上で止める。 */
       @media (max-width: 860px) {
+        :root { --dock-h: 144px; }
         #hud { font-size: 12px; }
         .drawer-toggle { display: inline-block; }
         #main { padding: 8px; gap: 0; }
         #center { flex: 1 1 auto; }
         #left, #right {
-          position: fixed; top: 52px; bottom: 0; z-index: 30;
+          position: fixed; top: 52px; bottom: var(--dock-h); z-index: 30;
           width: 80%; max-width: 340px;
           transition: transform 0.25s ease; box-shadow: 0 0 24px rgba(0,0,0,0.6);
         }
         #left { left: 0; transform: translateX(-105%); border-radius: 0 10px 10px 0; }
         #right { right: 0; transform: translateX(105%); border-radius: 10px 0 0 10px; }
         #left.open, #right.open { transform: translateX(0); }
-        #backdrop.show { display: block; position: fixed; inset: 52px 0 0 0; background: rgba(0,0,0,0.5); z-index: 20; }
+        #backdrop.show { display: block; position: fixed; inset: 52px 0 var(--dock-h) 0; background: rgba(0,0,0,0.5); z-index: 20; }
         #log { width: 86%; bottom: 10%; }
         .ov-line { font-size: 15px; }
         #verdict { gap: 16px; top: 8%; }
         .verdict-btn { padding: 10px 18px; }
         .vb-ja { font-size: 22px; }
         .vb-en { font-size: 11px; }
-        /* 操作オーバーレイはモバイルで右からのドロワー。 */
-        #action-overlay { top: 52px; right: 0; bottom: 0; width: 92%; max-width: 420px;
+        /* メニューオーバーレイはモバイルで右からのドロワー (ドックの上で止める)。 */
+        #action-overlay { top: 52px; right: 0; bottom: var(--dock-h); width: 92%; max-width: 420px;
           border-radius: 10px 0 0 10px; z-index: 60; }
-        #ao-backdrop.show { display: block; position: fixed; inset: 52px 0 0 0; background: rgba(0,0,0,0.5); z-index: 56; }
+        #ao-backdrop.show { display: block; position: fixed; inset: 52px 0 var(--dock-h) 0; background: rgba(0,0,0,0.5); z-index: 56; }
+        /* 行動ドック: 横幅が足りないので折り返し、高さは上限内でスクロール。 */
+        #action-dock { max-height: var(--dock-h); overflow-y: auto; overflow-x: hidden; }
+        .dock-row { flex-wrap: wrap; min-height: 0; }
+        .dock-actions { margin-left: 0; }
+        .dock-field { flex: 1 1 140px; }
+        .dock-select { max-width: none; width: 100%; }
+      }
+
+      /* スマホ縦: タイトルを省き、行動ボタンを等分配置して指で押しやすく。 */
+      @media (max-width: 520px) {
+        :root { --dock-h: 172px; }
+        .dock-title { display: none; }
+        .dock-state { gap: 4px; }
+        .dock-chip { padding: 3px 7px; font-size: 11px; }
+        .dock-actions { width: 100%; }
+        .dock-btn { flex: 1; padding: 9px 4px; }
       }
     </style>
   </head>
@@ -313,7 +353,7 @@
       <span id="hud">接続待ち…</span>
       <button id="hist-btn">📜 歴史</button>
       <button id="push-btn">🔔 通知</button>
-      <button id="btn-actions">🎛 操作</button>
+      <button id="btn-actions">🎛 メニュー</button>
       <button id="btn-right" class="drawer-toggle">📊 村</button>
       <span id="status"></span>
     </div>
@@ -344,15 +384,17 @@
       </div>
       <div id="backdrop"></div>
     </div>
+    <!-- プレイヤー行動パネル (§4): PC・モバイル共通で画面下に独立表示するドック。 -->
+    <div id="action-dock">
+      <div id="controls"></div>
+    </div>
     <div id="ao-backdrop"></div>
-    <!-- 統合アクションオーバーレイ (§v1.3-E)。各 id は従来パネルの mount 先を兼ねる。 -->
+    <!-- 統合アクションオーバーレイ (§v1.3-E)。各 id は従来パネルの mount 先を兼ねる。
+         操作 (行動) は #action-dock へ独立したので、ここは カード/村/裁判/経済/課金/情報。 -->
     <div id="action-overlay">
       <div id="ao-header"></div>
       <div id="ao-tabs"></div>
       <div id="ao-content">
-        <section class="ao-tab" data-tab="act" data-label="🎯 操作">
-          <div id="controls"></div>
-        </section>
         <section class="ao-tab" data-tab="card" data-label="🃏 カード">
           <div id="cards"></div>
         </section>
@@ -365,6 +407,8 @@
         </section>
         <section class="ao-tab" data-tab="econ" data-label="💰 経済">
           <div id="economy"></div>
+        </section>
+        <section class="ao-tab" data-tab="account" data-label="💴 課金">
           <div id="account"></div>
         </section>
         <section class="ao-tab" data-tab="info" data-label="📊 情報">

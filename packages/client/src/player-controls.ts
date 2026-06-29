@@ -1,5 +1,6 @@
-// プレイヤー操作パネル (§4)。カルマ/善性/制裁コスト/応援クールダウンを表示し、
-// どうぶつを 1 体選んで 扇動 / 制裁 / 応援 する。対象選択は <select> で行う。
+// プレイヤー行動パネル (§4)。画面下の独立ドック (#action-dock) に常時表示する横並びバー。
+// カルマ/善性/制裁コスト/応援クールダウン/推し を左にチップ表示し、どうぶつを 1 体選んで
+// 扇動 / 制裁 / 応援 / 推し指名 する。PC・モバイル共通で画面下に出す (レスポンシブで折り返す)。
 
 import type { WireWorld } from '@pagus/sim';
 
@@ -40,47 +41,43 @@ export class PlayerControls {
     private readonly h: ControlHandlers,
   ) {
     this.root.replaceChildren();
-    this.root.appendChild(heading('🎯 操作'));
-    this.stateBox.className = 'ctl-state';
-    this.root.appendChild(this.stateBox);
+    const row = document.createElement('div');
+    row.className = 'dock-row';
 
-    this.root.appendChild(subLabel('対象どうぶつ'));
-    this.select.className = 'target-select';
+    // 左: タイトル + 自分の状態チップ。
+    const title = document.createElement('span');
+    title.className = 'dock-title';
+    title.textContent = '🎯 行動';
+    this.stateBox.className = 'dock-state';
+    row.append(title, this.stateBox);
+
+    // 中: 対象どうぶつ + 悪口の主 (扇動)。
+    this.select.className = 'dock-select';
     this.select.addEventListener('change', () => {
       this.selectedId = this.select.value || null;
     });
-    this.root.appendChild(this.select);
-
     // 扇動の噂の主 (§4.2): 「誰の悪口か」を選ぶ第2セレクタ。未選択 = 漠然とした不穏な噂。
-    this.root.appendChild(subLabel('悪口の主 (扇動)'));
-    this.rumorSelect.className = 'target-select';
+    this.rumorSelect.className = 'dock-select';
     this.rumorSelect.addEventListener('change', () => {
       this.rumorAboutId = this.rumorSelect.value || null;
     });
-    this.root.appendChild(this.rumorSelect);
-
-    const btns = document.createElement('div');
-    btns.className = 'ctl-btns';
-    btns.append(
-      this.actionButton('🔥 扇動', 'incite', 'btn-incite'),
-      this.actionButton('⚖ 制裁', 'sanction', 'btn-sanction'),
-      this.actionButton('🌸 応援', 'cheer', 'btn-cheer'),
+    row.append(
+      dockField('対象', this.select),
+      dockField('悪口の主', this.rumorSelect),
     );
-    this.root.appendChild(btns);
-    this.root.appendChild(hint('扇動=偽情報で事件化を促す / 制裁=即つるし上げ裁判 / 応援=気質を後押し'));
 
-    // 推し指名 (§1): 選択中の対象を推しにする。生存中はカルマ加速。
-    this.root.appendChild(subLabel('推し (応援すると贔屓)'));
-    const champBtn = document.createElement('button');
-    champBtn.textContent = '⭐ 推しに指名';
-    champBtn.className = 'btn-champion';
-    champBtn.addEventListener('click', () => {
-      const id = this.selectedId;
-      if (id) this.h.onChampion(id);
-    });
-    this.root.appendChild(champBtn);
-    this.root.appendChild(hint('推しが生存中はカルマ加速。死ぬとカルマ罰 + 弔いの掟が生まれる'));
+    // 右: 行動ボタン群。
+    const btns = document.createElement('div');
+    btns.className = 'dock-actions';
+    btns.append(
+      this.actionButton('🔥 扇動', 'incite', 'btn-incite', '偽情報で事件化を促す'),
+      this.actionButton('⚖ 制裁', 'sanction', 'btn-sanction', '即つるし上げ裁判'),
+      this.actionButton('🌸 応援', 'cheer', 'btn-cheer', '気質を後押し'),
+      this.championButton(),
+    );
+    row.append(btns);
 
+    this.root.appendChild(row);
     this.renderState();
   }
 
@@ -142,24 +139,25 @@ export class PlayerControls {
     this.stateBox.replaceChildren();
     const s = this.state;
     if (!s) {
-      this.stateBox.appendChild(hint('接続待ち…'));
+      this.stateBox.appendChild(chip('接続待ち…', ''));
       return;
     }
-    this.stateBox.appendChild(kv('💠 カルマ', s.karma.toFixed(1)));
-    this.stateBox.appendChild(kv('😇 善性', s.virtue.toFixed(2)));
-    this.stateBox.appendChild(kv('⚖ 制裁コスト', s.sanctionCost.toFixed(1)));
     const cd = s.canCheerInMs;
-    this.stateBox.appendChild(kv('🌸 応援', cd <= 0 ? 'いま可能' : `あと ${Math.ceil(cd / 1000)}秒`));
-    // 推し (§1): 指名中なら名前 + 加速中の旨を出す。
-    const champ = s.championId ? (s.championName ?? s.championId) : '(未指名)';
-    this.stateBox.appendChild(kv('⭐ 推し', champ));
-    if (s.championId) this.stateBox.appendChild(hint('推し生存中 → カルマ加速'));
+    const champ = s.championId ? (s.championName ?? s.championId) : '未指名';
+    this.stateBox.append(
+      chip('💠 カルマ', s.karma.toFixed(1)),
+      chip('😇 善性', s.virtue.toFixed(2)),
+      chip('⚖ 制裁', s.sanctionCost.toFixed(1)),
+      chip('🌸 応援', cd <= 0 ? '可' : `${Math.ceil(cd / 1000)}s`),
+      chip('⭐ 推し', champ),
+    );
   }
 
-  private actionButton(label: string, type: ActionType, cls: string): HTMLButtonElement {
+  private actionButton(label: string, type: ActionType, cls: string, tip: string): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.textContent = label;
-    btn.className = cls;
+    btn.className = `dock-btn ${cls}`;
+    btn.title = tip;
     btn.addEventListener('click', () => {
       const id = this.selectedId;
       if (!id) return;
@@ -169,33 +167,45 @@ export class PlayerControls {
     });
     return btn;
   }
+
+  /** 推し指名 (§1): 選択中の対象を推しにする。生存中はカルマ加速。 */
+  private championButton(): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.textContent = '⭐ 推し指名';
+    btn.className = 'dock-btn btn-champion';
+    btn.title = '推しが生存中はカルマ加速。死ぬとカルマ罰 + 弔いの掟が生まれる';
+    btn.addEventListener('click', () => {
+      const id = this.selectedId;
+      if (id) this.h.onChampion(id);
+    });
+    return btn;
+  }
 }
 
-function heading(text: string): HTMLElement {
-  const el = document.createElement('h3');
-  el.textContent = text;
-  return el;
-}
-function subLabel(text: string): HTMLElement {
-  const el = document.createElement('div');
-  el.className = 'sub';
-  el.textContent = text;
-  return el;
-}
-function hint(text: string): HTMLElement {
-  const el = document.createElement('div');
-  el.className = 'muted';
-  el.textContent = text;
-  return el;
-}
-function kv(label: string, value: string): HTMLElement {
-  const r = document.createElement('div');
-  r.className = 'kv';
+/** ラベル付きセレクタ (小ラベル + select) を縦に組む。 */
+function dockField(label: string, select: HTMLSelectElement): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'dock-field';
   const l = document.createElement('span');
+  l.className = 'dock-field-label';
   l.textContent = label;
-  const v = document.createElement('span');
-  v.className = 'kv-val';
-  v.textContent = value;
-  r.append(l, v);
-  return r;
+  box.append(l, select);
+  return box;
+}
+
+/** 状態チップ (ラベル + 値)。値が空ならラベルのみ。 */
+function chip(label: string, value: string): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'dock-chip';
+  const l = document.createElement('span');
+  l.className = 'dock-chip-label';
+  l.textContent = label;
+  box.appendChild(l);
+  if (value) {
+    const v = document.createElement('span');
+    v.className = 'dock-chip-val';
+    v.textContent = value;
+    box.appendChild(v);
+  }
+  return box;
 }
