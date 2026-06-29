@@ -51,9 +51,12 @@ export class VillageScene {
   readonly root = new Container();
   private readonly bg = new Graphics();
   private readonly grid = new Graphics();
+  private readonly itemLayer = new Container();
   private readonly layer = new Container();
   private readonly vignette = new Graphics();
   private readonly units = new Map<string, Unit>();
+  /** フィールドアイテム (§16) の表示ノード。id → 絵文字 Text。 */
+  private readonly itemNodes = new Map<string, Text>();
   private w = 1;
   private h = 1;
   private cell = 24;
@@ -65,7 +68,8 @@ export class VillageScene {
 
   constructor(private readonly tex: Map<AnimalName, Texture>) {
     this.layer.sortableChildren = true;
-    this.root.addChild(this.bg, this.grid, this.layer, this.vignette);
+    // itemLayer は grid の上・どうぶつ (layer) の下に置く (落とし物は足元に見える)。
+    this.root.addChild(this.bg, this.grid, this.itemLayer, this.layer, this.vignette);
   }
 
   awakeIds(world: WireWorld): string[] {
@@ -168,6 +172,8 @@ export class VillageScene {
     this.vignette.clear();
     if (focusing) this.vignette.rect(0, 0, w, h).fill({ color: 0x000000, alpha: 0.45 });
 
+    this.renderItems(world, cellX, cellY);
+
     const victims = focusing ? [...this.focusSet].filter((id) => id !== this.focusPerp) : [];
 
     const seen = new Set<string>();
@@ -240,6 +246,29 @@ export class VillageScene {
       if (!seen.has(id)) {
         u.node.destroy({ children: true });
         this.units.delete(id);
+      }
+    }
+  }
+
+  /** フィールドアイテム (§16) を絵文字でマス目に描く。world.items と表示ノードを突き合わせる。 */
+  private renderItems(world: WireWorld, cellX: number, cellY: number): void {
+    const seen = new Set<string>();
+    for (const item of world.items) {
+      seen.add(item.id);
+      let node = this.itemNodes.get(item.id);
+      if (!node) {
+        node = new Text({ text: item.kind === 'precious' ? '💎' : '💊', style: { fontSize: 16 } });
+        node.anchor.set(0.5);
+        this.itemLayer.addChild(node);
+        this.itemNodes.set(item.id, node);
+      }
+      node.x = (item.position.x + 0.5) * cellX;
+      node.y = (item.position.y + 0.5) * cellY;
+    }
+    for (const [id, node] of this.itemNodes) {
+      if (!seen.has(id)) {
+        node.destroy();
+        this.itemNodes.delete(id);
       }
     }
   }

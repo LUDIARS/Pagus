@@ -18,6 +18,7 @@ import { SpectaclePanel } from './spectacle-panel.js';
 import { BetPanel } from './bet-panel.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
 import { AccountPanel } from './account-panel.js';
+import { ItemPanel } from './item-panel.js';
 import { ActionOverlay } from './action-overlay.js';
 import { connect, type Conn } from './ws-client.js';
 import { getUserId, setUserId, enablePush } from './push-client.js';
@@ -95,6 +96,12 @@ async function main(): Promise<void> {
   const cards = new CardPanel(el('cards'), {
     onCard: (card, args) => conn.send({ t: 'card', card, userId, ...args }),
   });
+
+  // アイテムパネル (§16): 人手でフィールドにアイテム配置 (ランダム/貴金属/薬物)。推しに直送も可。
+  const items = new ItemPanel(el('items'), {
+    onPlace: (kind, toChampion) => conn.send({ t: 'placeItem', kind, toChampion, userId }),
+  });
+  void items;
 
   // 経済パネル (§v1.3-B): 銀行 / 保険 / 闇市 / オークション (人から人への送金は廃止)。
   const economy = new EconomyPanel(el('economy'), {

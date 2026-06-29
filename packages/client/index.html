@@ -145,6 +145,16 @@
       #cards { background: #131019; border: 1px solid #4a3a5a; border-radius: 8px; padding: 10px; }
       #cards h3 { color: #c79bf2; }
 
+      /* アイテムパネル (§16)。 */
+      #items { background: #16130e; border: 1px solid #5a4a2a; border-radius: 8px; padding: 10px; }
+      #items h3 { color: #f2d08a; }
+      .item-kinds { display: flex; gap: 6px; margin: 4px 0 8px; }
+      .item-kind-btn { flex: 1; padding: 7px 4px; font-size: 13px; border-color: #c0a04f; color: #f2e6c0; }
+      .item-kind-btn.active { background: #283044; box-shadow: 0 0 0 1px #f2c94c inset; }
+      .item-btn { width: 100%; margin: 4px 0 2px; }
+      .item-btn.item-field { border-color: #6fcf97; color: #d0f2e0; }
+      .item-btn.item-champion { border-color: #f2c94c; color: #f2e0a0; }
+
       /* 政治パネル (§v1.3-C)。 */
       #governance { background: #15131a; border: 1px solid #4a4566; border-radius: 8px; padding: 10px; }
       #governance h3 { color: #b9aef2; }
@@ -409,6 +419,9 @@
       <div id="ao-content">
         <section class="ao-tab" data-tab="card" data-label="🃏 カード">
           <div id="cards"></div>
+        </section>
+        <section class="ao-tab" data-tab="item" data-label="🎁 アイテム">
+          <div id="items"></div>
         </section>
         <section class="ao-tab" data-tab="village" data-label="🏛 村">
           <div id="governance"></div>

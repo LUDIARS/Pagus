@@ -207,6 +207,20 @@ export const BASE_BEHAVIOR_RULES: BehaviorRule[] = [
       { kind: 'emotionDelta', emotionAxis: 'joy', delta: 0.05 },
     ],
   },
+  // §16 アイテム: 薬物を拾った個体 (eventParam 'drug' > 0、items.ts の DRUG_TAG と一致) は非行に走りやすい。
+  {
+    id: 'base_drugged',
+    source: 'base',
+    description: '薬物に手を出した者は気が荒れ、非行に走りやすい',
+    when: [
+      { kind: 'actionCategory', category: 'wander' },
+      { kind: 'eventParamAbove', tag: 'drug', value: 0 },
+    ],
+    then: [
+      { kind: 'triggerWeight', delta: 2 },
+      { kind: 'emotionDelta', emotionAxis: 'anger', delta: 0.1 },
+    ],
+  },
 ];
 
 /** base ルールの独立コピーを作る (world ごとに別配列で持たせ、haiku 追加で汚染しない)。 */

@@ -50,6 +50,12 @@ export class VillageStatus {
     this.root.appendChild(
       row('👑 最富裕', `${richest.name} (${Math.round(richest.wealth)} / ${HOBBY_LABELS[richest.hobby]})`),
     );
+    // §16 フィールドアイテム (拾われるまでの落とし物)。
+    if (w.items.length > 0) {
+      const precious = w.items.filter((i) => i.kind === 'precious').length;
+      const drug = w.items.length - precious;
+      this.root.appendChild(row('🎁 落とし物', `💎${precious} / 💊${drug}`));
+    }
   }
 
   private render(): void {

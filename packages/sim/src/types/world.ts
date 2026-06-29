@@ -1,4 +1,4 @@
-import type { Villager, VillagerId, ActivityPattern } from './villager.js';
+import type { Villager, VillagerId, ActivityPattern, GridPos } from './villager.js';
 import type { Incident } from './incident.js';
 import type { TrialState } from './trial.js';
 import type { VirtueVector } from '../virtue.js';
@@ -98,6 +98,19 @@ export interface VillageRule {
   text: string;
 }
 
+/**
+ * フィールドに落ちているアイテム (§16)。人手で配置するランダム配布物。
+ * 貴金属 (precious) = 拾うと富む / 薬物 (drug) = 拾うと気が荒れ非行に走りやすい。
+ * 'random' は配置時に precious/drug へ解決する。日末に最寄りの住民が拾って消える。
+ */
+export type FieldItemKind = 'precious' | 'drug';
+
+export interface FieldItem {
+  id: string;
+  kind: FieldItemKind;
+  position: GridPos;
+}
+
 /** 戒厳令の発動状態 (§v1.3-C ⑨)。freeze=月次事件を凍結 / surge=日常事件を多発させる。 */
 export interface MartialState {
   mode: MartialMode;
@@ -135,6 +148,8 @@ export interface World {
   villageRules: VillageRule[];
   /** ふるまいの法則 (§2.1)。日常の感情/行動を決めるルール群。Haiku が日末に増やす。 */
   behaviorRules: BehaviorRule[];
+  /** フィールドに落ちているアイテム (§16)。人手で配置し、日末に住民が拾う。 */
+  items: FieldItem[];
   /**
    * 戒厳令 (§v1.3-C ⑨)。発動中のみキーを持つ (exactOptionalPropertyTypes)。
    * freeze=fireScheduledIncident を抑止 / surge=DailyEngine の事件化閾値を下げる。

@@ -13,6 +13,14 @@ import { createVillager } from './villager-factory.js';
 import type { WorldBrain, DayEvaluation, WorldEvalContext, HolidayEvent, MonthlySchedule } from './world-brain.js';
 import type { BehaviorRule } from './behavior-rules.js';
 import { settleEconomy, type EconomySettlement } from './economy.js';
+import {
+  resolveItemKind,
+  applyItemEffect,
+  collectItems as collectFieldItems,
+  type ItemKindChoice,
+  type ItemPickup,
+} from './items.js';
+import type { FieldItem, FieldItemKind } from './types/index.js';
 import type { EventDirector } from './event-director.js';
 
 export type IdGen = () => string;
@@ -25,6 +33,16 @@ function counterIdGen(prefix: string): IdGen {
 /** 0..1 に丸める。徳目評判・性格軸の適用後クランプに使う。 */
 function clamp01(n: number): number {
   return Math.min(1, Math.max(0, n));
+}
+
+/** 復元した world.items の id (item_N) から最大番号を求める (§16, 通し番号の続きを決める)。 */
+function maxItemIndex(items: FieldItem[]): number {
+  let max = 0;
+  for (const it of items) {
+    const n = Number(it.id.replace(/^item_/, ''));
+    if (Number.isInteger(n) && n > max) max = n;
+  }
+  return max;
 }
 
 /** 出生どうぶつの種の候補。 */
@@ -129,6 +147,8 @@ export class TermMachine {
   private incidentCount: number;
   /** ふるまいの法則の通し番号 (rule_haiku_N を振る, §2.1)。 */
   private ruleCount: number;
+  /** フィールドアイテムの通し番号 (§16)。復元した world.items と衝突しないよう既存最大値から続ける。 */
+  private itemCount: number;
   /** ふるまいの法則の上限 (§2.1)。 */
   private readonly rulesMax: number;
   /** 戒厳令 surge (§v1.3-C ⑨) の閾値ボーナス。 */
@@ -158,6 +178,7 @@ export class TermMachine {
     this.bornCount = opts.bornCount ?? 0;
     this.incidentCount = opts.incidentCount ?? 0;
     this.ruleCount = opts.ruleCount ?? 0;
+    this.itemCount = maxItemIndex(world.items); // 復元した items の最大番号から続ける (衝突回避)
     this.rulesMax = opts.rulesMax ?? 40;
     this.martialSurgeBonus = opts.martialSurgeBonus ?? 4;
   }
@@ -1080,6 +1101,41 @@ export class TermMachine {
    */
   settleEconomy(): EconomySettlement {
     return settleEconomy(this.world.villagers.values(), this.rng);
+  }
+
+  // --- フィールドアイテム (§16) -------------------------------------------------
+
+  /**
+   * フィールドにアイテムを配置する (§16)。'random' は precious/drug に解決し、ランダムな空きマスに置く。
+   * カルマ消費は呼び出し側 (server) で行わない = 無料・ランダム配布。
+   */
+  placeItem(choice: ItemKindChoice): FieldItem {
+    this.itemCount += 1;
+    const kind = resolveItemKind(choice, this.rng);
+    const position = {
+      x: Math.floor(this.rng() * this.world.config.gridWidth),
+      y: Math.floor(this.rng() * this.world.config.gridHeight),
+    };
+    const item: FieldItem = { id: `item_${this.itemCount}`, kind, position };
+    this.world.items.push(item);
+    return item;
+  }
+
+  /**
+   * 推しに直接アイテムを送る (§16)。フィールドを介さず対象へ即適用する。
+   * 対象が不在/退場なら null。
+   */
+  giveChampionItem(choice: ItemKindChoice, championId: string): { kind: FieldItemKind; name: string } | null {
+    const v = this.world.villagers.get(championId);
+    if (!v || !v.alive) return null;
+    const kind = resolveItemKind(choice, this.rng);
+    applyItemEffect(v, kind);
+    return { kind, name: v.name };
+  }
+
+  /** 日末: フィールド上のアイテムを最寄りの住民が拾う (§16)。 */
+  collectItems(): ItemPickup[] {
+    return collectFieldItems(this.world);
   }
 
   /** 日末の生活イベント (結婚/出産)。確率は option 既定 0 (= テスト不変)。 */

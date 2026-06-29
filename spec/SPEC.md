@@ -430,6 +430,18 @@ data/
 - **決済**: `TermMachine.settleEconomy()` を server が日末 (advance) に呼び、送金/クズ化遷移/たかりを live feed に出す。
 - **観測**: 右パネル「村の経済」に 富裕/貧困/クズ化 数・最富裕個体を表示。snapshot は v7。
 
+## 16. フィールドアイテム (人手のランダム配布) — 実装済
+
+> 2026-06-29 起草・実装。プレイヤーが**フィールドにアイテムを配置**できる (§15 経済へ波及)。**カルマ消費なし・ランダム配布**。`packages/sim/src/items.ts` + `World.items`。snapshot v8。
+
+- **種別**: ランダム / 貴金属 (precious) / 薬物 (drug)。'random' は配置時に precious/drug へ解決。
+- **配置**: `placeItem(kind)` がランダムな空きマスに置く (`World.items`)。client の「🎁 アイテム」タブから。
+- **推しに直送**: `giveChampionItem(kind, championId)` でフィールドを介さず推しへ即適用 (`toChampion=true`)。
+- **拾得 (日末)**: `collectItems` で各アイテムを**最寄りの生存住民**が拾い、効果適用後に消える。
+- **効果**: 貴金属 → 所持金 +`preciousWealth`(150) (クズ化の誘因)。薬物 → 怒り +`drugAnger`(0.3)・所持金 −`drugWealthLoss`(20)・eventParam `drug`+1。
+- **非行連動**: 薬物を拾った個体 (`eventParam 'drug' > 0`) は behavior-rule `base_drugged` で `triggerWeight`+2・怒り+ → 事件化しやすくなる (黒箱エンジン)。
+- **観測**: フィールドに 💎/💊 を描画 (`VillageScene`)、右パネルに落とし物数。配置/拾得は live feed / 村の歴史に出す。
+
 ## 11. 開いている設計判断
 
 > 2026-06-26: 実装で確定した項目 — 裁判の2問(「最も愚か」で被告選び→「殺す/活かす」)、GANs別コンテキスト(加害者/被害者視点の step を交互)、住民bloc+ユーザ1票+狂人加重の合算、世界側日末評価(reputationDelta/villagerDeltas/spawn)、創発/生活メカニクス(狂人/和解/二次被害/ストレス耐性/結婚出産 §8B)、糾弾の Haiku 生成+レパートリー(§5.3)、村の歴史(§8B.8)。

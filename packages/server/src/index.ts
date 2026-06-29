@@ -6,7 +6,7 @@
 // 例外で env 維持: PAGUS_CONFIG_KEY (マスター鍵) / PAGUS_FRESH (その起動だけ world.json 無視) /
 // PAGUS_BRAIN (stub|llm の起動モード) / PAGUS_DATA_DIR (config 自体の置き場を解決するため)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
 import { loadPagusConfig, type PagusConfig } from './config/pagus-config.js';
 import { TermLoop } from './term-loop.js';
@@ -511,6 +511,30 @@ function main(): void {
       }
       ps.setChampion(userId, targetId);
       pushState(userId);
+    },
+    // フィールドアイテム配置 (§16): カルマ消費なし・ランダム配布。toChampion で推しに直送。
+    onPlaceItem: (kind, toChampion, userId) => {
+      knownUsers.add(userId);
+      const cal = tm.world.calendar;
+      const date = `${cal.month}月${cal.dayOfMonth}日`;
+      if (toChampion) {
+        const championId = ps.snapshot(userId, Date.now()).championId;
+        if (!championId) {
+          ws.sendRejected(userId, '推しが未指名 (先に推しを指名)');
+          return;
+        }
+        const res = tm.giveChampionItem(kind, championId);
+        if (!res) {
+          ws.sendRejected(userId, 'その推しは不在 (生存どうぶつのみ)');
+          return;
+        }
+        chronicle.add(date, `🎁 ${ITEM_LABELS[res.kind]}を推しの ${res.name} に渡した`, 'other');
+      } else {
+        const item = tm.placeItem(kind);
+        chronicle.add(date, `🎁 ${ITEM_LABELS[item.kind]}がフィールドに置かれた`, 'other');
+      }
+      ws.updateChronicle(chronicle.recent());
+      ws.broadcastSnapshot(tm.world);
     },
     onAddRule: (text, userId) => {
       knownUsers.add(userId);

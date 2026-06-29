@@ -1,7 +1,7 @@
 // WS 配線契約。World は Map を持ち JSON 化できないので、villagers を配列にした
 // WireWorld を介して server→client へ送る。client もこの型だけ見れば描画できる。
 
-import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule, MartialState, MartialMode } from './types/index.js';
+import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule, MartialState, MartialMode, FieldItem } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 import { defaultBehaviorRules, type BehaviorRule } from './behavior-rules.js';
 
@@ -17,6 +17,8 @@ export interface WireWorld {
   scheduledIncident: ScheduledIncident | null;
   villageRules: VillageRule[];
   behaviorRules: BehaviorRule[];
+  /** フィールドに落ちているアイテム (§16)。 */
+  items: FieldItem[];
   /** 戒厳令 (§v1.3-C ⑨)。発動中のみ。 */
   martial?: MartialState;
 }
@@ -34,6 +36,7 @@ export function toWire(world: World): WireWorld {
     scheduledIncident: world.scheduledIncident,
     villageRules: world.villageRules,
     behaviorRules: world.behaviorRules,
+    items: world.items,
   };
   // exactOptionalPropertyTypes: 戒厳令は発動中のみキーを足す (§v1.3-C ⑨)。
   if (world.martial !== undefined) wire.martial = world.martial;
@@ -54,6 +57,7 @@ export function fromWire(wire: WireWorld): World {
     scheduledIncident: wire.scheduledIncident ?? null,
     villageRules: wire.villageRules ?? [],
     behaviorRules: wire.behaviorRules ?? defaultBehaviorRules(),
+    items: wire.items ?? [],
   };
   if (wire.martial !== undefined) world.martial = wire.martial;
   return world;
@@ -63,7 +67,8 @@ export function fromWire(wire: WireWorld): World {
 // v5: BehaviorRule.expiresAtTerm/source='card' + Villager.hiddenUntilTerm (§v1.3-A カードパック)。
 // v6: World.martial (§v1.3-C 政治パック 戒厳令)。
 // v7: Villager.wealth/hobby/admireId/scummy (§15 住民経済)。
-export const WORLD_SNAPSHOT_VERSION = 7;
+// v8: World.items (§16 フィールドアイテム)。
+export const WORLD_SNAPSHOT_VERSION = 8;
 
 /**
  * 永続化する world スナップショット。WireWorld (JSON 化可能な world) に加え、
@@ -343,6 +348,9 @@ export type ClientMessage =
   | { t: 'cheer'; targetId: string; userId?: string } // 対象の気質を後押しする (§4.5)
   | { t: 'vote'; pick: string; userId?: string } // 裁判への 1 票 (foolish=候補id / fate='kill'|'spare')。userId で接続ユーザを区別 (重み合算)
   | { t: 'champion'; targetId: string; userId?: string } // 推しを 1 体指名 (§1)。再送で差し替え
+  // フィールドアイテム配置 (§16)。カルマ消費なし・ランダム配布。kind='random'|'precious'|'drug'。
+  // toChampion=true なら推しに直接送る (フィールドを介さない)。
+  | { t: 'placeItem'; kind: 'random' | 'precious' | 'drug'; toChampion?: boolean; userId?: string }
   | { t: 'addRule'; text: string; userId?: string } // カルマを払って村のしきたりを 1 件追加 (§2)
   | { t: 'removeRule'; ruleId: string; userId?: string } // カルマを払って村のしきたりを 1 件廃する (§2)
   | { t: 'bet'; pick: 'death' | 'educate'; amount: number; userId?: string } // 裁判の運命段階で結果に賭ける (§3)

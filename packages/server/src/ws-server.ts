@@ -55,6 +55,8 @@ export interface WsHandlers {
   onCheer(targetId: string, userId: string): void;
   onVote(pick: string, userId?: string): void;
   onChampion(targetId: string, userId: string): void;
+  /** フィールドアイテム配置 (§16)。toChampion=true で推しに直接送る。 */
+  onPlaceItem(kind: 'random' | 'precious' | 'drug', toChampion: boolean, userId: string): void;
   onAddRule(text: string, userId: string): void;
   onRemoveRule(ruleId: string, userId: string): void;
   onBet(pick: 'death' | 'educate', amount: number, userId: string): void;
@@ -210,6 +212,9 @@ export class GameWsServer {
     } else if (msg.t === 'champion') {
       this.bind(ws, msg.userId);
       this.h.onChampion(msg.targetId, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'placeItem') {
+      this.bind(ws, msg.userId);
+      this.h.onPlaceItem(msg.kind, msg.toChampion ?? false, this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'addRule') {
       this.bind(ws, msg.userId);
       this.h.onAddRule(msg.text, this.resolveUser(ws, msg.userId));

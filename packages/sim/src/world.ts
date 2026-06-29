@@ -52,6 +52,7 @@ export function createWorld(
     scheduledIncident: null,
     villageRules,
     behaviorRules,
+    items: [],
   };
 }
 
