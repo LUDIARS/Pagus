@@ -93,6 +93,8 @@ export interface PlayerStateSnapshot {
   karma: number;
   virtue: number;
   sanctionCost: number;
+  /** いま扇動に必要なカルマ (固定コスト, §4 消費カルマ表示用)。 */
+  inciteCost: number;
   canCheerInMs: number;
   /** 推し (champion) の villager id。未指名は null (§1)。 */
   championId: string | null;
@@ -447,6 +449,7 @@ export class PlayerState {
       karma: e.karma,
       virtue: e.virtue,
       sanctionCost: this.sanctionCost(userId),
+      inciteCost: this.inciteCostValue,
       canCheerInMs: this.canCheerInMs(userId, now),
       championId: e.championId,
       savings: e.savings,

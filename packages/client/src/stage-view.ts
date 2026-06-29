@@ -73,6 +73,22 @@ export class StageView {
     this.trial.setLines(incidentId, lines);
   }
 
+  /**
+   * プレイヤーの行動 (§4) に対象どうぶつが即リアクションする吹き出し (扇動の手応えが無い問題への対応)。
+   * 村シーン表示中のみ。裁判中は何もしない。
+   */
+  reactToAction(targetId: string, type: 'incite' | 'sanction' | 'cheer' | 'champion'): void {
+    if (this.inTrial) return;
+    const react: Record<typeof type, { text: string; tone: 'calm' | 'angry' }> = {
+      incite: { text: 'なんだと…！？', tone: 'angry' },
+      sanction: { text: 'やめてくれ…！', tone: 'angry' },
+      cheer: { text: 'ありがとう！', tone: 'calm' },
+      champion: { text: '推されてる…！', tone: 'calm' },
+    };
+    const r = react[type];
+    this.village.say(targetId, r.text, r.tone);
+  }
+
   update(world: WireWorld): void {
     this.last = world;
     this.chatter.setWorld(world);

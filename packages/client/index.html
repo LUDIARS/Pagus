@@ -123,12 +123,23 @@
       .dock-field-label { font-size: 10px; color: #8b96ad; }
       .dock-select { min-width: 140px; max-width: 220px; background: #0e121b; color: #cdd6e4;
         border: 1px solid #38405a; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
-      .dock-actions { display: flex; gap: 6px; margin-left: auto; }
+      /* ① コマンド選択 (消費カルマ併記)。選択中は枠を強調する。 */
+      .dock-commands { display: flex; gap: 6px; }
+      .dock-cmd-btn { display: flex; flex-direction: column; align-items: center; gap: 1px;
+        white-space: nowrap; padding: 5px 10px; font-size: 13px; line-height: 1.15; }
+      .dock-cmd-btn.active { background: #283044; box-shadow: 0 0 0 1px currentColor inset; }
+      .dock-cmd-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+      .dock-cmd-label { font-weight: bold; }
+      .dock-cmd-cost { font-size: 10px; color: #8b96ad; }
+      .dock-cmd-btn.active .dock-cmd-cost { color: #cdd6e4; }
+      .dock-cmd-btn.cmd-incite { border-color: #eb5757; color: #ff8a8a; }
+      .dock-cmd-btn.cmd-sanction { border-color: #f2994a; color: #f2b988; }
+      .dock-cmd-btn.cmd-cheer { border-color: #6fcf97; color: #9be0b5; }
+      .dock-cmd-btn.cmd-champion { border-color: #f2c94c; color: #f2e0a0; }
+      /* ② 実行ボタン。 */
       .dock-btn { white-space: nowrap; padding: 8px 12px; font-size: 13px; }
-      .dock-btn.btn-incite { border-color: #eb5757; }
-      .dock-btn.btn-sanction { border-color: #f2994a; }
-      .dock-btn.btn-cheer { border-color: #6fcf97; }
-      .dock-btn.btn-champion { border-color: #f2c94c; color: #f2e0a0; }
+      .dock-exec { margin-left: auto; border-color: #56ccf2; color: #9be3ff; font-weight: bold; }
+      .dock-exec:disabled { opacity: 0.45; cursor: not-allowed; }
 
       /* カードパネル (§v1.3-A)。 */
       #cards { background: #131019; border: 1px solid #4a3a5a; border-radius: 8px; padding: 10px; }
@@ -304,7 +315,7 @@
       /* タブレット〜モバイル: 中央を全画面、左右はスライドインのドロワー。
          行動ドックは画面下に残し、ドロワー/オーバーレイ/バックドロップはドックの上で止める。 */
       @media (max-width: 860px) {
-        :root { --dock-h: 144px; }
+        :root { --dock-h: 160px; }
         #hud { font-size: 12px; }
         .drawer-toggle { display: inline-block; }
         #main { padding: 8px; gap: 0; }
@@ -338,12 +349,13 @@
 
       /* スマホ縦: タイトルを省き、行動ボタンを等分配置して指で押しやすく。 */
       @media (max-width: 520px) {
-        :root { --dock-h: 172px; }
+        :root { --dock-h: 208px; }
         .dock-title { display: none; }
         .dock-state { gap: 4px; }
         .dock-chip { padding: 3px 7px; font-size: 11px; }
-        .dock-actions { width: 100%; }
-        .dock-btn { flex: 1; padding: 9px 4px; }
+        .dock-commands { width: 100%; }
+        .dock-cmd-btn { flex: 1; padding: 5px 2px; }
+        .dock-exec { width: 100%; margin-left: 0; }
       }
     </style>
   </head>

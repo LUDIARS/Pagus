@@ -79,11 +79,16 @@ async function main(): Promise<void> {
       conn.send(rumorAboutId ? { t: 'incite', targetId, rumorAboutId, userId } : { t: 'incite', targetId, userId });
     } else if (type === 'sanction') conn.send({ t: 'sanction', targetId, userId });
     else conn.send({ t: 'cheer', targetId, userId });
+    // 行動の手応え: 対象どうぶつに即リアクション吹き出しを出す (扇動のリアクション無し問題への対応)。
+    stage.reactToAction(targetId, type);
   };
   const controls = new PlayerControls(el('controls'), {
     onAction: sendAction,
     // 推し指名 (§1): 選択中の対象を推しにする。
-    onChampion: (targetId) => conn.send({ t: 'champion', targetId, userId }),
+    onChampion: (targetId) => {
+      conn.send({ t: 'champion', targetId, userId });
+      stage.reactToAction(targetId, 'champion');
+    },
   });
 
   // カードパネル (§v1.3-A): カルマで切る一発介入カード 5 種。

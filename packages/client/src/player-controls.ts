@@ -1,6 +1,8 @@
-// プレイヤー行動パネル (§4)。画面下の独立ドック (#action-dock) に常時表示する横並びバー。
-// カルマ/善性/制裁コスト/応援クールダウン/推し を左にチップ表示し、どうぶつを 1 体選んで
-// 扇動 / 制裁 / 応援 / 推し指名 する。PC・モバイル共通で画面下に出す (レスポンシブで折り返す)。
+// プレイヤー行動パネル (§4)。画面下の独立ドック (#action-dock) に常時表示する2段 UI:
+//   ① コマンドを選ぶ (扇動 / 制裁 / 応援 / 推し指名。各ボタンに消費カルマを併記) →
+//   ② 対象を選ぶ → 実行。
+// 扇動は推しを対象から除外する (推しに誤って扇動しないため §4.2)。実行時の手応えは
+// main がステージのリアクション吹き出しで返す (扇動のリアクションが無い問題への対応)。
 
 import type { WireWorld } from '@pagus/sim';
 
@@ -9,6 +11,8 @@ export interface PlayerStateView {
   karma: number;
   virtue: number;
   sanctionCost: number;
+  /** 扇動の固定コスト (§4 消費カルマ表示用)。 */
+  inciteCost: number;
   canCheerInMs: number;
   /** 推し (champion) の villager id。未指名は null (§1)。 */
   championId: string | null;
@@ -17,6 +21,8 @@ export interface PlayerStateView {
 }
 
 export type ActionType = 'incite' | 'sanction' | 'cheer';
+/** ドックで選べるコマンド (行動)。champion = 推し指名。 */
+type Command = ActionType | 'champion';
 
 export interface ControlHandlers {
   /** 対象 id を伴って操作を送る。扇動は rumorAboutId (悪口の主) を任意で伴う (§4.2)。 */
@@ -25,16 +31,37 @@ export interface ControlHandlers {
   onChampion(targetId: string): void;
 }
 
+/** コマンドの表示メタ。 */
+interface CommandMeta {
+  label: string;
+  /** 推しを対象から外すか (扇動のみ true)。 */
+  excludeChampion: boolean;
+  /** 悪口の主セレクタを出すか (扇動のみ)。 */
+  needsRumor: boolean;
+}
+const COMMANDS: Record<Command, CommandMeta> = {
+  incite: { label: '🔥 扇動', excludeChampion: true, needsRumor: true },
+  sanction: { label: '⚖ 制裁', excludeChampion: false, needsRumor: false },
+  cheer: { label: '🌸 応援', excludeChampion: false, needsRumor: false },
+  champion: { label: '⭐ 推し指名', excludeChampion: false, needsRumor: false },
+};
+const COMMAND_ORDER: Command[] = ['incite', 'sanction', 'cheer', 'champion'];
+
 export class PlayerControls {
   private world: WireWorld | null = null;
   private state: PlayerStateView | null = null;
+  private command: Command = 'incite';
   private selectedId: string | null = null;
   /** 扇動の噂の主 (誰の悪口を吹き込むか, §4.2)。未選択は null。 */
   private rumorAboutId: string | null = null;
 
   private readonly stateBox = document.createElement('div');
+  private readonly cmdBar = document.createElement('div');
   private readonly select = document.createElement('select');
+  private readonly rumorField = document.createElement('div');
   private readonly rumorSelect = document.createElement('select');
+  private readonly execBtn = document.createElement('button');
+  private readonly cmdButtons = new Map<Command, HTMLButtonElement>();
 
   constructor(
     private readonly root: HTMLElement,
@@ -44,41 +71,54 @@ export class PlayerControls {
     const row = document.createElement('div');
     row.className = 'dock-row';
 
-    // 左: タイトル + 自分の状態チップ。
     const title = document.createElement('span');
     title.className = 'dock-title';
     title.textContent = '🎯 行動';
     this.stateBox.className = 'dock-state';
     row.append(title, this.stateBox);
 
-    // 中: 対象どうぶつ + 悪口の主 (扇動)。
+    // ① コマンド選択 (消費カルマ併記)。
+    this.cmdBar.className = 'dock-commands';
+    for (const cmd of COMMAND_ORDER) {
+      const btn = document.createElement('button');
+      btn.className = `dock-cmd-btn cmd-${cmd}`;
+      btn.addEventListener('click', () => this.selectCommand(cmd));
+      this.cmdBar.appendChild(btn);
+      this.cmdButtons.set(cmd, btn);
+    }
+    row.appendChild(this.cmdBar);
+
+    // ② 対象選択。
     this.select.className = 'dock-select';
     this.select.addEventListener('change', () => {
       this.selectedId = this.select.value || null;
     });
-    // 扇動の噂の主 (§4.2): 「誰の悪口か」を選ぶ第2セレクタ。未選択 = 漠然とした不穏な噂。
+    row.appendChild(dockField('対象', this.select));
+
+    // 扇動の噂の主 (§4.2)。扇動のときだけ出す。
     this.rumorSelect.className = 'dock-select';
     this.rumorSelect.addEventListener('change', () => {
       this.rumorAboutId = this.rumorSelect.value || null;
     });
-    row.append(
-      dockField('対象', this.select),
-      dockField('悪口の主', this.rumorSelect),
-    );
+    this.rumorField.className = 'dock-field';
+    {
+      const l = document.createElement('span');
+      l.className = 'dock-field-label';
+      l.textContent = '悪口の主';
+      this.rumorField.append(l, this.rumorSelect);
+    }
+    row.appendChild(this.rumorField);
 
-    // 右: 行動ボタン群。
-    const btns = document.createElement('div');
-    btns.className = 'dock-actions';
-    btns.append(
-      this.actionButton('🔥 扇動', 'incite', 'btn-incite', '偽情報で事件化を促す'),
-      this.actionButton('⚖ 制裁', 'sanction', 'btn-sanction', '即つるし上げ裁判'),
-      this.actionButton('🌸 応援', 'cheer', 'btn-cheer', '気質を後押し'),
-      this.championButton(),
-    );
-    row.append(btns);
+    // 実行ボタン。
+    this.execBtn.className = 'dock-btn dock-exec';
+    this.execBtn.addEventListener('click', () => this.execute());
+    row.appendChild(this.execBtn);
 
     this.root.appendChild(row);
+    this.selectCommand('incite');
     this.renderState();
+    // 応援クールダウンの残りを毎秒詰める (state 再送を待たずに表示/活性を進める)。
+    setInterval(() => this.renderState(), 1000);
   }
 
   setWorld(world: WireWorld): void {
@@ -88,45 +128,51 @@ export class PlayerControls {
 
   setState(s: PlayerStateView): void {
     this.state = s;
+    this.refreshTargets(); // 推し変化を対象除外へ反映
     this.renderState();
   }
 
-  /** 生存どうぶつで select を作り直す。選択中が退場していたら先頭へ。 */
+  /** コマンドを選ぶ (①)。対象リスト・噂の主表示・実行ボタンを切り替える。 */
+  private selectCommand(cmd: Command): void {
+    this.command = cmd;
+    for (const [c, btn] of this.cmdButtons) btn.classList.toggle('active', c === cmd);
+    this.rumorField.style.display = COMMANDS[cmd].needsRumor ? '' : 'none';
+    this.refreshTargets();
+    this.renderState();
+  }
+
+  /** 現コマンドの消費カルマ (表示用)。応援/推し指名は 0 (無料)。 */
+  private costOf(cmd: Command): number {
+    const s = this.state;
+    if (!s) return 0;
+    if (cmd === 'incite') return s.inciteCost;
+    if (cmd === 'sanction') return Math.round(s.sanctionCost);
+    return 0;
+  }
+
+  /** 生存どうぶつで対象 select を作り直す。扇動は推しを除外する。 */
   private refreshTargets(): void {
     const w = this.world;
     if (!w) return;
-    const alive = w.villagers.filter((v) => v.alive);
-    if (this.selectedId && !alive.some((v) => v.id === this.selectedId)) {
-      this.selectedId = null;
-    }
+    const championId = this.state?.championId ?? null;
+    const exclude = COMMANDS[this.command].excludeChampion;
+    const alive = w.villagers.filter((v) => v.alive && !(exclude && v.id === championId));
+
+    if (this.selectedId && !alive.some((v) => v.id === this.selectedId)) this.selectedId = null;
     if (!this.selectedId && alive.length > 0) this.selectedId = alive[0]?.id ?? null;
 
-    this.select.replaceChildren();
-    for (const v of alive) {
-      const opt = document.createElement('option');
-      opt.value = v.id;
-      opt.textContent = `${v.name} (${v.species})`;
-      if (v.id === this.selectedId) opt.selected = true;
-      this.select.appendChild(opt);
-    }
-    if (alive.length === 0) {
-      const opt = document.createElement('option');
-      opt.value = '';
-      opt.textContent = '(どうぶつがいません)';
-      this.select.appendChild(opt);
-    }
+    fillSelect(this.select, alive, this.selectedId, '(対象がいません)');
 
-    // 噂の主セレクタ (§4.2): 先頭に「(指定なし)」、続いて生存どうぶつ。退場済みはリセット。
-    if (this.rumorAboutId && !alive.some((v) => v.id === this.rumorAboutId)) {
-      this.rumorAboutId = null;
-    }
+    // 噂の主 (§4.2): 先頭に「(指定なし)」、続いて生存どうぶつ。退場済みはリセット。
+    const aliveAll = w.villagers.filter((v) => v.alive);
+    if (this.rumorAboutId && !aliveAll.some((v) => v.id === this.rumorAboutId)) this.rumorAboutId = null;
     this.rumorSelect.replaceChildren();
     const none = document.createElement('option');
     none.value = '';
     none.textContent = '(指定なし)';
     if (!this.rumorAboutId) none.selected = true;
     this.rumorSelect.appendChild(none);
-    for (const v of alive) {
+    for (const v of aliveAll) {
       const opt = document.createElement('option');
       opt.value = v.id;
       opt.textContent = `${v.name} (${v.species})`;
@@ -135,54 +181,81 @@ export class PlayerControls {
     }
   }
 
+  /** 状態チップ + 実行ボタンのラベル/活性を描画する。 */
   private renderState(): void {
-    this.stateBox.replaceChildren();
     const s = this.state;
+    this.stateBox.replaceChildren();
     if (!s) {
       this.stateBox.appendChild(chip('接続待ち…', ''));
+    } else {
+      const champ = s.championId ? (s.championName ?? '指名中') : '未指名';
+      this.stateBox.append(
+        chip('💠 カルマ', s.karma.toFixed(1)),
+        chip('😇 善性', s.virtue.toFixed(2)),
+        chip('⭐ 推し', champ),
+      );
+    }
+    // コマンドボタンのコスト併記 + 応援クールダウン表示。
+    const cd = s ? Math.max(0, s.canCheerInMs) : 0;
+    for (const cmd of COMMAND_ORDER) {
+      const btn = this.cmdButtons.get(cmd);
+      if (!btn) continue;
+      btn.replaceChildren();
+      const lab = document.createElement('span');
+      lab.className = 'dock-cmd-label';
+      lab.textContent = COMMANDS[cmd].label;
+      const cost = document.createElement('span');
+      cost.className = 'dock-cmd-cost';
+      cost.textContent = costLabel(cmd, this.costOf(cmd), cd);
+      btn.append(lab, cost);
+      // 応援はクールダウン中は不可。
+      btn.disabled = cmd === 'cheer' && cd > 0;
+    }
+    // 実行ボタン。
+    const meta = COMMANDS[this.command];
+    const c = this.costOf(this.command);
+    this.execBtn.textContent = `${meta.label} を実行${c > 0 ? ` (−${c})` : ''}`;
+    this.execBtn.disabled = !this.selectedId || (this.command === 'cheer' && cd > 0);
+  }
+
+  /** 実行 (②の後)。選択中のコマンド+対象でハンドラを呼ぶ。 */
+  private execute(): void {
+    const id = this.selectedId;
+    if (!id) return;
+    if (this.command === 'champion') {
+      this.h.onChampion(id);
       return;
     }
-    const cd = s.canCheerInMs;
-    const champ = s.championId ? (s.championName ?? s.championId) : '未指名';
-    this.stateBox.append(
-      chip('💠 カルマ', s.karma.toFixed(1)),
-      chip('😇 善性', s.virtue.toFixed(2)),
-      chip('⚖ 制裁', s.sanctionCost.toFixed(1)),
-      chip('🌸 応援', cd <= 0 ? '可' : `${Math.ceil(cd / 1000)}s`),
-      chip('⭐ 推し', champ),
-    );
-  }
-
-  private actionButton(label: string, type: ActionType, cls: string, tip: string): HTMLButtonElement {
-    const btn = document.createElement('button');
-    btn.textContent = label;
-    btn.className = `dock-btn ${cls}`;
-    btn.title = tip;
-    btn.addEventListener('click', () => {
-      const id = this.selectedId;
-      if (!id) return;
-      // 扇動のときだけ噂の主 (rumorAboutId) を伴わせる (§4.2)。未選択なら省略。
-      if (type === 'incite' && this.rumorAboutId) this.h.onAction(type, id, this.rumorAboutId);
-      else this.h.onAction(type, id);
-    });
-    return btn;
-  }
-
-  /** 推し指名 (§1): 選択中の対象を推しにする。生存中はカルマ加速。 */
-  private championButton(): HTMLButtonElement {
-    const btn = document.createElement('button');
-    btn.textContent = '⭐ 推し指名';
-    btn.className = 'dock-btn btn-champion';
-    btn.title = '推しが生存中はカルマ加速。死ぬとカルマ罰 + 弔いの掟が生まれる';
-    btn.addEventListener('click', () => {
-      const id = this.selectedId;
-      if (id) this.h.onChampion(id);
-    });
-    return btn;
+    if (this.command === 'incite' && this.rumorAboutId) this.h.onAction('incite', id, this.rumorAboutId);
+    else this.h.onAction(this.command, id);
   }
 }
 
-/** ラベル付きセレクタ (小ラベル + select) を縦に組む。 */
+/** 生存どうぶつで select を作り直す共通処理。 */
+function fillSelect(sel: HTMLSelectElement, alive: { id: string; name: string; species: string }[], selectedId: string | null, emptyText: string): void {
+  sel.replaceChildren();
+  for (const v of alive) {
+    const opt = document.createElement('option');
+    opt.value = v.id;
+    opt.textContent = `${v.name} (${v.species})`;
+    if (v.id === selectedId) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  if (alive.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = emptyText;
+    sel.appendChild(opt);
+  }
+}
+
+/** コマンドボタンに出すコスト文。応援はクールダウンを、無料系は「無料」を出す。 */
+function costLabel(cmd: Command, cost: number, cheerCdMs: number): string {
+  if (cmd === 'cheer') return cheerCdMs > 0 ? `あと${Math.ceil(cheerCdMs / 1000)}s` : '無料';
+  if (cost <= 0) return '無料';
+  return `−${cost}`;
+}
+
 function dockField(label: string, select: HTMLSelectElement): HTMLElement {
   const box = document.createElement('div');
   box.className = 'dock-field';
@@ -193,7 +266,6 @@ function dockField(label: string, select: HTMLSelectElement): HTMLElement {
   return box;
 }
 
-/** 状態チップ (ラベル + 値)。値が空ならラベルのみ。 */
 function chip(label: string, value: string): HTMLElement {
   const box = document.createElement('div');
   box.className = 'dock-chip';
