@@ -12,6 +12,7 @@ import { personalityFromVirtue, VIRTUES } from './virtue.js';
 import { createVillager } from './villager-factory.js';
 import type { WorldBrain, DayEvaluation, WorldEvalContext, HolidayEvent, MonthlySchedule } from './world-brain.js';
 import type { BehaviorRule } from './behavior-rules.js';
+import { settleEconomy, type EconomySettlement } from './economy.js';
 import type { EventDirector } from './event-director.js';
 
 export type IdGen = () => string;
@@ -1070,6 +1071,15 @@ export class TermMachine {
     if (reform.emotion) v.emotion = { ...v.emotion, ...reform.emotion };
     v.reformCount += 1;
     return `${v.name} は教育で作り替えられた: ${changes.join(' / ') || '微調整'} (${reform.rationale})`;
+  }
+
+  /**
+   * 日末の住民経済決済 (§15)。生存住民に 収入 → 趣味消費 → 推し送金 を適用し、
+   * クズ化判定・たかりを行う。server が advance フェーズでログ/たかり表示に使う。
+   * ブラックボックスエンジン (LLM 非依存の決定的アルゴリズム)。
+   */
+  settleEconomy(): EconomySettlement {
+    return settleEconomy(this.world.villagers.values(), this.rng);
   }
 
   /** 日末の生活イベント (結婚/出産)。確率は option 既定 0 (= テスト不変)。 */

@@ -1,7 +1,7 @@
 // 右パネル: 村のステータス (徳目6軸) + 同時接続プレイヤー数 + 投票結果。
 // players は WS の 'players' メッセージで、それ以外は snapshot で更新される。
 
-import { VIRTUES, VIRTUE_LABELS } from '@pagus/sim';
+import { VIRTUES, VIRTUE_LABELS, wealthTier, HOBBY_LABELS } from '@pagus/sim';
 import type { WireWorld, Virtue } from '@pagus/sim';
 
 const VIRTUE_COLOR: Record<Virtue, string> = {
@@ -29,6 +29,29 @@ export class VillageStatus {
     this.render();
   }
 
+  /** 村の経済 (§15): 貧富の分布・クズ・最富裕を出して貧富の差を可視化する。 */
+  private renderEconomy(w: WireWorld): void {
+    const alive = w.villagers.filter((v) => v.alive);
+    let richest = alive[0];
+    if (!richest) return;
+    this.root.appendChild(h('div', '村の経済 (§15)', 'sub'));
+    let poor = 0;
+    let rich = 0;
+    let scum = 0;
+    for (const v of alive) {
+      const tier = wealthTier(v.wealth);
+      if (tier === 'poor') poor += 1;
+      else if (tier === 'rich') rich += 1;
+      if (v.scummy) scum += 1;
+      if (v.wealth > richest.wealth) richest = v;
+    }
+    this.root.appendChild(row('💰 富裕 / 貧困', `${rich} / ${poor} 匹`));
+    if (scum > 0) this.root.appendChild(row('🤑 クズ化', `${scum} 匹`));
+    this.root.appendChild(
+      row('👑 最富裕', `${richest.name} (${Math.round(richest.wealth)} / ${HOBBY_LABELS[richest.hobby]})`),
+    );
+  }
+
   private render(): void {
     this.root.replaceChildren();
     this.root.appendChild(row('👥 接続プレイヤー', `${this.players} 人`));
@@ -43,6 +66,8 @@ export class VillageStatus {
     for (const v of VIRTUES) {
       this.root.appendChild(bar(VIRTUE_LABELS[v], w.reputation[v], VIRTUE_COLOR[v]));
     }
+
+    this.renderEconomy(w);
 
     this.root.appendChild(h('div', '裁判 / 投票結果', 'sub'));
     const t = w.trial;

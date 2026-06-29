@@ -15,6 +15,7 @@ describe('DailyEngine (日常 = LLM 非依存)', () => {
   it('自由行動は triggerAfter 回目に周囲がいれば事件化する', () => {
     const eng = new DailyEngine({ rng: () => 0.5, triggerAfter: 3 });
     const v = createVillager({ id: 'a', name: 'アオ', position: { x: 12, y: 12 } });
+    v.wealth = 200; // §15 経済ルールの影響を除いて triggerAfter 単体を検証する (貧困だと閾値が下がる)
     const env = envWith(true);
     expect(eng.decide(v, env, null).triggersIncident).toBe(false); // 1
     expect(eng.decide(v, env, null).triggersIncident).toBe(false); // 2

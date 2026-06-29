@@ -1,5 +1,6 @@
-import type { Villager, VillagerId, GridPos, ActivityPattern, VillagerOrigin } from './types/index.js';
+import type { Villager, VillagerId, GridPos, ActivityPattern, VillagerOrigin, Hobby } from './types/index.js';
 import { makePersonality, type PersonalityAxis } from './personality.js';
+import { initialWealth, pickHobby } from './economy.js';
 
 export interface VillagerSeed {
   id: VillagerId;
@@ -14,16 +15,21 @@ export interface VillagerSeed {
   madman?: boolean;
   /** 出自 (既定 'seed')。出生は 'born'、事件用キャラは 'incident'。 */
   origin?: VillagerOrigin;
+  /** 初期所持金 (§15)。未指定なら id ハッシュ + 野心から決定的に算出 (貧富の差)。 */
+  wealth?: number;
+  /** 趣味嗜好 (§15)。未指定なら dominant 気質から割り当て。 */
+  hobby?: Hobby;
 }
 
 /** シード or テスト用に、既定値で埋めた どうぶつ を作る。 */
 export function createVillager(seed: VillagerSeed): Villager {
+  const traits = makePersonality(seed.traits);
   return {
     id: seed.id,
     name: seed.name,
     alive: true,
     persona: {
-      traits: makePersonality(seed.traits),
+      traits,
       values: seed.values ?? [],
       speechStyle: seed.speechStyle ?? 'ふつう',
     },
@@ -39,5 +45,9 @@ export function createVillager(seed: VillagerSeed): Villager {
     partnerId: null,
     origin: seed.origin ?? 'seed',
     eventParams: {},
+    wealth: seed.wealth ?? initialWealth(seed.id, traits),
+    hobby: seed.hobby ?? pickHobby(traits),
+    admireId: null,
+    scummy: false,
   };
 }

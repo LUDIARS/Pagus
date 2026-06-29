@@ -91,6 +91,7 @@ describe('戒厳令 surge (§v1.3-C ⑨ DailyEngine.setSurge)', () => {
   it('surge=0 (平時) は triggerAfter どおり', () => {
     const eng = new DailyEngine({ rng: () => 0.5, triggerAfter: 3 });
     const v = createVillager({ id: 'a', name: 'アオ', position: { x: 12, y: 12 } });
+    v.wealth = 200; // §15 経済ルールの影響を除いて surge 単体を検証する (貧困だと閾値が下がる)
     eng.setSurge(0);
     expect(eng.decide(v, envWithNeighbor(), null).triggersIncident).toBe(false); // 1
     expect(eng.decide(v, envWithNeighbor(), null).triggersIncident).toBe(false); // 2
