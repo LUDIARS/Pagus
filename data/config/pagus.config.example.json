@@ -35,7 +35,6 @@
     "spiritAwayDays": 2
   },
   "economy": {
-    "bankInterest": 0.02,
     "insureDays": 5,
     "insureMult": 3,
     "reviveCost": 80,

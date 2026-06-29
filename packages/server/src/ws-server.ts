@@ -62,8 +62,6 @@ export interface WsHandlers {
   onBet(pick: 'death' | 'educate', amount: number, userId: string): void;
   onFaction(side: Faction, userId: string): void;
   onCard(card: CardName, args: CardArgs, userId: string): void;
-  onDeposit(amount: number, userId: string): void;
-  onWithdraw(amount: number, userId: string): void;
   onInsure(targetId: string, premium: number, userId: string): void;
   onBuyMarket(item: MarketItem, args: MarketArgs, userId: string): void;
   onBid(lotId: string, amount: number, userId: string): void;
@@ -236,12 +234,6 @@ export class GameWsServer {
       if (msg.kind !== undefined) args.kind = msg.kind;
       if (msg.text !== undefined) args.text = msg.text;
       this.h.onCard(msg.card, args, this.resolveUser(ws, msg.userId));
-    } else if (msg.t === 'deposit') {
-      this.bind(ws, msg.userId);
-      this.h.onDeposit(msg.amount, this.resolveUser(ws, msg.userId));
-    } else if (msg.t === 'withdraw') {
-      this.bind(ws, msg.userId);
-      this.h.onWithdraw(msg.amount, this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'insure') {
       this.bind(ws, msg.userId);
       this.h.onInsure(msg.targetId, msg.premium, this.resolveUser(ws, msg.userId));
@@ -307,7 +299,6 @@ export class GameWsServer {
           inciteCost: state.inciteCost,
           canCheerInMs: state.canCheerInMs,
           championId: state.championId,
-          savings: state.savings,
           spent: state.spent,
         }
       : {
@@ -319,7 +310,6 @@ export class GameWsServer {
           canCheerInMs: state.canCheerInMs,
           championId: state.championId,
           championName,
-          savings: state.savings,
           spent: state.spent,
         };
     this.sendToUser(userId, JSON.stringify(msg));

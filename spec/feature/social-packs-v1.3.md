@@ -32,10 +32,10 @@ sim 追加: `swapVillagers(world,a,b)` / `awakenVillager(world,id,rng)` / 偽予
 - **①送金 (transfer)** — **廃止** (2026-06)。人から人へのカルマ送金は村の設計から外した (`transfer` メッセージ / `PlayerState.transfer` / `PAGUS_TRANSFER_FEE_PCT` ともに削除)。カルマの授受は銀行・オークション・闇市・税/基金を通じてのみ行う。
 - **②市場/オークション (auction)** `server/auction.ts`: 定期ロット (例: 「次の制裁無料券」「永続善性+0.1」「カード1枚」)。`{t:'bid', lotId, amount}` でオープン入札 (増額のみ)。`PAGUS_AUCTION_PERIOD_MS`(120000) ごとに最高入札者が落札しカルマ徴収・効果付与、他は返金。`ServerMessage {t:'auction', lots:[{id,title,highBid,highUserId,endsInMs}]}` broadcast。
 - **③推し保険 (insure)** `{t:'insure', targetId, premium}`: premium 払い、対象が `PAGUS_INSURE_DAYS`(5) 日以内に死んだら払戻 `premium × PAGUS_INSURE_MULT`(3)。死亡検知 (v1.2-A の機構) で清算。
-- **④銀行 (bank)** `{t:'deposit', amount}` / `{t:'withdraw', amount}`: `PlayerEntry.savings`。日末に `savings × PAGUS_BANK_INTEREST`(0.02) を利子付与。預金は spend 対象外 (引き出して使う)。
+- **④銀行 (bank)** — **廃止** (2026-06)。預金/利子は村の設計から外した (`deposit`/`withdraw` メッセージ / `PlayerState.savings` / `applyInterest` / `PAGUS_BANK_INTEREST` ともに削除)。
 - **⑤闇市 (blackmarket)** `{t:'buyMarket', item}`: プレミアム価格でカード (パックA) / `revive`(死んだ住民を1体復活) 等を購入。`revive` は最近死んだ villager を alive へ戻す (sim helper、cost `PAGUS_REVIVE_COST`(80))。
 
-`playerState` に savings を載せる。client: 銀行/保険/闇市/オークション UI (送金 UI は廃止)。
+client: 保険/闇市/オークション UI (送金・銀行 UI は廃止)。
 
 ## C. 政治パック (v1.3-C) — 統治
 
@@ -72,7 +72,7 @@ client: ハイライト/予測/MVP/祈り/レイド/シーズンの演出 UI。
   - **カード**: 天災/偽予言 等の対象不問カード。
   - **村**: しきたり改定/法案/村長/革命/戒厳令/基金。
   - **裁判**: 死刑/教育投票 + ベット。
-  - **経済**: 銀行/保険/オークション/闇市 (カルマ経済。送金は廃止)。
+  - **経済**: 保険/オークション/闇市 (カルマ経済。送金・銀行は廃止)。
   - **課金 (別枠)**: 課金モック / ユーザーコード / 別端末ログイン (§F)。実マネーの課金は村内カルマ経済とは別タブに分離。
   - **情報**: 状態(コスト/年)/スコアボード(称号・陣営)/履歴/ハイライト/予測/MVP/シーズン。
 - カルマ残高・クールダウン・コストを常時表示し、不可操作は無効化＋理由表示 (commandRejected と整合)。
@@ -82,7 +82,7 @@ client: ハイライト/予測/MVP/祈り/レイド/シーズンの演出 UI。
 ## env 既定一覧 (抜粋)
 
 カード: CARD_COOLDOWN_MS=60000 / DISASTER_COST=40・DISASTER_DAYS=3 / SPIRITAWAY_COST=35・_DAYS=2 / SWAP_COST=30 / AWAKEN_COST=25 / PROPHECY_COST=20。
-経済: AUCTION_PERIOD_MS=120000 / INSURE_DAYS=5・INSURE_MULT=3 / BANK_INTEREST=0.02 / REVIVE_COST=80。(TRANSFER_FEE_PCT は送金廃止に伴い削除)
+経済: AUCTION_PERIOD_MS=120000 / INSURE_DAYS=5・INSURE_MULT=3 / REVIVE_COST=80。(TRANSFER_FEE_PCT/BANK_INTEREST は送金・銀行廃止に伴い削除)
 政治: REVOLT_THRESHOLD=0.7 / MARTIAL_COST=100 / TAX_PERIOD_MS=180000・TAX_AMOUNT=5・FUND_THRESHOLD=100。
 演出: PREDICT_REWARD=30 / PRAY_WINDOW_MS=30000・PRAY_NEEDED=3 / (RAID/SEASON 各種)。
 

@@ -1,14 +1,12 @@
 // 経済パネル (§v1.3-B)。カルマ経済の操作 UI:
-//   ④ 銀行 (預入・引出) / ③ 推し保険 (対象 + 保険料) /
-//   ⑤ 闇市 (復活 + カード購入) / ② オークション (現ロット表示 + 入札)。
-// 人から人への送金 (旧 ①) は廃止。受理可否の最終判定は server
+//   ③ 推し保険 (対象 + 保険料) / ⑤ 闇市 (復活 + カード購入) /
+//   ② オークション (現ロット表示 + 入札)。
+// 人から人への送金 (旧 ①) と銀行/預金 (旧 ④) は廃止。受理可否の最終判定は server
 // (commandRejected はトーストで既出)。ここでは入力を集めて送るだけ。
 
 import type { WireWorld, MarketItem, AuctionLotView } from '@pagus/sim';
 
 export interface EconomyHandlers {
-  onDeposit(amount: number): void;
-  onWithdraw(amount: number): void;
   onInsure(targetId: string, premium: number): void;
   onBuyMarket(item: MarketItem, args: { targetId?: string; targetId2?: string; kind?: string }): void;
   onBid(lotId: string, amount: number): void;
@@ -17,7 +15,6 @@ export interface EconomyHandlers {
 export class EconomyPanel {
   private world: WireWorld | null = null;
   private karma = 0;
-  private savings = 0;
   /** 直近に受け取ったオークションロット (現アクティブ 1 件)。 */
   private lot: AuctionLotView | null = null;
   /** lot を受け取った時刻 (countdown のローカル計算用)。 */
@@ -27,7 +24,6 @@ export class EconomyPanel {
   private readonly stateBox = document.createElement('div');
   /** 生存どうぶつで作り直す対象セレクタ群。 */
   private readonly selects: HTMLSelectElement[] = [];
-  private readonly bankAmt = document.createElement('input');
   private readonly insureTarget = document.createElement('select');
   private readonly insurePremium = document.createElement('input');
   private readonly mktDisasterKind = document.createElement('select');
@@ -45,18 +41,6 @@ export class EconomyPanel {
     this.root.appendChild(heading('💰 経済'));
     this.stateBox.className = 'ctl-state';
     this.root.appendChild(this.stateBox);
-
-    // ④ 銀行。
-    this.root.appendChild(subLabel('銀行 (預金は操作に使えないが利子が付く)'));
-    numField(this.bankAmt, '額');
-    this.root.appendChild(this.bankAmt);
-    const bankBtns = document.createElement('div');
-    bankBtns.className = 'ctl-btns';
-    bankBtns.append(
-      this.actionBtn('🏦 預入', 'eco-deposit', () => { const a = intVal(this.bankAmt); if (a > 0) this.h.onDeposit(a); }),
-      this.actionBtn('💵 引出', 'eco-withdraw', () => { const a = intVal(this.bankAmt); if (a > 0) this.h.onWithdraw(a); }),
-    );
-    this.root.appendChild(bankBtns);
 
     // ③ 推し保険。
     this.root.appendChild(subLabel('推し保険 (対象が期間内に死ねば払戻)'));
@@ -113,9 +97,8 @@ export class EconomyPanel {
     this.refreshTargets();
   }
 
-  setState(karma: number, savings: number): void {
+  setState(karma: number): void {
     this.karma = karma;
-    this.savings = savings;
     this.renderState();
   }
 
@@ -152,7 +135,6 @@ export class EconomyPanel {
   private renderState(): void {
     this.stateBox.replaceChildren();
     this.stateBox.appendChild(kv('💠 カルマ', this.karma.toFixed(1)));
-    this.stateBox.appendChild(kv('🏦 預金', this.savings.toFixed(1)));
   }
 
   private renderAuction(): void {

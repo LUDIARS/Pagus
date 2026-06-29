@@ -182,39 +182,6 @@ describe('PlayerState カード介入クールダウン (§v1.3-A)', () => {
   });
 });
 
-// env 既定: 利子率は呼び出し側 (index PAGUS_BANK_INTEREST=0.02) が渡す。
-describe('PlayerState 銀行 (§v1.3-B ④ deposit/withdraw/interest)', () => {
-  it('預入は karma→savings、引出は savings→karma に移す', () => {
-    const ps = new PlayerState();
-    ps.addKarma('u', 40);
-    expect(ps.deposit('u', 30)).toBe(true);
-    expect(ps.get('u').karma).toBe(10);
-    expect(ps.savings('u')).toBe(30);
-    // 預金は spend (操作の支払) 対象外。
-    expect(ps.spend('u', 20)).toBe(false); // karma は 10 しかない
-    expect(ps.withdraw('u', 25)).toBe(true);
-    expect(ps.get('u').karma).toBe(35);
-    expect(ps.savings('u')).toBe(5);
-  });
-
-  it('残高/預金を超える預入・引出は false', () => {
-    const ps = new PlayerState();
-    ps.addKarma('u', 10);
-    expect(ps.deposit('u', 11)).toBe(false);
-    ps.deposit('u', 10);
-    expect(ps.withdraw('u', 11)).toBe(false);
-  });
-
-  it('applyInterest は預金に利子を付ける (savings ×= 1+rate)', () => {
-    const ps = new PlayerState();
-    ps.addKarma('u', 100);
-    ps.deposit('u', 100);
-    ps.applyInterest(0.02);
-    expect(ps.savings('u')).toBeCloseTo(102, 6);
-    expect(ps.get('u').karma).toBe(0); // karma には付かない
-  });
-});
-
 // env 既定: 倍率は呼び出し側 (index PAGUS_INSURE_MULT=3) が渡す。
 describe('PlayerState 推し保険 (§v1.3-B ③ insure/settle)', () => {
   it('死亡で premium×mult を払戻し契約を解除する', () => {
@@ -243,15 +210,6 @@ describe('PlayerState 推し保険 (§v1.3-B ③ insure/settle)', () => {
     ps.insure('a', 'v1', 10, 4); // expireTerm 4
     ps.pruneExpiredInsurance(5); // 4 < 5 → 失効
     expect(ps.settleInsuranceForDeath('v1', 3)).toEqual([]); // もう契約なし
-  });
-});
-
-describe('PlayerState snapshot に savings (§v1.3-B ④)', () => {
-  it('snapshot は savings を含む', () => {
-    const ps = new PlayerState();
-    ps.addKarma('u', 20);
-    ps.deposit('u', 15);
-    expect(ps.snapshot('u', 0).savings).toBe(15);
   });
 });
 

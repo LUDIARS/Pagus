@@ -139,8 +139,6 @@ export interface PlayerState {
   sanctionCost: number;
   /** 次に応援できるまでの残りミリ秒 (0 = いま可能)。 */
   canCheerInMs: number;
-  /** 銀行預金 (§v1.3-B ④)。日末に利子が付き、spend 対象外。 */
-  savings: number;
   /** 累計課金額 (§v1.3-F 課金モック)。topup でカルマと共に増える。 */
   spent: number;
 }
@@ -284,8 +282,6 @@ export type ServerMessage =
       championId?: string | null;
       /** 推しの名前 (index が world から補完)。未指名/不在なら省略。 */
       championName?: string;
-      /** 銀行預金 (§v1.3-B ④)。 */
-      savings: number;
       /** 累計課金額 (§v1.3-F 課金モック)。 */
       spent: number;
     }
@@ -358,9 +354,7 @@ export type ClientMessage =
   // カードパック (§v1.3-A): カルマで切る一発介入。card 別に必要な引数だけ伴う。
   // disaster=kind / spiritAway=targetId / swap=targetId(a)+targetId2(b) / awaken=targetId / falseProphecy=text?
   | { t: 'card'; card: CardName; targetId?: string; targetId2?: string; kind?: string; text?: string; userId?: string }
-  // 経済パック (§v1.3-B): カルマ経済。
-  | { t: 'deposit'; amount: number; userId?: string } // 銀行へ預入 (§v1.3-B ④)
-  | { t: 'withdraw'; amount: number; userId?: string } // 銀行から引出 (§v1.3-B ④)
+  // 経済パック (§v1.3-B): カルマ経済 (銀行/預金は廃止)。
   | { t: 'insure'; targetId: string; premium: number; userId?: string } // 推し保険を掛ける (§v1.3-B ③)
   | { t: 'buyMarket'; item: MarketItem; targetId?: string; targetId2?: string; kind?: string; userId?: string } // 闇市で購入 (§v1.3-B ⑤)
   | { t: 'bid'; lotId: string; amount: number; userId?: string } // オークション入札 (§v1.3-B ②)
