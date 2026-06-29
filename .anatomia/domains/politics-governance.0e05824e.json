@@ -1,0 +1,59 @@
+{
+  "name": "Politics & Governance",
+  "description": "政治パック (v1.3-C): 統治メカニクス、村のルール (Village Rules) — 事件の火種。",
+  "presetRules": [
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "/sim/src/",
+        "by": "path",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Pp]olit",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Gg]overn",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Rr]ule",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Vv]illageRule",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    }
+  ],
+  "templateRules": [],
+  "cardTemplate": "Summarise the \"Politics & Governance\" domain: 政治パック (v1.3-C): 統治メカニクス、村のルール (Village Rules) — 事件の火種。",
+  "source": "spec-draft",
+  "mechanics": [
+    "governance",
+    "village-rules"
+  ],
+  "specRefs": [
+    "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力 / C. 政治パック (v1.3-C) — 統治",
+    "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 8. 村の歴史ページの詳細化 (point 9) / 8.1 村のルール (Village Rules) — 事件の火種"
+  ],
+  "rationale": "統治と村のルールは事件の発生条件を規定する政治レイヤ。経済とは別の社会制御ドメイン。",
+  "updatedAt": "2026-06-29T16:26:30.910Z"
+}

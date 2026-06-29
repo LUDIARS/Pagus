@@ -14,9 +14,8 @@ export type FundEventKind = 'festival' | 'relief';
 /** コマンドの受理/却下 (握り潰さず理由を返す)。 */
 export type GovResult = { ok: true } | { ok: false; reason: string };
 
-/** 政治パックの数値設定 (env 由来)。 */
+/** 政治パックの数値設定 (env 由来)。村長は §17 で sim 側 (村人選挙) へ移管。 */
 export interface GovernanceConfig {
-  mayorPeriodMs: number;
   lawDeposit: number;
   lawVoteMs: number;
   revoltThreshold: number;
@@ -52,8 +51,6 @@ export interface GovernanceDeps {
   fundEvent(kind: FundEventKind): void;
   /** 村の歴史へ 1 行刻む。 */
   chronicle(text: string): void;
-  /** 村長 (⑥) を配る。 */
-  broadcastMayor(userId: string | null, endsInMs: number): void;
   /** 法案一覧 (⑦) を配る。 */
   broadcastLaws(items: LawView[]): void;
   /** 蜂起状態 (⑧) を配る。 */
@@ -76,14 +73,6 @@ interface Law {
 }
 
 export class Governance {
-  // ⑥ 村長
-  private mayor: string | null = null;
-  private mayorEndsAt: number;
-  /** voter userId → 投票先 userId。任期締切で集計しリセット。 */
-  private readonly mayorVotes = new Map<string, string>();
-  /** 現村長が今期の無料しきたり改定をまだ使っていないか。 */
-  private mayorFreeRuleAvailable = false;
-
   // ⑦ 法案
   private readonly laws = new Map<string, Law>();
   private lawSeq = 0;
@@ -109,7 +98,6 @@ export class Governance {
     private readonly deps: GovernanceDeps,
     now: number,
   ) {
-    this.mayorEndsAt = now + cfg.mayorPeriodMs;
     this.nextTaxAt = now + cfg.taxPeriodMs;
   }
 
@@ -117,58 +105,10 @@ export class Governance {
 
   /** 現在の全政治状態を broadcast する (起動直後に ws へ現値を保持させる)。 */
   broadcastAll(now: number): void {
-    this.deps.broadcastMayor(this.mayor, Math.max(0, this.mayorEndsAt - now));
     this.deps.broadcastLaws(this.lawViews(now));
     this.deps.broadcastRevolt(this.revoltActive, this.inciteTotal, this.suppressTotal, Math.max(0, this.revoltEndsAt - now));
     this.deps.broadcastMartial(null, 0);
     this.deps.broadcastFund(this.fund, this.cfg.fundThreshold);
-  }
-
-  // --- ⑥ 村長選挙 ----------------------------------------------------------------
-
-  /** 村長への 1 票 (§v1.3-C ⑥)。各 voter 1 票、再投票で上書き。任期締切で集計される。 */
-  voteMayor(userId: string, target: string): GovResult {
-    if (!target || target.length === 0) return { ok: false, reason: '投票先が不正' };
-    this.mayorVotes.set(userId, target);
-    return { ok: true };
-  }
-
-  /** その userId が現村長か (§v1.3-C ⑥ 特典判定)。 */
-  isMayor(userId: string): boolean {
-    return this.mayor !== null && this.mayor === userId;
-  }
-
-  /**
-   * 村長の無料しきたり改定 (§v1.3-C ⑥, 任期 1 回) を消費する。
-   * 現村長かつ今期未使用なら使ったことにして true。それ以外は false (= 通常どおり課金)。
-   */
-  tryMayorFreeRule(userId: string): boolean {
-    if (!this.isMayor(userId) || !this.mayorFreeRuleAvailable) return false;
-    this.mayorFreeRuleAvailable = false;
-    return true;
-  }
-
-  /** 任期締切で村長を集計し直す。最多得票 (同票は userId 昇順) を村長に。票が無ければ空位。 */
-  private tallyMayor(now: number): void {
-    const counts = new Map<string, number>();
-    for (const target of this.mayorVotes.values()) {
-      counts.set(target, (counts.get(target) ?? 0) + 1);
-    }
-    let winner: string | null = null;
-    let best = 0;
-    for (const [target, c] of [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-      if (c > best) {
-        best = c;
-        winner = target;
-      }
-    }
-    this.mayor = winner;
-    this.mayorFreeRuleAvailable = winner !== null;
-    this.mayorVotes.clear();
-    this.mayorEndsAt = now + this.cfg.mayorPeriodMs;
-    if (winner) this.deps.chronicle(`🏛 村長選挙: ${shortId(winner)} が村長に選ばれた (${best}票)`);
-    else this.deps.chronicle('🏛 村長選挙: 投票が無く村長は空位のまま');
-    this.deps.broadcastMayor(this.mayor, this.cfg.mayorPeriodMs);
   }
 
   // --- ⑦ 法案投票 ----------------------------------------------------------------
@@ -335,16 +275,10 @@ export class Governance {
 
   // --- tick ----------------------------------------------------------------------
 
-  /** 周期処理 (index が setInterval で毎秒回す)。任期更新 / 法案締切 / 蜂起決着 / 課税。 */
+  /** 周期処理 (index が setInterval で毎秒回す)。法案締切 / 蜂起決着 / 課税。 */
   tick(now: number): void {
-    if (now >= this.mayorEndsAt) this.tallyMayor(now);
     this.resolveLaws(now);
     if (this.revoltActive && now >= this.revoltEndsAt) this.resolveRevolt(now);
     if (now >= this.nextTaxAt) this.runTax(now);
   }
-}
-
-/** userId を短く (先頭6文字)。 */
-function shortId(id: string): string {
-  return id.length > 6 ? `${id.slice(0, 6)}…` : id;
 }

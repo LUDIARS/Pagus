@@ -111,6 +111,23 @@ export interface FieldItem {
   position: GridPos;
 }
 
+/**
+ * 村長選挙の匿名世論調査 (§17)。選挙の半年前 (campaign) から半月ごとに更新して表示する。
+ * 支持率・人気候補・「わからない/みんなきらい/きょうみない」の村人世論を表す。
+ */
+export interface MayorPoll {
+  /** 現村長の支持率 (0..1)。村長不在なら 0。 */
+  approval: number;
+  /** 人気候補 (人気度 support=0..1 降順、上位数体)。 */
+  candidates: { id: VillagerId; name: string; support: number }[];
+  /** 「わからない」の割合 (0..1)。 */
+  dontKnow: number;
+  /** 「みんなきらい」の割合 (0..1)。 */
+  hate: number;
+  /** 「きょうみない」の割合 (0..1)。 */
+  noInterest: number;
+}
+
 /** 戒厳令の発動状態 (§v1.3-C ⑨)。freeze=月次事件を凍結 / surge=日常事件を多発させる。 */
 export interface MartialState {
   mode: MartialMode;
@@ -150,6 +167,12 @@ export interface World {
   behaviorRules: BehaviorRule[];
   /** フィールドに落ちているアイテム (§16)。人手で配置し、日末に住民が拾う。 */
   items: FieldItem[];
+  /** 現村長の villager id (§17)。選挙イベントで村人世論により決まる。空位は null。 */
+  mayorId: VillagerId | null;
+  /** 次の村長選挙までの残りターム数 (§17)。 */
+  mayorTermsLeft: number;
+  /** 選挙運動期間中の匿名世論調査 (§17)。期間外は null。 */
+  mayorPoll: MayorPoll | null;
   /**
    * 戒厳令 (§v1.3-C ⑨)。発動中のみキーを持つ (exactOptionalPropertyTypes)。
    * freeze=fireScheduledIncident を抑止 / surge=DailyEngine の事件化閾値を下げる。

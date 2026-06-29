@@ -1,0 +1,95 @@
+{
+  "name": "Game Loop & Time Model",
+  "description": "起承転結ステートマシン (1ターム=1日)、セグメント駆動の起、日/月進行、カレンダー/季節/祝日、永続24h稼働。",
+  "presetRules": [
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "/sim/src/",
+        "by": "path",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ll]oop",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Tt]ick",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ss]egment",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Cc]alendar",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ss]eason",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Tt]erm",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Kk]isho",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ss]tateMachine",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    }
+  ],
+  "templateRules": [],
+  "cardTemplate": "Summarise the \"Game Loop & Time Model\" domain: 起承転結ステートマシン (1ターム=1日)、セグメント駆動の起、日/月進行、カレンダー/季節/祝日、永続24h稼働。",
+  "source": "spec-draft",
+  "mechanics": [
+    "kishotenketsu-state-machine",
+    "calendar",
+    "day-month-progression"
+  ],
+  "specRefs": [
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ",
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.1 起承転結ステートマシン (1 ターム = 1 日)",
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.2 起 (KISHO) — セグメント駆動",
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.6 住民改変 / 日・月の進行",
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.7 カレンダー / 季節 / 祝日"
+  ],
+  "rationale": "時間進行と起承転結のフェーズ駆動はゲーム全体を貫く制御フロー。各フェーズ(承/転/結)を呼び出すオーケストレーション層。",
+  "updatedAt": "2026-06-29T16:26:30.908Z"
+}

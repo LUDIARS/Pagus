@@ -65,8 +65,8 @@ export interface WsHandlers {
   onInsure(targetId: string, premium: number, userId: string): void;
   onBuyMarket(item: MarketItem, args: MarketArgs, userId: string): void;
   onBid(lotId: string, amount: number, userId: string): void;
-  // 政治パック (§v1.3-C)。
-  onVoteMayor(target: string, userId: string): void;
+  // 政治パック (§v1.3-C) + 村長リコール (§17)。
+  onRecallMayor(userId: string): void;
   onProposeLaw(text: string, userId: string): void;
   onVoteLaw(lawId: string, approve: boolean, userId: string): void;
   onRevolt(side: 'incite' | 'suppress', userId: string): void;
@@ -90,8 +90,7 @@ export class GameWsServer {
   private sysStatus: SysStatusMessage | null = null;
   /** オークション (§v1.3-B ②) の最新ロット状態。接続時に現値を送る。 */
   private auction: Extract<ServerMessage, { t: 'auction' }> | null = null;
-  /** 政治パック (§v1.3-C) の最新状態 (村長/法案/革命/戒厳令/基金)。接続時に現値を送る。 */
-  private mayor: Extract<ServerMessage, { t: 'mayor' }> | null = null;
+  /** 政治パック (§v1.3-C) の最新状態 (法案/革命/戒厳令/基金)。接続時に現値を送る。村長 (§17) は snapshot。 */
   private laws: Extract<ServerMessage, { t: 'laws' }> | null = null;
   private revolt: Extract<ServerMessage, { t: 'revolt' }> | null = null;
   private martial: Extract<ServerMessage, { t: 'martial' }> | null = null;
@@ -132,7 +131,6 @@ export class GameWsServer {
     if (this.sysStatus) ws.send(JSON.stringify(this.sysStatus));
     if (this.leaderboard) ws.send(JSON.stringify(this.leaderboard));
     if (this.auction) ws.send(JSON.stringify(this.auction));
-    if (this.mayor) ws.send(JSON.stringify(this.mayor));
     if (this.laws) ws.send(JSON.stringify(this.laws));
     if (this.revolt) ws.send(JSON.stringify(this.revolt));
     if (this.martial) ws.send(JSON.stringify(this.martial));
@@ -248,9 +246,9 @@ export class GameWsServer {
     } else if (msg.t === 'bid') {
       this.bind(ws, msg.userId);
       this.h.onBid(msg.lotId, msg.amount, this.resolveUser(ws, msg.userId));
-    } else if (msg.t === 'voteMayor') {
+    } else if (msg.t === 'recallMayor') {
       this.bind(ws, msg.userId);
-      this.h.onVoteMayor(msg.target, this.resolveUser(ws, msg.userId));
+      this.h.onRecallMayor(this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'proposeLaw') {
       this.bind(ws, msg.userId);
       this.h.onProposeLaw(msg.text, this.resolveUser(ws, msg.userId));
@@ -322,12 +320,6 @@ export class GameWsServer {
     this.fanout(JSON.stringify(msg));
   }
 
-  /** 村長 (§v1.3-C ⑥) を更新し全クライアントへ配る。接続時にも現値を送る。 */
-  broadcastMayor(userId: string | null, endsInMs: number): void {
-    const msg: Extract<ServerMessage, { t: 'mayor' }> = { t: 'mayor', userId, endsInMs };
-    this.mayor = msg;
-    this.fanout(JSON.stringify(msg));
-  }
 
   /** 投票中の法案一覧 (§v1.3-C ⑦) を更新し全クライアントへ配る。接続時にも現値を送る。 */
   broadcastLaws(items: LawView[]): void {

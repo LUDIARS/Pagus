@@ -7,7 +7,6 @@ const HUGE = 1_000_000_000;
 /** 既定は全周期を巨大にして、テスト対象の周期だけ小さくする。 */
 function makeConfig(over: Partial<GovernanceConfig> = {}): GovernanceConfig {
   return {
-    mayorPeriodMs: HUGE,
     lawDeposit: 20,
     lawVoteMs: HUGE,
     revoltThreshold: 0.7,
@@ -32,7 +31,6 @@ function makeDeps(initial: Record<string, number>, knownUsers: string[]) {
     martials: [] as { mode: MartialMode; days: number }[],
     funds: [] as FundEventKind[],
     chronicles: [] as string[],
-    mayor: { userId: null as string | null, endsInMs: 0 },
     laws: [] as LawView[],
     revolt: { active: false, incite: 0, suppress: 0 },
     martial: { mode: null as MartialMode | null },
@@ -59,7 +57,6 @@ function makeDeps(initial: Record<string, number>, knownUsers: string[]) {
     activateMartial: (mode, days) => rec.martials.push({ mode, days }),
     fundEvent: (kind) => rec.funds.push(kind),
     chronicle: (text) => rec.chronicles.push(text),
-    broadcastMayor: (userId, endsInMs) => { rec.mayor = { userId, endsInMs }; },
     broadcastLaws: (items) => { rec.laws = items; },
     broadcastRevolt: (active, incite, suppress) => { rec.revolt = { active, incite, suppress }; },
     broadcastMartial: (mode) => { rec.martial = { mode }; },
@@ -68,29 +65,7 @@ function makeDeps(initial: Record<string, number>, knownUsers: string[]) {
   return { deps, karma, rec };
 }
 
-describe('Governance 村長選挙 (§v1.3-C ⑥)', () => {
-  it('任期締切で最多得票が村長になり、無料しきたり改定を任期1回使える', () => {
-    const { deps, rec } = makeDeps({}, []);
-    const gov = new Governance(makeConfig({ mayorPeriodMs: 1000 }), deps, 0);
-    gov.voteMayor('u1', 'u2');
-    gov.voteMayor('u3', 'u2');
-    gov.voteMayor('u4', 'u1');
-    gov.tick(1000); // 任期締切 → 集計
-    expect(rec.mayor.userId).toBe('u2');
-    expect(gov.isMayor('u2')).toBe(true);
-    expect(gov.isMayor('u1')).toBe(false);
-    expect(gov.tryMayorFreeRule('u2')).toBe(true); // 任期1回
-    expect(gov.tryMayorFreeRule('u2')).toBe(false); // 2回目は不可
-    expect(gov.tryMayorFreeRule('u1')).toBe(false); // 非村長は不可
-  });
-
-  it('投票が無ければ空位になる', () => {
-    const { deps, rec } = makeDeps({}, []);
-    const gov = new Governance(makeConfig({ mayorPeriodMs: 1000 }), deps, 0);
-    gov.tick(1000);
-    expect(rec.mayor.userId).toBeNull();
-  });
-});
+// 村長は §17 で sim 側 (村人選挙) へ移管。Governance からは外れた (mayor.test.ts を参照)。
 
 describe('Governance 法案投票 (§v1.3-C ⑦)', () => {
   it('供託 → 賛成多数で可決し村ルール追加 + 供託返金', () => {

@@ -158,6 +158,12 @@ export class TermLoop {
         for (const rule of expired) this.h.onLog('kisho', `🃏 天災がおさまった: 「${rule.description}」`);
         const extra = `${r.monthRolled ? ' / 月がかわった' : ''}${r.holiday ? ` (${r.holiday})` : ''}`;
         this.h.onLog('kisho', `日が暮れた${extra}`);
+        // 村長選挙 (§17): 通常選挙/補欠選挙が起きたらログに出す。
+        if (r.mayor) {
+          this.h.onLog('kisho', r.mayor.kind === 'vacancy-elected'
+            ? `🏛 村長が空位となり ${r.mayor.name} が選ばれた`
+            : `🏛 村長選挙: ${r.mayor.name} が新しい村長に選ばれた`);
+        }
         // 月初: その月の事件発生日を決める (§12.3.1)。発生日が初日なら前日が無いので即デザイン。
         if (r.monthRolled) {
           const m = await this.tm.scheduleMonthlyIncident();

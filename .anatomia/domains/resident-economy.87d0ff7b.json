@@ -1,0 +1,71 @@
+{
+  "name": "Resident Economy",
+  "description": "住民経済: 貧富・趣味消費・非行・クズ化のアルゴリズム (economy.ts)、Villager 経済フィールド。v1.3-B カルマ経済も含む。",
+  "presetRules": [
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "/sim/src/",
+        "by": "path",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ee]conom",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ww]ealth",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Mm]oney",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Dd]elinquen",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ss]pend",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    }
+  ],
+  "templateRules": [],
+  "cardTemplate": "Summarise the \"Resident Economy\" domain: 住民経済: 貧富・趣味消費・非行・クズ化のアルゴリズム (economy.ts)、Villager 経済フィールド。v1.3-B カルマ経済も含む。",
+  "source": "spec-draft",
+  "mechanics": [
+    "wealth",
+    "consumption",
+    "delinquency"
+  ],
+  "specRefs": [
+    "Pagus 機能仕様書 (v0.0) / 15. 住民経済 (貧富と非行) — 実装済",
+    "住民経済 (§15) — 貧富・趣味消費・非行・クズ化",
+    "住民経済 (§15) — 貧富・趣味消費・非行・クズ化 / アルゴリズム (`packages/sim/src/economy.ts`)",
+    "住民経済 (§15) — 貧富・趣味消費・非行・クズ化 / データモデル (`Villager` 追加フィールド)",
+    "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力 / B. 経済パック (v1.3-B) — カルマ経済"
+  ],
+  "rationale": "経済は economy.ts に局所化された独立アルゴリズムで、非行(behavior-rules)へ連動する明確なドメイン。",
+  "updatedAt": "2026-06-29T16:26:30.911Z"
+}

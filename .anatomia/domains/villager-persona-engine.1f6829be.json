@@ -1,0 +1,80 @@
+{
+  "name": "Villager Persona Engine",
+  "description": "村人のドメインモデル: 三分の責務、Villager データスキーマ、改変 (Reform)、どうぶつ/睡眠、性格・評判の二層6軸ベクトル。",
+  "presetRules": [
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "/sim/src/types/",
+        "by": "path",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Vv]illager",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Pp]ersona",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Rr]eform",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Vv]ector",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Tt]rait",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Rr]eputation",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    }
+  ],
+  "templateRules": [],
+  "cardTemplate": "Summarise the \"Villager Persona Engine\" domain: 村人のドメインモデル: 三分の責務、Villager データスキーマ、改変 (Reform)、どうぶつ/睡眠、性格・評判の二層6軸ベクトル。",
+  "source": "spec-draft",
+  "mechanics": [
+    "persona",
+    "reform",
+    "personality-reputation-vector"
+  ],
+  "specRefs": [
+    "Pagus 機能仕様書 (v0.0) / 3. ドメインモデル — 村人 (ペルソナエンジン)",
+    "Pagus 機能仕様書 (v0.0) / 3. ドメインモデル — 村人 (ペルソナエンジン) / 3.1 三分の責務",
+    "Pagus 機能仕様書 (v0.0) / 3. ドメインモデル — 村人 (ペルソナエンジン) / 3.2 Villager データ (確定スキーマは `spec/interface/sim-types.md`)",
+    "Pagus 機能仕様書 (v0.0) / 3. ドメインモデル — 村人 (ペルソナエンジン) / 3.3 改変 (Reform)",
+    "Pagus 機能仕様書 (v0.0) / 3. ドメインモデル — 村人 (ペルソナエンジン) / 3.4 どうぶつと睡眠",
+    "Pagus 機能仕様書 (v0.0) / 8A. 評価系・イベント・投票・グループ (メカニクス追補 / v0.3〜) / 8A.1 二層の 6 軸ベクトル (性格 / 評判)"
+  ],
+  "rationale": "村人エンティティとその性格/評判モデルは sim の中核データドメイン。Brain とは別に「誰が何者か」を定義する。",
+  "updatedAt": "2026-06-29T16:26:30.913Z"
+}
