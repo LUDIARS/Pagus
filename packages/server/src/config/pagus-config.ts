@@ -66,8 +66,6 @@ export interface KarmaConfig {
   championKarmaMult: number;
   /** 推しの死のカルマ罰 (PAGUS_CHAMPION_DEATH_PENALTY). */
   championDeathPenalty: number;
-  /** 送金手数料 (%) (PAGUS_TRANSFER_FEE_PCT). */
-  transferFeePct: number;
   /** カード使用クールダウン ms (PAGUS_CARD_COOLDOWN_MS). */
   cardCooldownMs: number;
 }
@@ -200,7 +198,6 @@ export const DEFAULT_CONFIG: PagusConfig = {
     cheerVirtue: 0.05,
     championKarmaMult: 1.5,
     championDeathPenalty: 20,
-    transferFeePct: 0,
     cardCooldownMs: 60000,
   },
   cards: {

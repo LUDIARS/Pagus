@@ -60,7 +60,6 @@ export interface WsHandlers {
   onBet(pick: 'death' | 'educate', amount: number, userId: string): void;
   onFaction(side: Faction, userId: string): void;
   onCard(card: CardName, args: CardArgs, userId: string): void;
-  onTransfer(toUserId: string, amount: number, userId: string): void;
   onDeposit(amount: number, userId: string): void;
   onWithdraw(amount: number, userId: string): void;
   onInsure(targetId: string, premium: number, userId: string): void;
@@ -232,9 +231,6 @@ export class GameWsServer {
       if (msg.kind !== undefined) args.kind = msg.kind;
       if (msg.text !== undefined) args.text = msg.text;
       this.h.onCard(msg.card, args, this.resolveUser(ws, msg.userId));
-    } else if (msg.t === 'transfer') {
-      this.bind(ws, msg.userId);
-      this.h.onTransfer(msg.toUserId, msg.amount, this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'deposit') {
       this.bind(ws, msg.userId);
       this.h.onDeposit(msg.amount, this.resolveUser(ws, msg.userId));

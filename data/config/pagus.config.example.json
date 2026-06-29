@@ -23,7 +23,6 @@
     "cheerVirtue": 0.05,
     "championKarmaMult": 1.5,
     "championDeathPenalty": 20,
-    "transferFeePct": 0,
     "cardCooldownMs": 60000
   },
   "cards": {

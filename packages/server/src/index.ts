@@ -200,7 +200,6 @@ function main(): void {
     cheerVirtue: cfg.karma.cheerVirtue,
     championKarmaMult: cfg.karma.championKarmaMult,
     championDeathPenalty: cfg.karma.championDeathPenalty,
-    transferFeePct: cfg.karma.transferFeePct,
     cardCooldownMs: cfg.karma.cardCooldownMs,
   });
   const knownUsers = new Set<string>();
@@ -707,25 +706,6 @@ function main(): void {
       pushState(userId);
     },
     // --- 経済パック (§v1.3-B) ---------------------------------------------------
-    onTransfer: (toUserId, amount, userId) => {
-      knownUsers.add(userId);
-      if (!toUserId || toUserId.length === 0 || toUserId === userId) {
-        ws.sendRejected(userId, '送金先が不正 (自分以外を指定)');
-        return;
-      }
-      if (!Number.isInteger(amount) || amount <= 0) {
-        ws.sendRejected(userId, '送金額は正の整数');
-        return;
-      }
-      if (!ps.transfer(userId, toUserId, amount)) {
-        ws.sendRejected(userId, 'カルマが足りない');
-        return;
-      }
-      knownUsers.add(toUserId);
-      pushState(userId);
-      pushState(toUserId);
-      scheduleLeaderboard();
-    },
     onDeposit: (amount, userId) => {
       knownUsers.add(userId);
       if (!Number.isInteger(amount) || amount <= 0) {

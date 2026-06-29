@@ -182,27 +182,6 @@ describe('PlayerState カード介入クールダウン (§v1.3-A)', () => {
   });
 });
 
-// env 既定: PAGUS_TRANSFER_FEE_PCT=0。
-describe('PlayerState 送金 (§v1.3-B ① transfer)', () => {
-  it('残高内なら from→to へ移し、手数料0で受取は満額', () => {
-    const ps = new PlayerState();
-    ps.addKarma('a', 50);
-    expect(ps.transfer('a', 'b', 20)).toBe(true);
-    expect(ps.get('a').karma).toBe(30);
-    expect(ps.get('b').karma).toBe(20);
-  });
-
-  it('自分宛て / 非正 / 非整数 / 残高超過は false (無言フォールバック禁止)', () => {
-    const ps = new PlayerState();
-    ps.addKarma('a', 10);
-    expect(ps.transfer('a', 'a', 5)).toBe(false); // 自分宛て
-    expect(ps.transfer('a', 'b', 0)).toBe(false); // 非正
-    expect(ps.transfer('a', 'b', 2.5)).toBe(false); // 非整数
-    expect(ps.transfer('a', 'b', 11)).toBe(false); // 残高超過
-    expect(ps.get('a').karma).toBe(10); // いずれも残高不変
-  });
-});
-
 // env 既定: 利子率は呼び出し側 (index PAGUS_BANK_INTEREST=0.02) が渡す。
 describe('PlayerState 銀行 (§v1.3-B ④ deposit/withdraw/interest)', () => {
   it('預入は karma→savings、引出は savings→karma に移す', () => {
