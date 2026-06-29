@@ -187,6 +187,11 @@ export class TermLoop {
           this.h.onLog('kisho', s.scummy ? `🤑 ${s.name} は大金を持て余してクズ化した` : `🧹 ${s.name} は身を持ち直した`);
         }
         for (const d of econ.demands) this.h.onLog('kisho', `💢 ${d.name} がプレイヤーに ${d.amount} カルマをたかってきた`);
+        // 日末: フィールドのアイテムを最寄りの住民が拾う (§16)。貴金属=富む / 薬物=荒れる。
+        const pickups = this.tm.collectItems();
+        for (const p of pickups) {
+          this.h.onLog('kisho', p.kind === 'precious' ? `💎 ${p.name} が貴金属を拾った` : `💊 ${p.name} が薬物に手を出した`);
+        }
         // ふるまいの法則の Haiku 増殖 (§2.1): 低確率で 1 つ生成して村に芽生えさせる。
         if (this.ruleGen.enabled && this.ruleRng() < this.ruleGen.chance) {
           const rule = await this.tm.maybeGrowRule();
