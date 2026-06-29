@@ -83,7 +83,6 @@ export interface CardsConfig {
 
 /** 経済パック (§v1.3-B) + ベット/しきたり改定/課金. */
 export interface EconomyConfig {
-  bankInterest: number; // PAGUS_BANK_INTEREST
   insureDays: number; // PAGUS_INSURE_DAYS
   insureMult: number; // PAGUS_INSURE_MULT
   reviveCost: number; // PAGUS_REVIVE_COST
@@ -210,7 +209,6 @@ export const DEFAULT_CONFIG: PagusConfig = {
     spiritAwayDays: 2,
   },
   economy: {
-    bankInterest: 0.02,
     insureDays: 5,
     insureMult: 3,
     reviveCost: 80,

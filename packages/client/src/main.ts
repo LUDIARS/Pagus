@@ -103,10 +103,8 @@ async function main(): Promise<void> {
   });
   void items;
 
-  // 経済パネル (§v1.3-B): 銀行 / 保険 / 闇市 / オークション (人から人への送金は廃止)。
+  // 経済パネル (§v1.3-B): 保険 / 闇市 / オークション (送金・銀行は廃止)。
   const economy = new EconomyPanel(el('economy'), {
-    onDeposit: (amount) => conn.send({ t: 'deposit', amount, userId }),
-    onWithdraw: (amount) => conn.send({ t: 'withdraw', amount, userId }),
     onInsure: (targetId, premium) => conn.send({ t: 'insure', targetId, premium, userId }),
     onBuyMarket: (item, args) => conn.send({ t: 'buyMarket', item, userId, ...args }),
     onBid: (lotId, amount) => conn.send({ t: 'bid', lotId, amount, userId }),
@@ -170,7 +168,7 @@ async function main(): Promise<void> {
     onPlayerState: (state) => {
       controls.setState(state);
       cards.setKarma(state.karma);
-      economy.setState(state.karma, state.savings);
+      economy.setState(state.karma);
       account.setSpent(state.spent);
       // 常時ヘッダ (カルマ/善性/課金/推し/応援クールダウン) を更新。
       overlay.setPlayerState({

@@ -235,7 +235,6 @@ function main(): void {
   let cardRuleCount = 0;
 
   // 経済パック (§v1.3-B) の設定。
-  const BANK_INTEREST = cfg.economy.bankInterest; // 銀行預金の日末利子 (④)
   const INSURE_DAYS = cfg.economy.insureDays; // 推し保険の有効日数 (③)
   const INSURE_MULT = cfg.economy.insureMult; // 保険の払戻倍率 (③)
   const REVIVE_COST = cfg.economy.reviveCost; // 闇市の復活コスト (⑤)
@@ -730,30 +729,6 @@ function main(): void {
       pushState(userId);
     },
     // --- 経済パック (§v1.3-B) ---------------------------------------------------
-    onDeposit: (amount, userId) => {
-      knownUsers.add(userId);
-      if (!Number.isInteger(amount) || amount <= 0) {
-        ws.sendRejected(userId, '預入額は正の整数');
-        return;
-      }
-      if (!ps.deposit(userId, amount)) {
-        ws.sendRejected(userId, 'カルマが足りない');
-        return;
-      }
-      pushState(userId);
-    },
-    onWithdraw: (amount, userId) => {
-      knownUsers.add(userId);
-      if (!Number.isInteger(amount) || amount <= 0) {
-        ws.sendRejected(userId, '引出額は正の整数');
-        return;
-      }
-      if (!ps.withdraw(userId, amount)) {
-        ws.sendRejected(userId, '預金が足りない');
-        return;
-      }
-      pushState(userId);
-    },
     onInsure: (targetId, premium, userId) => {
       knownUsers.add(userId);
       const target = targetId ? tm.world.villagers.get(targetId) : undefined;
@@ -1142,10 +1117,9 @@ function main(): void {
 
   loop = new TermLoop(tm, pace, incidentStepMs, {
     onSnapshot: (w) => {
-      // 日末 (term 進行) を検知して銀行利子付与 + 保険の期限切れ掃除 (§v1.3-B ③④)。
+      // 日末 (term 進行) を検知して保険の期限切れ掃除 (§v1.3-B ③)。
       if (w.term > lastEconomyTerm) {
         lastEconomyTerm = w.term;
-        ps.applyInterest(BANK_INTEREST);
         ps.pruneExpiredInsurance(w.term);
         for (const uid of knownUsers) pushState(uid);
       }

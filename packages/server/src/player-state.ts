@@ -55,8 +55,6 @@ interface PlayerEntry {
   stats: PlayerStats;
   /** 明示選択した陣営 (§4.3)。未選択は null = 行動から推定。 */
   faction: Faction | null;
-  /** 銀行預金 (§v1.3-B ④)。日末に利子が付き、spend (操作の支払) 対象外。 */
-  savings: number;
   /** 累計課金額 (§v1.3-F 課金モック)。topup でカルマと共に増える。 */
   spent: number;
 }
@@ -98,8 +96,6 @@ export interface PlayerStateSnapshot {
   canCheerInMs: number;
   /** 推し (champion) の villager id。未指名は null (§1)。 */
   championId: string | null;
-  /** 銀行預金 (§v1.3-B ④)。 */
-  savings: number;
   /** 累計課金額 (§v1.3-F 課金モック)。 */
   spent: number;
 }
@@ -152,7 +148,7 @@ export class PlayerState {
   get(userId: string): PlayerEntry {
     let e = this.players.get(userId);
     if (!e) {
-      e = { karma: 0, virtue: 0, lastCheerMs: 0, championId: null, stats: emptyStats(), faction: null, savings: 0, spent: 0 };
+      e = { karma: 0, virtue: 0, lastCheerMs: 0, championId: null, stats: emptyStats(), faction: null, spent: 0 };
       this.players.set(userId, e);
     }
     return e;
@@ -278,38 +274,6 @@ export class PlayerState {
   }
 
   // --- 経済パック (§v1.3-B) -----------------------------------------------------
-
-  /** 銀行へ預入 (§v1.3-B ④)。amount は正の整数かつカルマ残高内。預金は spend 対象外。 */
-  deposit(userId: string, amount: number): boolean {
-    if (!Number.isInteger(amount) || amount <= 0) return false;
-    const e = this.get(userId);
-    if (e.karma < amount) return false;
-    e.karma -= amount;
-    e.savings += amount;
-    return true;
-  }
-
-  /** 銀行から引出 (§v1.3-B ④)。amount は正の整数かつ預金残高内。 */
-  withdraw(userId: string, amount: number): boolean {
-    if (!Number.isInteger(amount) || amount <= 0) return false;
-    const e = this.get(userId);
-    if (e.savings < amount) return false;
-    e.savings -= amount;
-    e.karma += amount;
-    return true;
-  }
-
-  /** 全ユーザの預金に利子を付ける (§v1.3-B ④, 日末)。savings ×= (1 + rate)。 */
-  applyInterest(rate: number): void {
-    for (const e of this.players.values()) {
-      if (e.savings > 0) e.savings *= 1 + rate;
-    }
-  }
-
-  /** その userId の預金 (§v1.3-B ④)。 */
-  savings(userId: string): number {
-    return this.get(userId).savings;
-  }
 
   /**
    * 推し保険を掛ける (§v1.3-B ③)。userId が villagerId に premium を掛け、expireTerm まで有効。
@@ -452,7 +416,6 @@ export class PlayerState {
       inciteCost: this.inciteCostValue,
       canCheerInMs: this.canCheerInMs(userId, now),
       championId: e.championId,
-      savings: e.savings,
       spent: e.spent,
     };
   }
