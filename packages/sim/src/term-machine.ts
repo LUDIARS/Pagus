@@ -21,6 +21,15 @@ import {
   type ItemPickup,
 } from './items.js';
 import type { FieldItem, FieldItemKind } from './types/index.js';
+import {
+  tickMayor,
+  electMayor,
+  recallMayor as recallMayorFn,
+  DEFAULT_MAYOR,
+  type MayorConfig,
+  type MayorEvent,
+  type RecallResult,
+} from './mayor.js';
 import type { EventDirector } from './event-director.js';
 
 export type IdGen = () => string;
@@ -87,6 +96,8 @@ export interface TermMachineOptions {
   rulesMax?: number;
   /** 戒厳令 surge (§v1.3-C ⑨) 中に日常事件の閾値を下げる量。既定 4。 */
   martialSurgeBonus?: number;
+  /** 村長選挙 (§17) のチューニング。省略時は DEFAULT_MAYOR。 */
+  mayorConfig?: MayorConfig;
 }
 
 /** 日末の生活イベント (結婚/出産)。server がログ表示する。 */
@@ -121,6 +132,8 @@ export interface AdvanceDayResult {
   monthRolled: boolean;
   /** 新しい日が祝日ならその名前。 */
   holiday: string | null;
+  /** 村長選挙イベント (§17, 起きた時のみ)。server がログ。 */
+  mayor: MayorEvent | null;
 }
 
 export class TermMachine {
@@ -153,6 +166,8 @@ export class TermMachine {
   private readonly rulesMax: number;
   /** 戒厳令 surge (§v1.3-C ⑨) の閾値ボーナス。 */
   private readonly martialSurgeBonus: number;
+  /** 村長選挙 (§17) のチューニング。 */
+  private readonly mayorConfig: MayorConfig;
   /** その日の裁判結末。applyReform が incident/trial を null にする前に ketsuStep で捕捉する。 */
   private dayOutcome: { incident: Incident; verdict: Verdict; defendantId: VillagerId } | null = null;
 
@@ -181,6 +196,11 @@ export class TermMachine {
     this.itemCount = maxItemIndex(world.items); // 復元した items の最大番号から続ける (衝突回避)
     this.rulesMax = opts.rulesMax ?? 40;
     this.martialSurgeBonus = opts.martialSurgeBonus ?? 4;
+    this.mayorConfig = opts.mayorConfig ?? DEFAULT_MAYOR;
+    // 村長 (§17): 復元時は world.mayorId を尊重し、未設定なら初回選挙で人気の村人を据える。
+    if (world.mayorId === null && aliveVillagers(world).length > 0) {
+      electMayor(world, this.mayorConfig);
+    }
   }
 
   /** スナップショット保存用: 出生通し番号 (born_N が再起動後も衝突しないよう保持する)。 */
@@ -1220,7 +1240,14 @@ export class TermMachine {
       cal.season = season(cal.month);
     }
     this.world.phase = 'idle';
-    return { monthRolled, holiday: holidayName(cal.year, cal.month, cal.dayOfMonth) };
+    // 村長選挙 (§17): 補欠/通常選挙・世論調査更新を日末に進める。
+    const mayor = tickMayor(this.world, this.mayorConfig);
+    return { monthRolled, holiday: holidayName(cal.year, cal.month, cal.dayOfMonth), mayor };
+  }
+
+  /** 村長リコールを判定する (§17)。server の recallMayor コマンドから呼ぶ。 */
+  recallMayor(): RecallResult {
+    return recallMayorFn(this.world, this.rng, this.mayorConfig);
   }
 
   /**

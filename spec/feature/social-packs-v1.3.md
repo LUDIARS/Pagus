@@ -41,7 +41,7 @@ client: 保険/闇市/オークション UI (送金・銀行 UI は廃止)。
 
 `server/governance.ts` に集約。
 
-- **⑥村長選挙 (mayor)** `{t:'voteMayor', userId target}`: `PAGUS_TERM_DAYS`(=ゲーム月) ごとに集計、最多得票プレイヤーが**村長**。村長特典: 月1回 `addRule` 無料 + ベット手数料免除等。`ServerMessage {t:'mayor', userId, until}`。
+- **⑥村長 (mayor)** — **2026-06 刷新 → §17**。旧「プレイヤーが `voteMayor` で投票、最多得票プレイヤーが村長」は廃止。村長は**村人 (NPC)** が**選挙イベント**で村人世論により就任する方式へ (匿名世論調査 + リコール)。実装は `packages/sim/src/mayor.ts`、詳細 `spec/feature/villager-mayor.md`。村長の無料しきたり特典も撤去。
 - **⑦法案投票 (law)** `{t:'proposeLaw', text}` (供託カルマ) + `{t:'voteLaw', lawId, approve:bool}`: 賛成多数で `addVillageRule` 実行 + 提案者へ供託返金、否決で没収。投票中の法案を broadcast `{t:'laws', items:[...]}`。
 - **⑧革命 (revolt)** — アルゴリズム: 村の `malice > PAGUS_REVOLT_THRESHOLD`(0.7) で日末に蜂起イベント発火。プレイヤーは `{t:'revolt', side:'incite'|'suppress'}` で分岐 (集約カルマ多い側が勝ち)。incite 勝利→大量事件/評判悪化、suppress 勝利→鎮静 (malice 減)。chronicle `🔥 革命: …`。
 - **⑨戒厳令 (martialLaw)** `{t:'martial', mode:'freeze'|'surge'}`: 複数プレイヤーの集約カルマ `PAGUS_MARTIAL_COST`(100) を満たすと発動。freeze=スケジュール事件を一時凍結 / surge=日常事件の閾値を下げ多発。TTL 付き。

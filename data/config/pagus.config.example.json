@@ -49,7 +49,7 @@
   "politics": {
     "revoltThreshold": 0.7,
     "martialDays": 2,
-    "mayorPeriodMs": 180000,
+    "recallStake": 50,
     "lawDeposit": 20,
     "lawVoteMs": 60000,
     "revoltStake": 10,

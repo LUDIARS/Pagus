@@ -1,0 +1,86 @@
+{
+  "name": "Brain/LLM Backends",
+  "description": "Multi-model LLM distribution: backend abstraction, per-villager assignment, tier routing (strong override), default cast, prompt/output contracts. The AI inference layer (Discutere-style).",
+  "presetRules": [
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "/server/src/llm/",
+        "by": "path",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Bb]rain",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Bb]ackend",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Tt]ier",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Rr]oute",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Cc]ast",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ll]lm",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Pp]rompt",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    }
+  ],
+  "templateRules": [],
+  "cardTemplate": "Summarise the \"Brain/LLM Backends\" domain: Multi-model LLM distribution: backend abstraction, per-villager assignment, tier routing (strong override), default cast, prompt/output contracts. The AI inference layer (Discutere-style).",
+  "source": "spec-draft",
+  "mechanics": [],
+  "specRefs": [
+    "Brain backends — マルチモデル分散 (v0.2)",
+    "Brain backends — マルチモデル分散 (v0.2) / backend 抽象",
+    "Brain backends — マルチモデル分散 (v0.2) / per-villager 割当",
+    "Brain backends — マルチモデル分散 (v0.2) / tier ルーティング (strong override)",
+    "Brain backends — マルチモデル分散 (v0.2) / プロンプト / 出力契約",
+    "Pagus 機能仕様書 (v0.0) / 5. AI (Brain) インターフェース",
+    "Pagus 機能仕様書 (v0.0) / 5. AI (Brain) インターフェース / 5.1 LLM tier (コスト方針)",
+    "Pagus 機能仕様書 (v0.0) / 5. AI (Brain) インターフェース / 5.2 マルチ LLM 分散 (Discutere 方式) + GPT-5.5"
+  ],
+  "rationale": "LLM 推論の抽象・ルーティング・コスト方針は server/src/llm に集約された明確な責務。ゲームメカニクスではなくインフラ層。",
+  "updatedAt": "2026-06-29T16:26:30.904Z"
+}

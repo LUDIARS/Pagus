@@ -1,7 +1,7 @@
 // WS 配線契約。World は Map を持ち JSON 化できないので、villagers を配列にした
 // WireWorld を介して server→client へ送る。client もこの型だけ見れば描画できる。
 
-import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule, MartialState, MartialMode, FieldItem } from './types/index.js';
+import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 import { defaultBehaviorRules, type BehaviorRule } from './behavior-rules.js';
 
@@ -19,6 +19,12 @@ export interface WireWorld {
   behaviorRules: BehaviorRule[];
   /** フィールドに落ちているアイテム (§16)。 */
   items: FieldItem[];
+  /** 現村長の villager id (§17)。空位は null。 */
+  mayorId: string | null;
+  /** 次の村長選挙までの残りターム数 (§17)。 */
+  mayorTermsLeft: number;
+  /** 選挙運動期間中の匿名世論調査 (§17)。期間外は null。 */
+  mayorPoll: MayorPoll | null;
   /** 戒厳令 (§v1.3-C ⑨)。発動中のみ。 */
   martial?: MartialState;
 }
@@ -37,6 +43,9 @@ export function toWire(world: World): WireWorld {
     villageRules: world.villageRules,
     behaviorRules: world.behaviorRules,
     items: world.items,
+    mayorId: world.mayorId,
+    mayorTermsLeft: world.mayorTermsLeft,
+    mayorPoll: world.mayorPoll,
   };
   // exactOptionalPropertyTypes: 戒厳令は発動中のみキーを足す (§v1.3-C ⑨)。
   if (world.martial !== undefined) wire.martial = world.martial;
@@ -58,6 +67,9 @@ export function fromWire(wire: WireWorld): World {
     villageRules: wire.villageRules ?? [],
     behaviorRules: wire.behaviorRules ?? defaultBehaviorRules(),
     items: wire.items ?? [],
+    mayorId: wire.mayorId ?? null,
+    mayorTermsLeft: wire.mayorTermsLeft ?? 0,
+    mayorPoll: wire.mayorPoll ?? null,
   };
   if (wire.martial !== undefined) world.martial = wire.martial;
   return world;
@@ -68,7 +80,8 @@ export function fromWire(wire: WireWorld): World {
 // v6: World.martial (§v1.3-C 政治パック 戒厳令)。
 // v7: Villager.wealth/hobby/admireId/scummy (§15 住民経済)。
 // v8: World.items (§16 フィールドアイテム)。
-export const WORLD_SNAPSHOT_VERSION = 8;
+// v9: World.mayorId/mayorTermsLeft/mayorPoll (§17 村人村長の選挙)。
+export const WORLD_SNAPSHOT_VERSION = 9;
 
 /**
  * 永続化する world スナップショット。WireWorld (JSON 化可能な world) に加え、
@@ -317,7 +330,7 @@ export type ServerMessage =
       cost: CostSummary;
     }
   // --- 政治パック (§v1.3-C) ---
-  | { t: 'mayor'; userId: string | null; endsInMs: number } // 村長 (⑥, broadcast)
+  // 村長 (§17) は WireWorld (mayorId/mayorTermsLeft/mayorPoll) に乗って snapshot で配信する。
   | { t: 'laws'; items: LawView[] } // 投票中の法案一覧 (⑦, broadcast)
   | { t: 'revolt'; active: boolean; incite: number; suppress: number; endsInMs: number } // 革命の蜂起状態 (⑧, broadcast)
   | { t: 'martial'; mode: MartialMode | null; endsInMs: number } // 戒厳令の発動状態 (⑨, broadcast)
@@ -359,7 +372,7 @@ export type ClientMessage =
   | { t: 'buyMarket'; item: MarketItem; targetId?: string; targetId2?: string; kind?: string; userId?: string } // 闇市で購入 (§v1.3-B ⑤)
   | { t: 'bid'; lotId: string; amount: number; userId?: string } // オークション入札 (§v1.3-B ②)
   // 政治パック (§v1.3-C): 統治。
-  | { t: 'voteMayor'; target: string; userId?: string } // 村長選挙の 1 票 (⑥)
+  | { t: 'recallMayor'; userId?: string } // 村長リコール請求 (§17)。成功率は支持率+過去の事件
   | { t: 'proposeLaw'; text: string; userId?: string } // 法案を供託カルマ付きで提案 (⑦)
   | { t: 'voteLaw'; lawId: string; approve: boolean; userId?: string } // 法案へ賛成/反対 (⑦)
   | { t: 'revolt'; side: 'incite' | 'suppress'; userId?: string } // 蜂起にカルマを投じる (⑧)

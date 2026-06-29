@@ -1,12 +1,14 @@
-// 政治パネル (§v1.3-C)。統治の操作 UI:
-//   ⑥ 村長選挙 (投票先 userId + 現村長表示) / ⑦ 法案 (提案 + 賛否投票) /
-//   ⑧ 革命 (蜂起中に扇動/鎮圧) / ⑨ 戒厳令 (freeze/surge) / ⑩ 村基金 (残高表示)。
-// 受理可否の最終判定は server (commandRejected はトーストで既出)。ここでは入力を集めて送るだけ。
+// 政治パネル (§v1.3-C + §17)。統治の操作 UI:
+//   村長 (§17 村人が選挙で就任: 現村長/任期/匿名世論調査表示 + リコール請求) /
+//   ⑦ 法案 (提案 + 賛否投票) / ⑧ 革命 (蜂起中に扇動/鎮圧) / ⑨ 戒厳令 / ⑩ 村基金。
+// 村長/世論は snapshot (WireWorld) から、それ以外は専用メッセージから受ける。
+// 受理可否の最終判定は server (commandRejected はトーストで既出)。
 
-import type { LawView, MartialMode } from '@pagus/sim';
+import type { LawView, MartialMode, WireWorld } from '@pagus/sim';
 
 export interface GovernanceHandlers {
-  onVoteMayor(target: string): void;
+  /** 村長リコールを請求する (§17)。 */
+  onRecallMayor(): void;
   onProposeLaw(text: string): void;
   onVoteLaw(lawId: string, approve: boolean): void;
   onRevolt(side: 'incite' | 'suppress'): void;
@@ -15,9 +17,7 @@ export interface GovernanceHandlers {
 
 export class GovernancePanel {
   // 受信状態 + ローカル countdown 用の受信時刻。
-  private mayorId: string | null = null;
-  private mayorEndsInMs = 0;
-  private mayorAt = 0;
+  private world: WireWorld | null = null;
   private laws: LawView[] = [];
   private lawsAt = 0;
   private revoltActive = false;
@@ -30,7 +30,7 @@ export class GovernancePanel {
   private fundThreshold = 100;
 
   private readonly mayorBox = document.createElement('div');
-  private readonly voteTarget = document.createElement('input');
+  private readonly pollBox = document.createElement('div');
   private readonly lawText = document.createElement('input');
   private readonly lawsBox = document.createElement('div');
   private readonly revoltBox = document.createElement('div');
@@ -40,28 +40,19 @@ export class GovernancePanel {
 
   constructor(
     private readonly root: HTMLElement,
-    private readonly myUserId: string,
     private readonly h: GovernanceHandlers,
   ) {
     this.root.replaceChildren();
     this.root.appendChild(heading('🏛 政治'));
 
-    // ⑥ 村長選挙。
-    this.root.appendChild(subLabel('村長'));
+    // 村長 (§17): 村人が選挙で就任。現村長/任期 + 匿名世論調査 + リコール。
+    this.root.appendChild(subLabel('村長 (村人が選挙で就任)'));
     this.mayorBox.className = 'ctl-state';
     this.root.appendChild(this.mayorBox);
-    textField(this.voteTarget, '投票先 userId');
-    this.root.appendChild(this.voteTarget);
-    const mayorBtns = document.createElement('div');
-    mayorBtns.className = 'ctl-btns';
-    mayorBtns.append(
-      this.btn('🗳 投票', 'gov-btn', () => {
-        const t = this.voteTarget.value.trim();
-        if (t) this.h.onVoteMayor(t);
-      }),
-      this.btn('🙋 自分に', 'gov-btn', () => this.h.onVoteMayor(this.myUserId)),
-    );
-    this.root.appendChild(mayorBtns);
+    this.pollBox.className = 'gov-poll';
+    this.root.appendChild(this.pollBox);
+    this.root.appendChild(this.btn('🪧 リコール請求', 'gov-btn gov-recall', () => this.h.onRecallMayor()));
+    this.root.appendChild(hint('成功率は支持率と過去の事件で決まる。請願にカルマがかかる。'));
 
     // ⑦ 法案。
     this.root.appendChild(subLabel('法案 (供託カルマ。可決で村の掟に)'));
@@ -110,10 +101,9 @@ export class GovernancePanel {
     this.timer = setInterval(() => this.renderTimed(), 1000);
   }
 
-  setMayor(userId: string | null, endsInMs: number): void {
-    this.mayorId = userId;
-    this.mayorEndsInMs = endsInMs;
-    this.mayorAt = Date.now();
+  /** snapshot から村長/世論 (§17) を反映する。 */
+  setWorld(world: WireWorld): void {
+    this.world = world;
     this.renderMayor();
   }
 
@@ -151,18 +141,38 @@ export class GovernancePanel {
     this.renderFund();
   }
 
-  /** ms 締切のあるもの (村長/法案/革命) の残り表示を更新する。 */
+  /** ms 締切のあるもの (法案/革命) の残り表示を更新する。村長は term ベースで snapshot 時に更新。 */
   private renderTimed(): void {
-    this.renderMayor();
     this.renderLaws();
     this.renderRevolt();
   }
 
+  /** 村長 (§17): 現村長名/任期 + 匿名世論調査 (支持率/人気候補/わからない・みんなきらい・きょうみない)。 */
   private renderMayor(): void {
     this.mayorBox.replaceChildren();
-    const who = this.mayorId ? (this.mayorId === this.myUserId ? 'あなた' : shortId(this.mayorId)) : '(空位)';
-    this.mayorBox.appendChild(kv('👑 村長', who));
-    this.mayorBox.appendChild(kv('⏳ 任期', `あと ${this.remainSec(this.mayorEndsInMs, this.mayorAt)}秒`));
+    this.pollBox.replaceChildren();
+    const w = this.world;
+    if (!w) {
+      this.mayorBox.appendChild(kv('👑 村長', '(接続待ち)'));
+      return;
+    }
+    const mayor = w.mayorId ? w.villagers.find((v) => v.id === w.mayorId) : null;
+    this.mayorBox.appendChild(kv('👑 村長', mayor ? `${mayor.name} (${mayor.species})` : '(空位)'));
+    this.mayorBox.appendChild(kv('🗳 次の選挙', `あと ${w.mayorTermsLeft}日`));
+
+    const poll = w.mayorPoll;
+    if (!poll) {
+      this.pollBox.appendChild(hint('世論調査は選挙の半年前から (半月ごと更新)'));
+      return;
+    }
+    this.pollBox.appendChild(subLabel('匿名世論調査'));
+    this.pollBox.appendChild(kv('📊 村長支持率', pct(poll.approval)));
+    for (const c of poll.candidates) {
+      this.pollBox.appendChild(kv(`⭐ ${c.name}`, pct(c.support)));
+    }
+    this.pollBox.appendChild(kv('🤷 わからない', pct(poll.dontKnow)));
+    this.pollBox.appendChild(kv('😠 みんなきらい', pct(poll.hate)));
+    this.pollBox.appendChild(kv('😐 きょうみない', pct(poll.noInterest)));
   }
 
   private renderLaws(): void {
@@ -234,8 +244,9 @@ function textField(input: HTMLInputElement, placeholder: string): void {
   input.className = 'target-select';
   input.placeholder = placeholder;
 }
-function shortId(id: string): string {
-  return id.length > 6 ? `${id.slice(0, 6)}…` : id;
+/** 0..1 を百分率表記にする (§17 世論調査)。 */
+function pct(n: number): string {
+  return `${Math.round(Math.max(0, Math.min(1, n)) * 100)}%`;
 }
 function heading(text: string): HTMLElement {
   const el = document.createElement('h3');

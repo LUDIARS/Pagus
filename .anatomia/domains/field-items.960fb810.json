@@ -1,0 +1,70 @@
+{
+  "name": "Field Items",
+  "description": "フィールドアイテム (§16): 人手のランダム配布物。モデル・フロー・非行連動 (behavior-rules)・client 観測。",
+  "presetRules": [
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "/sim/src/",
+        "by": "path",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "/client/src/",
+        "by": "path",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ff]ieldItem",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ii]tem",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Dd]rop",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Pp]ickup",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    }
+  ],
+  "templateRules": [],
+  "cardTemplate": "Summarise the \"Field Items\" domain: フィールドアイテム (§16): 人手のランダム配布物。モデル・フロー・非行連動 (behavior-rules)・client 観測。",
+  "source": "spec-draft",
+  "mechanics": [
+    "field-items",
+    "random-distribution"
+  ],
+  "specRefs": [
+    "Pagus 機能仕様書 (v0.0) / 16. フィールドアイテム (人手のランダム配布) — 実装済",
+    "フィールドアイテム (§16) — 人手のランダム配布物",
+    "フィールドアイテム (§16) — 人手のランダム配布物 / モデル",
+    "フィールドアイテム (§16) — 人手のランダム配布物 / フロー",
+    "フィールドアイテム (§16) — 人手のランダム配布物 / 非行連動 (behavior-rules)"
+  ],
+  "rationale": "アイテム配布は独自モデルとフローを持つ小ぶりだが明確なメカニクス。経済/非行への連動を持つ境界。",
+  "updatedAt": "2026-06-29T16:26:30.907Z"
+}

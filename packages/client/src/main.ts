@@ -110,9 +110,9 @@ async function main(): Promise<void> {
     onBid: (lotId, amount) => conn.send({ t: 'bid', lotId, amount, userId }),
   });
 
-  // 政治パネル (§v1.3-C): 村長 / 法案 / 革命 / 戒厳令 / 村基金。
-  const governance = new GovernancePanel(el('governance'), userId, {
-    onVoteMayor: (target) => conn.send({ t: 'voteMayor', target, userId }),
+  // 政治パネル (§v1.3-C + §17): 村長(村人選挙/世論/リコール) / 法案 / 革命 / 戒厳令 / 村基金。
+  const governance = new GovernancePanel(el('governance'), {
+    onRecallMayor: () => conn.send({ t: 'recallMayor', userId }),
     onProposeLaw: (text) => conn.send({ t: 'proposeLaw', text, userId }),
     onVoteLaw: (lawId, approve) => conn.send({ t: 'voteLaw', lawId, approve, userId }),
     onRevolt: (side) => conn.send({ t: 'revolt', side, userId }),
@@ -150,6 +150,7 @@ async function main(): Promise<void> {
       controls.setWorld(world);
       cards.setWorld(world);
       economy.setWorld(world);
+      governance.setWorld(world); // 村長/世論調査 (§17) は snapshot から
       spectacle.setWorld(world);
       betPanel.update(world);
       verdict.classList.toggle('show', showVerdict(world));
@@ -189,7 +190,6 @@ async function main(): Promise<void> {
     onBetState: (s) => betPanel.setBetState(s),
     onLeaderboard: (s) => leaderboard.setLeaderboard(s),
     onAuction: (lots) => economy.setAuction(lots),
-    onMayor: (mayorId, endsInMs) => governance.setMayor(mayorId, endsInMs),
     onLaws: (items) => governance.setLaws(items),
     onRevolt: (active, incite, suppress, endsInMs) => governance.setRevolt(active, incite, suppress, endsInMs),
     onMartial: (mode) => governance.setMartial(mode),

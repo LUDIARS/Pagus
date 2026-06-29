@@ -100,7 +100,7 @@ export interface EconomyConfig {
 export interface PoliticsConfig {
   revoltThreshold: number; // PAGUS_REVOLT_THRESHOLD
   martialDays: number; // PAGUS_MARTIAL_DAYS
-  mayorPeriodMs: number; // PAGUS_MAYOR_PERIOD_MS
+  recallStake: number; // 村長リコール請願のカルマ費 (§17)
   lawDeposit: number; // PAGUS_LAW_DEPOSIT
   lawVoteMs: number; // PAGUS_LAW_VOTE_MS
   revoltStake: number; // PAGUS_REVOLT_STAKE
@@ -223,7 +223,7 @@ export const DEFAULT_CONFIG: PagusConfig = {
   politics: {
     revoltThreshold: 0.7,
     martialDays: 2,
-    mayorPeriodMs: 180000,
+    recallStake: 50,
     lawDeposit: 20,
     lawVoteMs: 60000,
     revoltStake: 10,

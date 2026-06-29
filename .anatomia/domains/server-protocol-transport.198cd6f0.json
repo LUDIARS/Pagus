@@ -1,0 +1,73 @@
+{
+  "name": "Server Protocol & Transport",
+  "description": "WS プロトコル、データ配置(アンカー)、ユーザ確認イベント/通知投票、server オーケストレーション(llm を除く)。",
+  "presetRules": [
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "/server/src/",
+        "by": "path",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ww]s",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ss]ocket",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Pp]rotocol",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Aa]nchor",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Bb]roadcast",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Nn]otif",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    }
+  ],
+  "templateRules": [],
+  "cardTemplate": "Summarise the \"Server Protocol & Transport\" domain: WS プロトコル、データ配置(アンカー)、ユーザ確認イベント/通知投票、server オーケストレーション(llm を除く)。",
+  "source": "spec-draft",
+  "mechanics": [],
+  "specRefs": [
+    "Pagus 機能仕様書 (v0.0) / 7. プロトコル (WS)",
+    "Pagus 機能仕様書 (v0.0) / 8. データ配置 (アンカー)",
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.8 ユーザ確認イベント / 通知投票 (実装済 v0.6)"
+  ],
+  "rationale": "WS プロトコルとデータ配置は server/src のトランスポート/配信層。sim ロジックや LLM とは別のインフラ責務。",
+  "updatedAt": "2026-06-29T16:26:30.912Z"
+}

@@ -1,0 +1,90 @@
+{
+  "name": "Emergent Social Mechanics",
+  "description": "創発メカニクス追補: 狂人(madman)、和解(reconcile)、ストレス耐性、結婚・出産、改変ログ、村の歴史(Chronicle)。多人数ソーシャル機能。",
+  "presetRules": [
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "/sim/src/",
+        "by": "path",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Mm]adman",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Rr]econcile",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Mm]arri",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Bb]irth",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Cc]hronicle",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ss]tress",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Hh]istory",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    }
+  ],
+  "templateRules": [],
+  "cardTemplate": "Summarise the \"Emergent Social Mechanics\" domain: 創発メカニクス追補: 狂人(madman)、和解(reconcile)、ストレス耐性、結婚・出産、改変ログ、村の歴史(Chronicle)。多人数ソーシャル機能。",
+  "source": "spec-draft",
+  "mechanics": [
+    "madman",
+    "reconcile",
+    "marriage-birth",
+    "stress-tolerance",
+    "chronicle"
+  ],
+  "specRefs": [
+    "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26)",
+    "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.1 狂人 (madman)",
+    "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.2 和解 (reconcile)",
+    "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.6 結婚・出産",
+    "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.8 村の歴史 (Chronicle)",
+    "Pagus 機能仕様書 (v0.0) / 13. 多人数ソーシャル機能 (v1.2) — 計画中"
+  ],
+  "rationale": "個別の創発的住民間メカニクス群。それぞれ小さいが社会的相互作用という共通テーマでまとめられる粗いドメイン。",
+  "updatedAt": "2026-06-29T16:26:30.906Z"
+}

@@ -48,8 +48,6 @@ export interface WsHandlers {
   onLeaderboard?(s: LeaderboardView): void;
   /** オークションのロット状態 (§v1.3-B ②)。 */
   onAuction?(lots: AuctionLotView[]): void;
-  /** 村長 (§v1.3-C ⑥)。 */
-  onMayor?(userId: string | null, endsInMs: number): void;
   /** 投票中の法案一覧 (§v1.3-C ⑦)。 */
   onLaws?(items: LawView[]): void;
   /** 蜂起状態 (§v1.3-C ⑧)。 */
@@ -127,8 +125,7 @@ export function connect(url: string, h: WsHandlers): Conn {
         h.onBetState?.({ incidentId: msg.incidentId, pool: msg.pool, yourBet: msg.yourBet });
       } else if (msg.t === 'leaderboard') {
         h.onLeaderboard?.({ players: msg.players, factions: msg.factions });
-      } else if (msg.t === 'mayor') h.onMayor?.(msg.userId, msg.endsInMs);
-      else if (msg.t === 'laws') h.onLaws?.(msg.items);
+      } else if (msg.t === 'laws') h.onLaws?.(msg.items);
       else if (msg.t === 'revolt') h.onRevolt?.(msg.active, msg.incite, msg.suppress, msg.endsInMs);
       else if (msg.t === 'martial') h.onMartial?.(msg.mode, msg.endsInMs);
       else if (msg.t === 'fund') h.onFund?.(msg.amount, msg.threshold);

@@ -53,6 +53,9 @@ export function createWorld(
     villageRules,
     behaviorRules,
     items: [],
+    mayorId: null,
+    mayorTermsLeft: 0,
+    mayorPoll: null,
   };
 }
 

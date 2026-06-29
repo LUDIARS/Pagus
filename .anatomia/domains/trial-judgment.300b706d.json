@@ -1,0 +1,78 @@
+{
+  "name": "Trial & Judgment",
+  "description": "転(審議/裁判): 糾弾セリフ (Haiku 生成+レパートリー)、死刑/教育の2択への簡素化、プレイヤーの裁判介入(投票一本化)。",
+  "presetRules": [
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "/sim/src/",
+        "by": "path",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Tt]rial",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Jj]udg",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Tt]en",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Aa]ccus",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Vv]erdict",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    },
+    {
+      "preset": "couplingCap",
+      "params": {
+        "targetPattern": "[Ss]entence",
+        "by": "name",
+        "maxFanOut": 9007199254740991
+      }
+    }
+  ],
+  "templateRules": [],
+  "cardTemplate": "Summarise the \"Trial & Judgment\" domain: 転(審議/裁判): 糾弾セリフ (Haiku 生成+レパートリー)、死刑/教育の2択への簡素化、プレイヤーの裁判介入(投票一本化)。",
+  "source": "spec-draft",
+  "mechanics": [
+    "trial",
+    "death-or-education",
+    "accusation-lines"
+  ],
+  "specRefs": [
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.4 転 (TEN) — 審議 (裁判)",
+    "Pagus 機能仕様書 (v0.0) / 5. AI (Brain) インターフェース / 5.3 裁判の糾弾セリフ (Haiku 生成 + レパートリー)",
+    "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 5. 裁判の簡素化 — 死刑 / 教育の2択",
+    "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.4 プレイヤーの裁判介入 (投票一本化)"
+  ],
+  "rationale": "裁判は転フェーズの独立した審議メカニクスで、糾弾・判決・介入という固有ルールを持つ。",
+  "updatedAt": "2026-06-29T16:26:30.913Z"
+}

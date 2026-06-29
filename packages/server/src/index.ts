@@ -280,6 +280,7 @@ function main(): void {
   // 政治パック (§v1.3-C) の設定。
   const REVOLT_THRESHOLD = cfg.politics.revoltThreshold; // 蜂起の悪辣しきい値 (⑧)
   const MARTIAL_DAYS = cfg.politics.martialDays; // 戒厳令の有効日数 (⑨)
+  const RECALL_STAKE = cfg.politics.recallStake; // 村長リコール請願のカルマ費 (§17)
   // 戒厳令の発動と日末の期限切れ検知 (term 進行ベース)。
   let lastGovTerm = tm.world.term;
 
@@ -546,9 +547,7 @@ function main(): void {
         ws.sendRejected(userId, 'しきたりが上限に達している');
         return;
       }
-      // 村長特典 (§v1.3-C ⑥): 任期 1 回は無料。使えなければ通常どおり課金。
-      const mayorFree = governance.tryMayorFreeRule(userId);
-      if (!mayorFree && !ps.spend(userId, RULE_ADD_COST)) {
+      if (!ps.spend(userId, RULE_ADD_COST)) {
         ws.sendRejected(userId, 'カルマが足りない');
         return;
       }
@@ -863,11 +862,29 @@ function main(): void {
       ws.broadcastSnapshot(w);
       pushState(userId);
     },
-    // --- 政治パック (§v1.3-C) ---------------------------------------------------
-    onVoteMayor: (target, userId) => {
+    // --- 政治パック (§v1.3-C) + 村長リコール (§17) -----------------------------
+    onRecallMayor: (userId) => {
       knownUsers.add(userId);
-      const res = governance.voteMayor(userId, target);
-      if (!res.ok) ws.sendRejected(userId, res.reason);
+      if (!tm.world.mayorId) {
+        ws.sendRejected(userId, '村長が空位 (リコール対象なし)');
+        return;
+      }
+      if (!ps.spend(userId, RECALL_STAKE)) {
+        ws.sendRejected(userId, `カルマが足りない (請願に ${RECALL_STAKE})`);
+        return;
+      }
+      pushState(userId);
+      const r = tm.recallMayor();
+      const cal = tm.world.calendar;
+      const date = `${cal.month}月${cal.dayOfMonth}日`;
+      if (r.success) {
+        const tail = r.newMayor ? ` → ${r.newMayor} が補欠当選` : '';
+        chronicle.add(date, `🏛 リコール成立: ${r.ousted} が罷免された (成功率${Math.round(r.probability * 100)}%)${tail}`, 'other');
+      } else {
+        chronicle.add(date, `🏛 リコール不成立: 村長の罷免は退けられた (成功率${Math.round(r.probability * 100)}%)`, 'other');
+      }
+      ws.updateChronicle(chronicle.recent());
+      ws.broadcastSnapshot(tm.world);
     },
     onProposeLaw: (text, userId) => {
       knownUsers.add(userId);
@@ -957,7 +974,6 @@ function main(): void {
   // 政治パック (§v1.3-C): 村長/法案/革命/戒厳令/税。状態と時間管理は Governance、副作用はここ。
   governance = new Governance(
     {
-      mayorPeriodMs: cfg.politics.mayorPeriodMs,
       lawDeposit: cfg.politics.lawDeposit,
       lawVoteMs: cfg.politics.lawVoteMs,
       revoltThreshold: REVOLT_THRESHOLD,
@@ -1005,7 +1021,6 @@ function main(): void {
         chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, text, 'other');
         ws.updateChronicle(chronicle.recent());
       },
-      broadcastMayor: (uid, endsInMs) => ws.broadcastMayor(uid, endsInMs),
       broadcastLaws: (items) => ws.broadcastLaws(items),
       broadcastRevolt: (active, incite, suppress, endsInMs) => ws.broadcastRevolt(active, incite, suppress, endsInMs),
       broadcastMartial: (mode, endsInMs) => ws.broadcastMartial(mode, endsInMs),
