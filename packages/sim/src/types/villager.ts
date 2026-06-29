@@ -51,6 +51,12 @@ export interface Appearance {
 /** どうぶつの出自。事件用キャラ (incident) は通常住民と区別する (§12.3)。 */
 export type VillagerOrigin = 'seed' | 'born' | 'incident';
 
+/**
+ * 趣味嗜好 (§15 住民経済)。消費の荒さ・傾向を決める。気質の dominant 軸から factory が割り当てる。
+ * 質素(ascetic) < 蒐集(collector)/社交(social) < 着飾り(fashion)/美食(gourmet)/賭博(gamble) の順に消費が荒い。
+ */
+export type Hobby = 'ascetic' | 'collector' | 'social' | 'fashion' | 'gourmet' | 'gamble';
+
 export interface Villager {
   id: VillagerId;
   name: string;
@@ -87,4 +93,16 @@ export interface Villager {
    * 日常エンジン (BT) のアルゴリズムイベント発火条件に使い、人間が定期レビューで消す。
    */
   eventParams: Record<string, number>;
+  /**
+   * 所持金 (§15 住民経済)。プレイヤーのカルマとは別の住民通貨。日末の経済決済 (economy.ts) で
+   * 収入 + 趣味消費 + 推しへの送金で増減する。貧 (< poorThreshold) は非行に走りやすく、
+   * 富 (>= scumThreshold) は消費が荒くなりプレイヤーにたかる「クズ化」傾向を持つ。
+   */
+  wealth: number;
+  /** 趣味嗜好 (§15)。消費の傾向。dominant 気質から factory が割り当てる。 */
+  hobby: Hobby;
+  /** 推し (§15)。送金先の住民 id。未設定/対象退場時は日末決済が選び直す。 */
+  admireId: VillagerId | null;
+  /** クズ化フラグ (§15)。大金を持つと true になり、消費が荒くなり・プレイヤーにたかる。 */
+  scummy: boolean;
 }

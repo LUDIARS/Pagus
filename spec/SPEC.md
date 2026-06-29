@@ -418,6 +418,18 @@ data/
 - **§14.D 演出・協力**: ハイライト / 予測アワード / 月間MVP / 観客の祈り / 共闘レイド / シーズン制。
 - **実装フェーズ**: v1.3-A→B→C→D。
 
+## 15. 住民経済 (貧富と非行) — 実装済
+
+> 2026-06-29 起草・実装。住民 (NPC) に**所持金 (`Villager.wealth`)** を持たせ、貧富の差・趣味消費・非行・クズ化を **LLM 非依存の決定的アルゴリズム (ブラックボックスエンジン)** で回す。プレイヤーのカルマとは別通貨。実装は `packages/sim/src/economy.ts` + behavior-rules の wealth ルール。詳細 `spec/feature/villager-economy.md`。
+
+- **貧富の差**: 初期所持金は id ハッシュ × 振れ幅 + 野心で決定的に散らす (`initialWealth`)。一部が富裕・一部が貧困になる。
+- **趣味嗜好に従った消費**: 各住民は `hobby` (質素/蒐集/社交/着飾り/美食/賭博、dominant 気質から割当) を持ち、日末に趣味倍率で消費する。
+- **非行 (poor → delinquency)**: 所持金 < `poorThreshold`(40) の個体は behavior-rule (`base_poor_delinquency`) で `triggerWeight`+2・怒り+ → daily-engine で事件化しやすくなる。
+- **推しへの送金 (NPC→NPC)**: 各住民は `admireId` (推し) を持ち、日末に確率で所持金の一部を送る (退場時は選び直し)。プレイヤー UI の送金廃止 (§14.B) とは別の、住民どうしの自律送金。
+- **クズ化 (rich → scum)**: 所持金 >= `scumThreshold`(400) で `scummy`=true。消費が荒くなり (浪費倍率)、確率でプレイヤーに**カルマをたかる** (demand)。富裕線を割れば更生。behavior-rule `base_rich_scum` で諍いの火種にもなる。
+- **決済**: `TermMachine.settleEconomy()` を server が日末 (advance) に呼び、送金/クズ化遷移/たかりを live feed に出す。
+- **観測**: 右パネル「村の経済」に 富裕/貧困/クズ化 数・最富裕個体を表示。snapshot は v7。
+
 ## 11. 開いている設計判断
 
 > 2026-06-26: 実装で確定した項目 — 裁判の2問(「最も愚か」で被告選び→「殺す/活かす」)、GANs別コンテキスト(加害者/被害者視点の step を交互)、住民bloc+ユーザ1票+狂人加重の合算、世界側日末評価(reputationDelta/villagerDeltas/spawn)、創発/生活メカニクス(狂人/和解/二次被害/ストレス耐性/結婚出産 §8B)、糾弾の Haiku 生成+レパートリー(§5.3)、村の歴史(§8B.8)。

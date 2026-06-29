@@ -180,6 +180,13 @@ export class TermLoop {
         const life = this.tm.lifeEvents();
         for (const m of life.marriages) this.h.onLog('kisho', `💍 ${m.aName} と ${m.bName} が結ばれた`);
         for (const b of life.births) this.h.onLog('kisho', `👶 ${b.parents} に ${b.childName} が生まれた`);
+        // 日末の住民経済決済 (§15): 推し送金 / クズ化遷移 / プレイヤーへのたかり を live feed に出す。
+        const econ = this.tm.settleEconomy();
+        for (const t of econ.transfers) this.h.onLog('kisho', `💸 ${t.fromName} が推しの ${t.toName} に ${t.amount} を送った`);
+        for (const s of econ.scumChanges) {
+          this.h.onLog('kisho', s.scummy ? `🤑 ${s.name} は大金を持て余してクズ化した` : `🧹 ${s.name} は身を持ち直した`);
+        }
+        for (const d of econ.demands) this.h.onLog('kisho', `💢 ${d.name} がプレイヤーに ${d.amount} カルマをたかってきた`);
         // ふるまいの法則の Haiku 増殖 (§2.1): 低確率で 1 つ生成して村に芽生えさせる。
         if (this.ruleGen.enabled && this.ruleRng() < this.ruleGen.chance) {
           const rule = await this.tm.maybeGrowRule();

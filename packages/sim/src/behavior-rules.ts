@@ -25,7 +25,9 @@ export type RuleCondition =
   | { kind: 'timeOfDay'; timeOfDay: TimeOfDay }
   | { kind: 'hasNeighbor' }
   | { kind: 'species'; species: string }
-  | { kind: 'actionCategory'; category: RuleCategory };
+  | { kind: 'actionCategory'; category: RuleCategory }
+  | { kind: 'wealthBelow'; value: number } // 所持金 < value (§15 貧困=非行傾向)
+  | { kind: 'wealthAbove'; value: number }; // 所持金 >= value (§15 富裕=クズ化)
 
 /** ルール効果 (閉じた enum)。match した全ルールの効果を集約する。 */
 export type RuleEffect =
@@ -86,6 +88,10 @@ function matchCondition(cond: RuleCondition, ctx: RuleEvalContext): boolean {
       return villager.species === cond.species;
     case 'actionCategory':
       return category === cond.category;
+    case 'wealthBelow':
+      return villager.wealth < cond.value;
+    case 'wealthAbove':
+      return villager.wealth >= cond.value;
   }
 }
 
@@ -173,6 +179,33 @@ export const BASE_BEHAVIOR_RULES: BehaviorRule[] = [
     description: 'うろつくと怒りが緩やかに鎮まる',
     when: [{ kind: 'actionCategory', category: 'wander' }],
     then: [{ kind: 'emotionDelta', emotionAxis: 'anger', delta: -0.05 }],
+  },
+  // §15 住民経済: 閾値は economy.ts の DEFAULT_ECONOMY と一致させること (poorThreshold=40 / scumThreshold=400)。
+  {
+    id: 'base_poor_delinquency',
+    source: 'base',
+    description: '金に困った者は気が立ち、非行 (事件) に走りやすい',
+    when: [
+      { kind: 'actionCategory', category: 'wander' },
+      { kind: 'wealthBelow', value: 40 },
+    ],
+    then: [
+      { kind: 'triggerWeight', delta: 2 },
+      { kind: 'emotionDelta', emotionAxis: 'anger', delta: 0.1 },
+    ],
+  },
+  {
+    id: 'base_rich_scum',
+    source: 'base',
+    description: '大金を持つと横柄になり、諍いの火種になりやすい',
+    when: [
+      { kind: 'actionCategory', category: 'wander' },
+      { kind: 'wealthAbove', value: 400 },
+    ],
+    then: [
+      { kind: 'triggerWeight', delta: 1 },
+      { kind: 'emotionDelta', emotionAxis: 'joy', delta: 0.05 },
+    ],
   },
 ];
 

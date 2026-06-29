@@ -62,7 +62,8 @@ export function fromWire(wire: WireWorld): World {
 /** 現スナップショット形式のバージョン。型が壊れる変更時に増やし、古い snapshot を破棄する。 */
 // v5: BehaviorRule.expiresAtTerm/source='card' + Villager.hiddenUntilTerm (§v1.3-A カードパック)。
 // v6: World.martial (§v1.3-C 政治パック 戒厳令)。
-export const WORLD_SNAPSHOT_VERSION = 6;
+// v7: Villager.wealth/hobby/admireId/scummy (§15 住民経済)。
+export const WORLD_SNAPSHOT_VERSION = 7;
 
 /**
  * 永続化する world スナップショット。WireWorld (JSON 化可能な world) に加え、
