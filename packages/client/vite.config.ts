@@ -8,7 +8,11 @@ export default defineConfig({
   server: {
     port: 4320,
     host: true, // 0.0.0.0 で待受 (Cloudflare Tunnel が IPv4 localhost で届く)。
-    allowedHosts: ['pagus.vtn-game.com', 'localhost'],
+    allowedHosts: [
+      'pagus.vtn-game.com',
+      'localhost',
+      ...(process.env.LUDIARS_ALLOWED_HOSTS?.split(',').map(s => s.trim()).filter(Boolean) ?? []),
+    ],
     proxy: {
       '/ws': { target: 'ws://localhost:4310', ws: true },
       // push 購読 / 通知経由の投票も同一オリジンで game server (4310) へ。
