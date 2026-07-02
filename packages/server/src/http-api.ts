@@ -2,17 +2,24 @@
 // - GET  /api/push/public-key  VAPID 公開鍵 (push 無効なら enabled:false)
 // - POST /api/push/subscribe   購読登録 (body = PushSubscription)
 // - POST /api/vote             裁判への 1 票 ({pick, userId}) — 通知経由の投票用
+// - GET  /api/blackbox/rules            判例ルール一覧 + 卒業メトリクス
+// - GET  /api/blackbox/decisions        判例のレビュー待ちキュー (trial 発火分)
+// - POST /api/blackbox/decisions/:id/verdict  {verdict: "ok"|"ng"} — OK×3 で判例卒業
 // - GET  /healthz              死活
 // それ以外は 404。WS の upgrade は ws 側が処理するのでここには来ない。
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { PushSubscription } from 'web-push';
+import { describeCondition, type BlackBox } from '@ludiars/blackbox';
+import { DOMAIN_TRIAL_FATE } from './llm/fate-blackbox.js';
 import type { PushService } from './push-service.js';
 
 export interface HttpApiDeps {
   push: PushService;
   /** 裁判への 1 票を反映する。 */
   onVote(pick: string, userId: string): void;
+  /** 裁判判例の成長型ブラックボックス (レビュー/閲覧用)。 */
+  blackbox?: BlackBox;
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -59,6 +66,42 @@ export function createRequestListener(deps: HttpApiDeps) {
           }
           deps.push.subscribe(sub);
           sendJson(res, 201, { ok: true });
+        })
+        .catch(() => sendJson(res, 400, { error: 'bad request' }));
+      return;
+    }
+
+    if (deps.blackbox && method === 'GET' && url === '/api/blackbox/rules') {
+      const bb = deps.blackbox;
+      const rules = bb.engine.listRules(DOMAIN_TRIAL_FATE).map((r) => ({
+        ...r,
+        whenText: describeCondition(r.when),
+      }));
+      sendJson(res, 200, { rules, stats: bb.stats(DOMAIN_TRIAL_FATE) });
+      return;
+    }
+
+    if (deps.blackbox && method === 'GET' && url === '/api/blackbox/decisions') {
+      sendJson(res, 200, { items: deps.blackbox.ledger.listPending(DOMAIN_TRIAL_FATE, 50) });
+      return;
+    }
+
+    if (deps.blackbox && method === 'POST' && /^\/api\/blackbox\/decisions\/\d+\/verdict$/.test(url)) {
+      const bb = deps.blackbox;
+      const id = Number(url.split('/')[4]);
+      void readJson(req)
+        .then((body) => {
+          const v = (body as { verdict?: unknown }).verdict;
+          if (v !== 'ok' && v !== 'ng') {
+            sendJson(res, 400, { error: "verdict must be 'ok' or 'ng'" });
+            return;
+          }
+          const r = bb.engine.recordVerdict(id, v);
+          if (!r.ok) {
+            sendJson(res, 404, { error: 'decision not found' });
+            return;
+          }
+          sendJson(res, 200, { ok: true, rule: r.ruleUpdated ?? null });
         })
         .catch(() => sendJson(res, 400, { error: 'bad request' }));
       return;

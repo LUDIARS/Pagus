@@ -45,8 +45,11 @@ import {
   coerceIncidentStep,
   coerceFoolishPick,
   coerceFate,
+  coerceFateJudgement,
   coerceReform,
 } from './json-coerce.js';
+import type { BlackBox, LlmJudgement } from '@ludiars/blackbox';
+import { DOMAIN_TRIAL_FATE, fateFeatures, parseProposedFateRule, type FateOutput } from './fate-blackbox.js';
 
 export interface LlmBrainOptions {
   /** backend → LlmClient のファクトリ (test 差し替え用)。既定は CLI クライアント。 */
@@ -57,6 +60,11 @@ export interface LlmBrainOptions {
   retries?: number;
   /** LLM 呼び出しごとのコスト計上フック (§7)。未指定なら計上しない。 */
   costSink?: CostSink;
+  /**
+   * 裁判 fate 投票の判例化 (成長型ブラックボックス)。指定すると groupVoteFate は
+   * 卒業/試用の判例ルールで即決し、無ければ LLM 投票を教師に判例を育てる。
+   */
+  fateBlackbox?: BlackBox;
 }
 
 export class LlmBrain implements Brain {
@@ -64,12 +72,14 @@ export class LlmBrain implements Brain {
   private readonly createClient: (backend: Backend) => LlmClient;
   private readonly clients = new Map<string, LlmClient>();
   private readonly costSink: CostSink | undefined;
+  private readonly fateBlackbox: BlackBox | undefined;
   /** プレイヤー扇動: 次の自由行動で事件化を促す。 */
   private incitePending = false;
 
   constructor(registry: BackendRegistry, opts: LlmBrainOptions = {}) {
     this.registry = registry;
     this.costSink = opts.costSink;
+    this.fateBlackbox = opts.fateBlackbox;
     const timeoutMs = opts.timeoutMs;
     const retries = opts.retries;
     this.createClient =
@@ -116,9 +126,34 @@ export class LlmBrain implements Brain {
   }
 
   async groupVoteFate(ctx: FateVoteContext): Promise<'kill' | 'spare'> {
-    const parts = buildFatePrompt(ctx);
-    const backend = this.select(parts, ctx.axis, ctx.axis);
-    return this.invokeJson(backend, parts, coerceFate);
+    const bb = this.fateBlackbox;
+    if (!bb) {
+      const parts = buildFatePrompt(ctx);
+      const backend = this.select(parts, ctx.axis, ctx.axis);
+      return this.invokeJson(backend, parts, coerceFate);
+    }
+    // 判例化: 卒業/試用の判例ルールが一致すれば LLM を呼ばず即決。無ければ
+    // LLM 投票を教師に判例候補を影評価で育てる (fate-blackbox.ts)。
+    const features = fateFeatures(ctx);
+    const { decision } = await bb.engine.decide<{ axis: string; incident: string }, FateOutput>(
+      DOMAIN_TRIAL_FATE,
+      { axis: ctx.axis, incident: ctx.incident.description },
+      features,
+      async (_input, _features, bbCtx) => {
+        const parts = buildFatePrompt(ctx, { features, retiredRules: bbCtx.retiredRules });
+        const backend = this.select(parts, ctx.axis, ctx.axis);
+        const j = await this.invokeJson(backend, parts, coerceFateJudgement);
+        const judgement: LlmJudgement<FateOutput> = {
+          output: { verdict: j.verdict },
+          confidence: j.confidence,
+          rationale: j.rationale,
+        };
+        const proposed = parseProposedFateRule(j.proposedRule, j.verdict);
+        if (proposed) judgement.proposedRule = proposed;
+        return judgement;
+      },
+    );
+    return decision.output.verdict;
   }
 
   async decideEducation(ctx: EducationContext): Promise<Reform> {

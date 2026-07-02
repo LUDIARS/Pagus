@@ -26,6 +26,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@ludiars/blackbox':
+        specifier: ^0.2.0
+        version: 0.2.0
       '@ludiars/encrypted-config':
         specifier: ^0.1.0
         version: 0.1.0
@@ -209,6 +212,9 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
+
+  '@ludiars/blackbox@0.2.0':
+    resolution: {integrity: sha512-x1zC9hvejPrXjTwdHPKBC0N31fyuzEJw/9yC8foqTH79mpsjxLrH9o+JODzlupfDrHWTs4kWDZyNYvCo/ZluQQ==, tarball: https://npm.pkg.github.com/download/@ludiars/blackbox/0.2.0/89ab25502e5cc1c0878d22fc7ebfca09be05446a}
 
   '@ludiars/encrypted-config@0.1.0':
     resolution: {integrity: sha512-ts01jBX0XAXA7Q2tzM/9xKvRKivnHu87/qEYt2VEbs0lzXsj9n5iTzsPTWpPY66TGwQBdzEQuInPRpF3G412jg==, tarball: https://npm.pkg.github.com/download/@ludiars/encrypted-config/0.1.0/8e3738e88b171b2a530de3cbfb8bc86420c0a6d0}
@@ -741,6 +747,8 @@ snapshots:
     optional: true
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
+
+  '@ludiars/blackbox@0.2.0': {}
 
   '@ludiars/encrypted-config@0.1.0': {}
 

@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ludiars/blackbox": "^0.2.0",
     "@ludiars/encrypted-config": "^0.1.0",
     "@ludiars/llm-gateway": "^0.1.0",
     "@pagus/sim": "workspace:*",

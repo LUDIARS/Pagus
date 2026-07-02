@@ -23,6 +23,8 @@ import { TrialNarrator } from './trial-narrator.js';
 import { Chronicle } from './chronicle.js';
 import { WorldStore } from './world-store.js';
 import { PushService } from './push-service.js';
+import type { BlackBox } from '@ludiars/blackbox';
+import { makeTrialFateBlackBox } from './llm/fate-blackbox.js';
 import { createRequestListener } from './http-api.js';
 import { loadLexicon, validateMoral, fillName } from './theme/lexicon.js';
 import { DivergenceLog } from './distill/divergence-log.js';
@@ -69,7 +71,7 @@ function classifyKind(text: string, verdictPrefix = '判決'): ChronicleKind {
  * チューニング (triggerAfter / disableCodex / cliRetries) は config から受ける。
  * 不正値は無言フォールバックせず即エラー (RULE_CODE §7.1)。
  */
-function selectBrains(costSink: CostSink, cfg: PagusConfig): {
+function selectBrains(costSink: CostSink, cfg: PagusConfig, fateBlackbox: BlackBox): {
   brain: Brain;
   worldBrain: WorldBrain;
   registry: BackendRegistry | null;
@@ -92,7 +94,7 @@ function selectBrains(costSink: CostSink, cfg: PagusConfig): {
     const strong = disableCodex ? DEFAULT_STRONG : [...DEFAULT_STRONG, GPT_BACKEND];
     const registry = new BackendRegistry({ cast, strong });
     return {
-      brain: new LlmBrain(registry, { costSink, retries }),
+      brain: new LlmBrain(registry, { costSink, retries, fateBlackbox }),
       worldBrain: new LlmWorldBrain(registry, { costSink, retries }),
       registry,
     };
@@ -146,13 +148,17 @@ function main(): void {
   const incidentArcs = loadIncidentArcs();
 
   // LLM コストログ (§7)。llm モードのみ計上 (stub は costSink を呼ばない)。
+  // 裁判 fate 投票の判例 (成長型ブラックボックス)。world.json と同じ data/runtime に永続。
+  // stub モードでは発火しないが、蓄積済み判例の閲覧/レビュー (HTTP API) は常に可能。
+  const fateBlackbox = makeTrialFateBlackBox('data/runtime/blackbox.json');
+
   // コスト計上時に sysStatus を速やかに反映する (§2.3 イベント駆動)。実体は後で差し込む。
   const costLog = new CostLog();
   let scheduleSysStatus: () => void = () => {};
   const { brain, worldBrain, registry } = selectBrains((e) => {
     costLog.record(e);
     scheduleSysStatus();
-  }, cfg);
+  }, cfg, fateBlackbox);
   // 蒸留ループ (§v1.4-C): shadow sampling → 乖離ログ → 日末蒸留。教師は個体 Brain と同じ実装
   // (llm モードでは cheap tier の LLM、stub では決定的 StubBrain = パイプラインの動作確認用)。
   const divergence = new DivergenceLog();
@@ -496,7 +502,11 @@ function main(): void {
 
   // HTTP API (push 購読 / 通知経由の投票) と WS を同一ポートに相乗りさせる。
   const httpServer = createServer(
-    createRequestListener({ push, onVote: (pick, userId) => loop.vote(pick, userId) }),
+    createRequestListener({
+      push,
+      onVote: (pick, userId) => loop.vote(pick, userId),
+      blackbox: fateBlackbox,
+    }),
   );
   ws = new GameWsServer(httpServer, {
     onHello: (userId) => {

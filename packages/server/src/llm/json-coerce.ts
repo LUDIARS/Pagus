@@ -152,6 +152,26 @@ export function coerceFate(u: unknown): 'kill' | 'spare' {
   return v;
 }
 
+/** fate 投票 + 判例候補 (blackbox 用)。verdict 以外は任意で、不正でも落とさず捨てる。 */
+export interface FateJudgement {
+  verdict: 'kill' | 'spare';
+  confidence: number;
+  rationale: string;
+  /** 判例候補 (raw)。検証は fate-blackbox.parseProposedFateRule で行う。 */
+  proposedRule: unknown;
+}
+
+export function coerceFateJudgement(u: unknown): FateJudgement {
+  const verdict = coerceFate(u);
+  const o = asObj(u);
+  const confidence =
+    typeof o.confidence === 'number' && !Number.isNaN(o.confidence)
+      ? Math.min(1, Math.max(0, o.confidence))
+      : 0.7;
+  const rationale = typeof o.rationale === 'string' ? o.rationale : 'グループ投票';
+  return { verdict, confidence, rationale, proposedRule: o.proposedRule ?? null };
+}
+
 export function coerceReform(u: unknown, targetId: VillagerId): Reform {
   const o = asObj(u);
   const kind = o.kind;
