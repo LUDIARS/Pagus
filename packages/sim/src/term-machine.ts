@@ -3,7 +3,7 @@
 // 本クラスは純粋な遷移ロジックを提供する。
 
 import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign, InfoItem, MartialMode, MoralDial } from './types/index.js';
-import type { Brain, ActionDecision } from './brain.js';
+import type { Brain, ActionDecision, EnvironmentView } from './brain.js';
 import { aliveVillagers, awakeVillagers, environmentView, clampPos, bumpEventParam } from './world.js';
 import { DailyEngine, REACTION_EXPOSURE, type DailyEngineOptions } from './daily-engine.js';
 import { season, daysInMonth, holidayName } from './calendar.js';
@@ -160,6 +160,11 @@ export interface TermMachineOptions {
   threadCount?: number;
   /** モラルダイヤル (§v1.4-D)。wholesome では死刑が無効になる。既定 'balanced'。 */
   moral?: MoralDial;
+  /**
+   * 日常決定のフック (§v1.4-C shadow sampling)。kishoTick の各決定を server が観測し、
+   * サンプリングして教師 LLM と比較する。sim は呼ぶだけで確率や比較を知らない。
+   */
+  onDailyDecision?: (villager: Villager, env: EnvironmentView, decision: ActionDecision) => void;
 }
 
 /** 日末の生活イベント (結婚/出産)。server がログ表示する。 */
@@ -246,6 +251,8 @@ export class TermMachine {
   private threadCount: number;
   /** モラルダイヤル (§v1.4-D)。 */
   private readonly moral: MoralDial;
+  /** 日常決定のフック (§v1.4-C shadow sampling)。 */
+  private readonly onDailyDecision: ((villager: Villager, env: EnvironmentView, decision: ActionDecision) => void) | null;
   /** その日の裁判結末。applyReform が incident/trial を null にする前に ketsuStep で捕捉する。 */
   private dayOutcome: { incident: Incident; verdict: Verdict; defendantId: VillagerId } | null = null;
 
@@ -282,6 +289,7 @@ export class TermMachine {
     this.trialComposeConfig = opts.trialComposeConfig ?? DEFAULT_TRIAL_COMPOSE;
     this.threadCount = opts.threadCount ?? maxThreadIndex(world.plotThreads);
     this.moral = opts.moral ?? 'balanced';
+    this.onDailyDecision = opts.onDailyDecision ?? null;
     // 村長 (§17): 復元時は world.mayorId を尊重し、未設定なら初回選挙で人気の村人を据える。
     if (world.mayorId === null && aliveVillagers(world).length > 0) {
       electMayor(world, this.mayorConfig);
@@ -325,11 +333,30 @@ export class TermMachine {
     // id/source は呼び出し側で確定 (通し番号で衝突回避、source は haiku 固定)。
     const rule: BehaviorRule = { ...proposed, id: `rule_haiku_${this.ruleCount}`, source: 'haiku' };
     this.world.behaviorRules.push(rule);
-    if (this.world.behaviorRules.length > this.rulesMax) {
-      const oldest = this.world.behaviorRules.findIndex((r) => r.source === 'haiku');
-      if (oldest >= 0) this.world.behaviorRules.splice(oldest, 1);
-    }
+    this.pruneRulesOverMax();
     return rule;
+  }
+
+  /**
+   * 蒸留ルール (§v1.4-C) を追加する。replay ゲート通過後に server が呼ぶ。
+   * source='distill'、id は rule_distill_N。上限超過はアトランダム由来 (haiku) から間引く。
+   */
+  addDistilledRule(proposed: BehaviorRule): BehaviorRule {
+    this.ruleCount += 1;
+    const rule: BehaviorRule = { ...proposed, id: `rule_distill_${this.ruleCount}`, source: 'distill' };
+    this.world.behaviorRules.push(rule);
+    this.pruneRulesOverMax();
+    return rule;
+  }
+
+  /** ルール上限の間引き: haiku (探索由来) を先に、無ければ distill (蒸留由来) を捨てる。base は守る。 */
+  private pruneRulesOverMax(): void {
+    while (this.world.behaviorRules.length > this.rulesMax) {
+      const haiku = this.world.behaviorRules.findIndex((r) => r.source === 'haiku');
+      const idx = haiku >= 0 ? haiku : this.world.behaviorRules.findIndex((r) => r.source === 'distill');
+      if (idx < 0) return; // base/card しか残っていなければ間引かない
+      this.world.behaviorRules.splice(idx, 1);
+    }
   }
 
   /** プレイヤーの扇動: この事件が和解しにくくなる (= 裁判に持ち込みやすい)。 */
@@ -897,14 +924,18 @@ export class TermMachine {
         const actor = this.world.villagers.get(directive.actor);
         if (!actor || !actor.alive) continue;
         // 日常エンジン (LLM 非依存) が行動を決める (§12.2)。
-        const decision = this.daily.decide(actor, environmentView(this.world, actor), directive);
+        const env = environmentView(this.world, actor);
+        const decision = this.daily.decide(actor, env, directive);
+        this.onDailyDecision?.(actor, env, decision); // shadow sampling (§v1.4-C)
         if (this.applyDecision(actor, decision, actions)) return { actions, incidentStarted: true };
       }
       return { actions, incidentStarted: false };
     }
 
     for (const villager of awakeVillagers(this.world)) {
-      const decision = this.daily.decide(villager, environmentView(this.world, villager), null);
+      const env = environmentView(this.world, villager);
+      const decision = this.daily.decide(villager, env, null);
+      this.onDailyDecision?.(villager, env, decision); // shadow sampling (§v1.4-C)
       if (this.applyDecision(villager, decision, actions)) return { actions, incidentStarted: true };
     }
     return { actions, incidentStarted: false };
@@ -918,6 +949,7 @@ export class TermMachine {
   ): boolean {
     if (decision.move) actor.position = clampPos(this.world, decision.move);
     actor.emotion = decision.newEmotion;
+    this.applySideEffects(actor, decision);
     actions.push({ villager: actor.id, action: decision.action });
     if (decision.triggersIncident && decision.incidentSeed && !this.world.incident) {
       const seed = decision.incidentSeed;
@@ -954,6 +986,52 @@ export class TermMachine {
       return true;
     }
     return false;
+  }
+
+  /**
+   * ルール評価が指示した副作用 (DSL v2, §v1.4-C) を適用する。
+   * spreadInfo=最新の情報を最寄りの 1 体へ複製 / moveBias=対象へ 1 歩寄る (狂人からは離れる) /
+   * wealthDelta=所持金の増減 (下限 0)。
+   */
+  private applySideEffects(actor: Villager, decision: ActionDecision): void {
+    const fx = decision.sideEffects;
+    if (!fx) return;
+    if (fx.wealthDelta !== undefined) {
+      actor.wealth = Math.max(0, actor.wealth + fx.wealthDelta);
+    }
+    if (fx.spreadInfo) {
+      const newest = actor.information[actor.information.length - 1];
+      if (newest) {
+        const neighbor = aliveVillagers(this.world)
+          .filter((v) => v.id !== actor.id)
+          .sort(
+            (a, b) =>
+              Math.max(Math.abs(a.position.x - actor.position.x), Math.abs(a.position.y - actor.position.y)) -
+              Math.max(Math.abs(b.position.x - actor.position.x), Math.abs(b.position.y - actor.position.y)),
+          )[0];
+        if (neighbor && !neighbor.information.some((i) => i.id === `${newest.id}_ripple_${neighbor.id}`)) {
+          neighbor.information.push({
+            id: `${newest.id}_ripple_${neighbor.id}`,
+            text: `${actor.name}から聞いた: ${newest.text}`,
+            source: 'observation',
+            termAcquired: this.world.term,
+          });
+        }
+      }
+    }
+    if (fx.moveBias) {
+      let target: Villager | undefined;
+      if (fx.moveBias === 'partner' && actor.partnerId) target = this.world.villagers.get(actor.partnerId);
+      else if (fx.moveBias === 'admire' && actor.admireId) target = this.world.villagers.get(actor.admireId);
+      else if (fx.moveBias === 'awayMadman') target = this.aliveMadman() ?? undefined;
+      if (target && target.alive) {
+        const away = fx.moveBias === 'awayMadman' ? -1 : 1;
+        actor.position = clampPos(this.world, {
+          x: actor.position.x + Math.sign(target.position.x - actor.position.x) * away,
+          y: actor.position.y + Math.sign(target.position.y - actor.position.y) * away,
+        });
+      }
+    }
   }
 
   /** 被害者の平均ストレス耐性で嫌がらせを受け流すか判定。 */

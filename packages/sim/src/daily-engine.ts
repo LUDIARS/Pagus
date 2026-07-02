@@ -72,14 +72,23 @@ export class DailyEngine {
     this.surgeBonus = Math.max(0, bonus);
   }
 
-  /** カテゴリでルール評価し、base 感情に効果を反映した感情・flavor を返す。 */
+  /** カテゴリでルール評価し、base 感情に効果を反映した感情・flavor・副作用 (v2) を返す。 */
   private evalFor(
     villager: Villager,
     env: EnvironmentView,
     category: RuleCategory,
-  ): { emotion: EmotionState; flavor: string | null } {
+  ): { emotion: EmotionState; flavor: string | null; sideEffects: ActionDecision['sideEffects'] } {
     const r = evaluateRules(this.rules, { villager, env, category });
-    return { emotion: applyEmotionDeltas(villager.emotion, r.emotionDeltas), flavor: r.flavor };
+    // 副作用 (DSL v2, §v1.4-C): 指示があるときだけキーを組む (exactOptionalPropertyTypes)。
+    let sideEffects: ActionDecision['sideEffects'];
+    if (r.spreadInfo || r.moveBias !== null || r.wealthDelta !== 0) {
+      sideEffects = {
+        ...(r.spreadInfo ? { spreadInfo: true } : {}),
+        ...(r.moveBias !== null ? { moveBias: r.moveBias } : {}),
+        ...(r.wealthDelta !== 0 ? { wealthDelta: r.wealthDelta } : {}),
+      };
+    }
+    return { emotion: applyEmotionDeltas(villager.emotion, r.emotionDeltas), flavor: r.flavor, sideEffects };
   }
 
   /** プレイヤーの扇動 (§12.4)。次の自由行動で事件化を促す (対象不問)。 */
@@ -118,8 +127,9 @@ export class DailyEngine {
       if (targeted) this.forcedTargetId = null;
     }
     // 最終カテゴリ (発火時は興奮 = harass 相当) でルール評価し感情・flavor を得る。
-    const { emotion, flavor } = this.evalFor(villager, env, trigger ? 'harass' : 'wander');
+    const { emotion, flavor, sideEffects } = this.evalFor(villager, env, trigger ? 'harass' : 'wander');
     return {
+      ...(sideEffects ? { sideEffects } : {}),
       move,
       action: flavor ?? `${villager.name} は ${env.place} をうろついた`,
       newEmotion: emotion,
@@ -144,8 +154,9 @@ export class DailyEngine {
   ): ActionDecision {
     const name = villager.name;
     if (d.category === 'harass' && d.target) {
-      const { emotion, flavor } = this.evalFor(villager, env, 'harass');
+      const { emotion, flavor, sideEffects } = this.evalFor(villager, env, 'harass');
       return {
+        ...(sideEffects ? { sideEffects } : {}),
         move,
         action: flavor ?? `${name} は誰かに嫌がらせをした`,
         newEmotion: emotion,
@@ -154,9 +165,9 @@ export class DailyEngine {
       };
     }
     const category: RuleCategory = d.category === 'good' ? 'good' : 'chat';
-    const { emotion, flavor } = this.evalFor(villager, env, category);
+    const { emotion, flavor, sideEffects } = this.evalFor(villager, env, category);
     const text = flavor ?? (d.category === 'good' ? `${name} は ${env.place} で良い行いをした` : `${name} は雑談した`);
-    return { move, action: text, newEmotion: emotion, triggersIncident: false, incidentSeed: null };
+    return { ...(sideEffects ? { sideEffects } : {}), move, action: text, newEmotion: emotion, triggersIncident: false, incidentSeed: null };
   }
 
   /** 1 マスのうろつき移動 (rng で 8 近傍 + 留まる)。 */

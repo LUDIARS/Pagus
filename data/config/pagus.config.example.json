@@ -80,6 +80,13 @@
     "pack": "classic",
     "moral": "balanced"
   },
+  "distill": {
+    "enabled": true,
+    "sampleChance": 0.02,
+    "minCases": 5,
+    "maxCases": 10,
+    "acceptGain": 0.1
+  },
   "politics": {
     "revoltThreshold": 0.7,
     "martialDays": 2,

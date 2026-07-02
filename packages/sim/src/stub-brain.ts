@@ -1,6 +1,7 @@
 // 決定的な stub Brain。test と、LLM 未配線の開発初期 (v0.1) で使う。
 // LLM を一切呼ばず、固定ロジックで起承転結を一巡させられる。
 
+import type { DistillContext } from './world-brain.js';
 import type { Brain, ActionContext, ActionDecision, EmotionContext, IncidentContext, IncidentStep, FoolishVoteContext, FateVoteContext, EducationContext } from './brain.js';
 import type {
   WorldBrain,
@@ -170,6 +171,31 @@ export class StubWorldBrain implements WorldBrain {
     const n = ctx.existingRules.filter((r) => r.source === 'haiku').length;
     const template = STUB_RULE_TEMPLATES[n % STUB_RULE_TEMPLATES.length] as Omit<BehaviorRule, 'id' | 'source'>;
     return { id: `rule_haiku_${n + 1}`, source: 'haiku', ...template };
+  }
+
+  /**
+   * 蒸留 (§v1.4-C) の決定的 stub: 先頭の乖離ケースから「そのカテゴリで教師が最も動かした
+   * 感情軸を同じ向きに揺らす」ルールを組む。ケースが無ければ throw (呼び出し側が防ぐ契約)。
+   */
+  async distillRule(ctx: DistillContext): Promise<BehaviorRule> {
+    const c = ctx.cases[0];
+    if (!c) throw new Error('distillRule: 乖離ケースが空です');
+    let axis = 'anger';
+    let best = 0;
+    for (const [k, d] of Object.entries(c.teacher.emotionDelta)) {
+      if (Math.abs(d) > Math.abs(best)) {
+        axis = k;
+        best = d;
+      }
+    }
+    const delta = best === 0 ? 0.05 : Math.sign(best) * 0.05;
+    return {
+      id: 'rule_distill_stub',
+      source: 'distill',
+      description: `蒸留: ${c.category} のとき ${axis} が${delta > 0 ? '昂る' : '和らぐ'}傾向を映す`,
+      when: [{ kind: 'actionCategory', category: c.category }],
+      then: [{ kind: 'emotionDelta', emotionAxis: axis, delta }],
+    };
   }
 }
 
