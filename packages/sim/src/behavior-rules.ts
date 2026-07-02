@@ -15,6 +15,12 @@ import type { EnvironmentView } from './brain.js';
 /** 行動カテゴリ (差配/自由行動から決まる)。ルール条件 actionCategory と評価コンテキストの両方で使う。 */
 export type RuleCategory = 'harass' | 'good' | 'chat' | 'wander';
 
+/**
+ * DSL のバージョン (§v1.4-C)。蒸留の受け皿として v2 で 情報/ストレス/感情下限 条件と
+ * 噂伝播/移動バイアス/所持金 効果を追加した。coerce (server) は未知 kind を reject する。
+ */
+export const RULE_DSL_VERSION = 2;
+
 /** ルール条件 (閉じた enum)。全条件 AND で match させる。 */
 export type RuleCondition =
   | { kind: 'traitAbove'; axis: PersonalityAxis; value: number }
@@ -28,18 +34,27 @@ export type RuleCondition =
   | { kind: 'actionCategory'; category: RuleCategory }
   | { kind: 'wealthBelow'; value: number } // 所持金 < value (§15 貧困=非行傾向)
   | { kind: 'wealthAbove'; value: number } // 所持金 >= value (§15 富裕=クズ化)
-  | { kind: 'placeState'; state: 'defiled' | 'blessed' }; // いる場所の状態 (§v1.4-A' spot)
+  | { kind: 'placeState'; state: 'defiled' | 'blessed' } // いる場所の状態 (§v1.4-A' spot)
+  // --- v2 (§v1.4-C 蒸留の受け皿) ---
+  | { kind: 'infoContains'; substr: string } // 持っている情報 (InfoItem) の本文に substr を含む
+  | { kind: 'infoFromPlayer' } // プレイヤー由来の情報 (扇動の噂 等) を持っている
+  | { kind: 'stressAbove'; value: number } // ストレス耐性 > value
+  | { kind: 'emotionBelow'; emotionAxis: string; value: number }; // 感情軸 < value
 
 /** ルール効果 (閉じた enum)。match した全ルールの効果を集約する。 */
 export type RuleEffect =
   | { kind: 'emotionDelta'; emotionAxis: string; delta: number }
   | { kind: 'triggerWeight'; delta: number }
-  | { kind: 'actionFlavor'; text: string };
+  | { kind: 'actionFlavor'; text: string }
+  // --- v2 (§v1.4-C) ---
+  | { kind: 'spreadInfo' } // 最新の情報を近傍 1 体へ伝える (噂の自然伝播)
+  | { kind: 'moveBias'; towards: 'partner' | 'admire' | 'awayMadman' } // 移動の重み付け
+  | { kind: 'wealthDelta'; delta: number }; // 所持金の増減 (下限 0)
 
 /** ふるまいの法則 1 件。base = 組込み / haiku = 生成由来 / card = カード(天災)由来の一時効果。 */
 export interface BehaviorRule {
   id: string;
-  source: 'base' | 'haiku' | 'card';
+  source: 'base' | 'haiku' | 'card' | 'distill';
   description: string;
   when: RuleCondition[];
   then: RuleEffect[];
@@ -65,6 +80,12 @@ export interface RuleEvalResult {
   triggerWeight: number;
   /** 行動文の差し替え (最後に match したルールを採用、無ければ null)。 */
   flavor: string | null;
+  /** 最新の情報を近傍へ伝えるか (v2, いずれかの match ルールが指示したら true)。 */
+  spreadInfo: boolean;
+  /** 移動の重み付け (v2, 最後の match を採用、無ければ null)。 */
+  moveBias: 'partner' | 'admire' | 'awayMadman' | null;
+  /** 所持金の増減 (v2, 加算集約)。 */
+  wealthDelta: number;
 }
 
 /** 1 条件が現在のコンテキストに合致するか (閉じた switch)。 */
@@ -95,6 +116,14 @@ function matchCondition(cond: RuleCondition, ctx: RuleEvalContext): boolean {
       return villager.wealth >= cond.value;
     case 'placeState':
       return env.placeState === cond.state;
+    case 'infoContains':
+      return villager.information.some((i) => i.text.includes(cond.substr));
+    case 'infoFromPlayer':
+      return villager.information.some((i) => i.source === 'player');
+    case 'stressAbove':
+      return villager.stress > cond.value;
+    case 'emotionBelow':
+      return (villager.emotion.axes[cond.emotionAxis] ?? 0) < cond.value;
   }
 }
 
@@ -106,6 +135,9 @@ export function evaluateRules(rules: readonly BehaviorRule[], ctx: RuleEvalConte
   const emotionDeltas: Record<string, number> = {};
   let triggerWeight = 0;
   let flavor: string | null = null;
+  let spreadInfo = false;
+  let moveBias: RuleEvalResult['moveBias'] = null;
+  let wealthDelta = 0;
   for (const rule of rules) {
     if (!rule.when.every((c) => matchCondition(c, ctx))) continue;
     for (const eff of rule.then) {
@@ -119,10 +151,19 @@ export function evaluateRules(rules: readonly BehaviorRule[], ctx: RuleEvalConte
         case 'actionFlavor':
           flavor = eff.text;
           break;
+        case 'spreadInfo':
+          spreadInfo = true;
+          break;
+        case 'moveBias':
+          moveBias = eff.towards;
+          break;
+        case 'wealthDelta':
+          wealthDelta += eff.delta;
+          break;
       }
     }
   }
-  return { emotionDeltas, triggerWeight, flavor };
+  return { emotionDeltas, triggerWeight, flavor, spreadInfo, moveBias, wealthDelta };
 }
 
 /** 感情軸の値からラベルを言語化する (旧 nudgeEmotion と同一規則)。 */

@@ -16,6 +16,7 @@ export * from './plot-threads.js';
 export * from './incident-arc.js';
 export * from './minor-incident.js';
 export * from './trial-composer.js';
+export * from './rule-replay.js';
 export * from './mayor.js';
 export * from './daily-engine.js';
 export * from './event-director.js';

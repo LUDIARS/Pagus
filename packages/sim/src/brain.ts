@@ -51,6 +51,18 @@ export interface ActionDecision {
    * 扇動はカルマを払った操作なので小騒動に流さずフル事件へ直行させる。
    */
   forcedTrigger?: boolean;
+  /**
+   * ルール評価が指示した副作用 (DSL v2, §v1.4-C)。DailyEngine は world を知らないため、
+   * 適用は TermMachine.applyDecision が行う。
+   */
+  sideEffects?: {
+    /** 最新の情報を近傍 1 体へ伝える (噂の自然伝播)。 */
+    spreadInfo?: boolean;
+    /** 移動の重み付け (対象へ 1 歩寄る / 狂人から離れる)。 */
+    moveBias?: 'partner' | 'admire' | 'awayMadman';
+    /** 所持金の増減 (下限 0)。 */
+    wealthDelta?: number;
+  };
 }
 
 // --- 感情の初期化/更新 ---

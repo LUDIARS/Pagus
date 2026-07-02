@@ -177,6 +177,20 @@ export interface SpectacleConfig {
   raidReward: number; // PAGUS_RAID_REWARD
 }
 
+/** 蒸留ループ (§v1.4-C shadow sampling → RuleSmith 蒸留 → replay ゲート). */
+export interface DistillConfig {
+  /** shadow sampling を有効にするか (llm モードで教師呼び出しの追加費用が出る). */
+  enabled: boolean;
+  /** 日常決定 1 件を教師に影として問う確率. */
+  sampleChance: number;
+  /** 蒸留を試みる最低乖離ケース数. */
+  minCases: number;
+  /** 1 回の蒸留に使う最大ケース数. */
+  maxCases: number;
+  /** replay ゲートの採用条件: 教師一致率がこの値以上改善したら採用. */
+  acceptGain: number;
+}
+
 /** テーマパック + モラルダイヤル (§v1.4-D). */
 export interface ThemeConfig {
   /** テーマパック名 (data/theme/<pack>/lexicon.json). */
@@ -228,6 +242,7 @@ export interface PagusConfig {
   intervene: InterveneConfig;
   arc: ArcConfig;
   theme: ThemeConfig;
+  distill: DistillConfig;
   politics: PoliticsConfig;
   spectacle: SpectacleConfig;
   llm: LlmConfig;
@@ -312,6 +327,13 @@ export const DEFAULT_CONFIG: PagusConfig = {
   theme: {
     pack: 'classic',
     moral: 'balanced',
+  },
+  distill: {
+    enabled: true,
+    sampleChance: 0.02,
+    minCases: 5,
+    maxCases: 10,
+    acceptGain: 0.1,
   },
   politics: {
     revoltThreshold: 0.7,
