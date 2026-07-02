@@ -1,148 +1,230 @@
-// プレイヤー行動パネル (§4)。画面下の独立ドック (#action-dock) に常時表示する2段 UI:
-//   ① コマンドを選ぶ (扇動 / 制裁 / 応援 / 推し指名。各ボタンに消費カルマを併記) →
-//   ② 対象を選ぶ → 実行。
-// 扇動は推しを対象から除外する (推しに誤って扇動しないため §4.2)。実行時の手応えは
-// main がステージのリアクション吹き出しで返す (扇動のリアクションが無い問題への対応)。
+// プレイヤー行動パネル (§4)。指定された行動を消費カルマ付きボタンとして描画し、
+// 押下後に対象選択ダイアログを開く。
+import type { Villager, WireWorld } from '@pagus/sim';
+import { villagerDisplayName } from './villager-display.js';
 
-import type { WireWorld } from '@pagus/sim';
-
-/** その接続ユーザの状態 (playerState 受信)。 */
 export interface PlayerStateView {
   karma: number;
   virtue: number;
   sanctionCost: number;
-  /** 扇動の固定コスト (§4 消費カルマ表示用)。 */
   inciteCost: number;
   canCheerInMs: number;
-  /** 推し (champion) の villager id。未指名は null (§1)。 */
   championId: string | null;
-  /** 推しの名前 (server が world から補完)。 */
   championName?: string;
 }
 
 export type ActionType = 'incite' | 'sanction' | 'cheer';
-/** ドックで選べるコマンド (行動)。champion = 推し指名。 */
-type Command = ActionType | 'champion';
+export type PlayerCommand = ActionType | 'champion';
 
 export interface ControlHandlers {
-  /** 対象 id を伴って操作を送る。扇動は rumorAboutId (悪口の主) を任意で伴う (§4.2)。 */
   onAction(type: ActionType, targetId: string, rumorAboutId?: string): void;
-  /** 選択中の対象を推しに指名する (§1)。 */
   onChampion(targetId: string): void;
+  onVerdict(pick: 'kill' | 'spare'): void;
 }
 
-/** コマンドの表示メタ。 */
 interface CommandMeta {
   label: string;
-  /** 推しを対象から外すか (扇動のみ true)。 */
+  dialogTitle: string;
   excludeChampion: boolean;
-  /** 悪口の主セレクタを出すか (扇動のみ)。 */
   needsRumor: boolean;
 }
-const COMMANDS: Record<Command, CommandMeta> = {
-  incite: { label: '🔥 扇動', excludeChampion: true, needsRumor: true },
-  sanction: { label: '⚖ 制裁', excludeChampion: false, needsRumor: false },
-  cheer: { label: '🌸 応援', excludeChampion: false, needsRumor: false },
-  champion: { label: '⭐ 推し指名', excludeChampion: false, needsRumor: false },
+
+const COMMANDS: Record<PlayerCommand, CommandMeta> = {
+  incite: { label: '🔥 扇動', dialogTitle: '扇動する相手', excludeChampion: true, needsRumor: true },
+  sanction: { label: '⚖ 制裁', dialogTitle: '制裁する相手', excludeChampion: false, needsRumor: false },
+  cheer: { label: '✨ 応援', dialogTitle: '応援する相手', excludeChampion: false, needsRumor: false },
+  champion: { label: '⭐ 推し指定', dialogTitle: '推しにする住民', excludeChampion: false, needsRumor: false },
 };
-const COMMAND_ORDER: Command[] = ['incite', 'sanction', 'cheer', 'champion'];
+
+const DEFAULT_COMMANDS: PlayerCommand[] = ['incite', 'sanction', 'cheer', 'champion'];
+
+export interface PlayerControlsOptions {
+  commands?: readonly PlayerCommand[];
+  showVerdict?: boolean;
+}
 
 export class PlayerControls {
   private world: WireWorld | null = null;
   private state: PlayerStateView | null = null;
-  private command: Command = 'incite';
-  private selectedId: string | null = null;
-  /** 扇動の噂の主 (誰の悪口を吹き込むか, §4.2)。未選択は null。 */
+  private command: PlayerCommand;
   private rumorAboutId: string | null = null;
+  private verdictCooldownUntil = 0;
 
-  private readonly stateBox = document.createElement('div');
+  private readonly commands: readonly PlayerCommand[];
+  private readonly showVerdict: boolean;
+  private readonly commandRow = document.createElement('div');
   private readonly cmdBar = document.createElement('div');
-  private readonly select = document.createElement('select');
-  private readonly rumorField = document.createElement('div');
+  private readonly verdictBox = document.createElement('div');
+  private readonly cmdButtons = new Map<PlayerCommand, HTMLButtonElement>();
+  private readonly dialogBackdrop = document.createElement('div');
+  private readonly dialogTitle = document.createElement('div');
+  private readonly dialogBody = document.createElement('div');
   private readonly rumorSelect = document.createElement('select');
-  private readonly execBtn = document.createElement('button');
-  private readonly cmdButtons = new Map<Command, HTMLButtonElement>();
 
   constructor(
     private readonly root: HTMLElement,
     private readonly h: ControlHandlers,
+    options: PlayerControlsOptions = {},
   ) {
+    this.commands = options.commands ?? DEFAULT_COMMANDS;
+    this.showVerdict = options.showVerdict ?? true;
+    this.command = this.commands[0] ?? 'cheer';
     this.root.replaceChildren();
-    const row = document.createElement('div');
-    row.className = 'dock-row';
 
-    const title = document.createElement('span');
-    title.className = 'dock-title';
-    title.textContent = '🎯 行動';
-    this.stateBox.className = 'dock-state';
-    row.append(title, this.stateBox);
+    this.commandRow.className = 'dock-row dock-action-row';
 
-    // ① コマンド選択 (消費カルマ併記)。
     this.cmdBar.className = 'dock-commands';
-    for (const cmd of COMMAND_ORDER) {
+    for (const cmd of this.commands) {
       const btn = document.createElement('button');
       btn.className = `dock-cmd-btn cmd-${cmd}`;
-      btn.addEventListener('click', () => this.selectCommand(cmd));
+      btn.addEventListener('click', () => this.openDialog(cmd));
       this.cmdBar.appendChild(btn);
       this.cmdButtons.set(cmd, btn);
     }
-    row.appendChild(this.cmdBar);
+    this.commandRow.appendChild(this.cmdBar);
+    this.root.appendChild(this.commandRow);
 
-    // ② 対象選択。
-    this.select.className = 'dock-select';
-    this.select.addEventListener('change', () => {
-      this.selectedId = this.select.value || null;
-    });
-    row.appendChild(dockField('対象', this.select));
+    this.verdictBox.className = 'dock-verdict';
+    this.verdictBox.append(
+      verdictButton('死刑', 'dock-verdict-kill', () => this.voteVerdict('kill')),
+      verdictButton('教育', 'dock-verdict-spare', () => this.voteVerdict('spare')),
+    );
+    if (this.showVerdict) this.root.appendChild(this.verdictBox);
 
-    // 扇動の噂の主 (§4.2)。扇動のときだけ出す。
-    this.rumorSelect.className = 'dock-select';
-    this.rumorSelect.addEventListener('change', () => {
-      this.rumorAboutId = this.rumorSelect.value || null;
-    });
-    this.rumorField.className = 'dock-field';
-    {
-      const l = document.createElement('span');
-      l.className = 'dock-field-label';
-      l.textContent = '悪口の主';
-      this.rumorField.append(l, this.rumorSelect);
-    }
-    row.appendChild(this.rumorField);
-
-    // 実行ボタン。
-    this.execBtn.className = 'dock-btn dock-exec';
-    this.execBtn.addEventListener('click', () => this.execute());
-    row.appendChild(this.execBtn);
-
-    this.root.appendChild(row);
-    this.selectCommand('incite');
+    this.buildDialog();
     this.renderState();
-    // 応援クールダウンの残りを毎秒詰める (state 再送を待たずに表示/活性を進める)。
     setInterval(() => this.renderState(), 1000);
   }
 
   setWorld(world: WireWorld): void {
     this.world = world;
-    this.refreshTargets();
+    this.renderState();
+    if (this.isDialogOpen()) this.renderDialog();
   }
 
   setState(s: PlayerStateView): void {
     this.state = s;
-    this.refreshTargets(); // 推し変化を対象除外へ反映
     this.renderState();
+    if (this.isDialogOpen()) this.renderDialog();
   }
 
-  /** コマンドを選ぶ (①)。対象リスト・噂の主表示・実行ボタンを切り替える。 */
-  private selectCommand(cmd: Command): void {
+  private buildDialog(): void {
+    this.dialogBackdrop.className = 'dock-dialog-backdrop';
+    const dialog = document.createElement('div');
+    dialog.className = 'dock-dialog';
+    dialog.addEventListener('click', (e) => e.stopPropagation());
+
+    const head = document.createElement('div');
+    head.className = 'dock-dialog-head';
+    this.dialogTitle.className = 'dock-dialog-title';
+    const close = document.createElement('button');
+    close.className = 'dock-dialog-close';
+    close.textContent = '×';
+    close.addEventListener('click', () => this.closeDialog());
+    head.append(this.dialogTitle, close);
+
+    this.dialogBody.className = 'dock-dialog-body';
+    dialog.append(head, this.dialogBody);
+    this.dialogBackdrop.appendChild(dialog);
+    this.dialogBackdrop.addEventListener('click', () => this.closeDialog());
+    this.root.appendChild(this.dialogBackdrop);
+
+    this.rumorSelect.className = 'dock-dialog-select';
+    this.rumorSelect.addEventListener('change', () => {
+      this.rumorAboutId = this.rumorSelect.value || null;
+    });
+  }
+
+  private openDialog(cmd: PlayerCommand): void {
+    const btn = this.cmdButtons.get(cmd);
+    if (btn?.disabled) return;
     this.command = cmd;
-    for (const [c, btn] of this.cmdButtons) btn.classList.toggle('active', c === cmd);
-    this.rumorField.style.display = COMMANDS[cmd].needsRumor ? '' : 'none';
-    this.refreshTargets();
-    this.renderState();
+    this.renderDialog();
+    this.dialogBackdrop.classList.add('show');
   }
 
-  /** 現コマンドの消費カルマ (表示用)。応援/推し指名は 0 (無料)。 */
-  private costOf(cmd: Command): number {
+  private closeDialog(): void {
+    this.dialogBackdrop.classList.remove('show');
+  }
+
+  private isDialogOpen(): boolean {
+    return this.dialogBackdrop.classList.contains('show');
+  }
+
+  private renderDialog(): void {
+    const meta = COMMANDS[this.command];
+    this.dialogTitle.textContent = `${meta.dialogTitle}を選ぶ`;
+    this.dialogBody.replaceChildren();
+
+    if (meta.needsRumor) this.dialogBody.appendChild(this.rumorField());
+
+    const targets = this.targetsFor(this.command);
+    if (targets.length === 0) {
+      this.dialogBody.appendChild(div('対象にできる住民がいません。', 'muted'));
+      return;
+    }
+
+    const grid = div('', 'dock-target-grid');
+    for (const v of targets) {
+      const btn = document.createElement('button');
+      btn.className = 'dock-target-btn';
+      btn.textContent = this.targetLabel(v);
+      btn.addEventListener('click', () => this.executeTarget(v.id));
+      grid.appendChild(btn);
+    }
+    this.dialogBody.appendChild(grid);
+  }
+
+  private rumorField(): HTMLElement {
+    this.fillRumorSelect();
+    const box = div('', 'dock-dialog-field');
+    const label = document.createElement('label');
+    label.className = 'dock-dialog-label';
+    label.textContent = '噂の主';
+    box.append(label, this.rumorSelect);
+    return box;
+  }
+
+  private fillRumorSelect(): void {
+    const alive = this.aliveVillagers();
+    if (this.rumorAboutId && !alive.some((v) => v.id === this.rumorAboutId)) this.rumorAboutId = null;
+
+    this.rumorSelect.replaceChildren();
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = '指定なし';
+    none.selected = !this.rumorAboutId;
+    this.rumorSelect.appendChild(none);
+
+    for (const v of alive) {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = `${this.displayName(v)} (${v.species})`;
+      opt.selected = v.id === this.rumorAboutId;
+      this.rumorSelect.appendChild(opt);
+    }
+  }
+
+  private aliveVillagers(): Villager[] {
+    return this.world?.villagers.filter((v) => v.alive) ?? [];
+  }
+
+  private targetsFor(cmd: PlayerCommand): Villager[] {
+    const championId = this.state?.championId ?? null;
+    const exclude = COMMANDS[cmd].excludeChampion;
+    return this.aliveVillagers().filter((v) => !(exclude && v.id === championId));
+  }
+
+  private targetLabel(v: Villager): string {
+    const champ = this.state?.championId === v.id ? ' / 推し' : '';
+    return `${this.displayName(v)} (${v.species})${champ}`;
+  }
+
+  private displayName(v: Villager): string {
+    return this.world ? villagerDisplayName(this.world, v) : v.name;
+  }
+
+  private costOf(cmd: PlayerCommand): number {
     const s = this.state;
     if (!s) return 0;
     if (cmd === 'incite') return s.inciteCost;
@@ -150,54 +232,27 @@ export class PlayerControls {
     return 0;
   }
 
-  /** 生存どうぶつで対象 select を作り直す。扇動は推しを除外する。 */
-  private refreshTargets(): void {
-    const w = this.world;
-    if (!w) return;
-    const championId = this.state?.championId ?? null;
-    const exclude = COMMANDS[this.command].excludeChampion;
-    const alive = w.villagers.filter((v) => v.alive && !(exclude && v.id === championId));
-
-    if (this.selectedId && !alive.some((v) => v.id === this.selectedId)) this.selectedId = null;
-    if (!this.selectedId && alive.length > 0) this.selectedId = alive[0]?.id ?? null;
-
-    fillSelect(this.select, alive, this.selectedId, '(対象がいません)');
-
-    // 噂の主 (§4.2): 先頭に「(指定なし)」、続いて生存どうぶつ。退場済みはリセット。
-    const aliveAll = w.villagers.filter((v) => v.alive);
-    if (this.rumorAboutId && !aliveAll.some((v) => v.id === this.rumorAboutId)) this.rumorAboutId = null;
-    this.rumorSelect.replaceChildren();
-    const none = document.createElement('option');
-    none.value = '';
-    none.textContent = '(指定なし)';
-    if (!this.rumorAboutId) none.selected = true;
-    this.rumorSelect.appendChild(none);
-    for (const v of aliveAll) {
-      const opt = document.createElement('option');
-      opt.value = v.id;
-      opt.textContent = `${v.name} (${v.species})`;
-      if (v.id === this.rumorAboutId) opt.selected = true;
-      this.rumorSelect.appendChild(opt);
-    }
+  private costText(cmd: PlayerCommand): string {
+    if (!this.state) return '...';
+    const cd = this.state ? Math.max(0, this.state.canCheerInMs) : 0;
+    if (cmd === 'cheer' && cd > 0) return `あと${Math.ceil(cd / 1000)}s`;
+    const cost = this.costOf(cmd);
+    return cost > 0 ? `消費 ${cost}カルマ` : '無料';
   }
 
-  /** 状態チップ + 実行ボタンのラベル/活性を描画する。 */
   private renderState(): void {
-    const s = this.state;
-    this.stateBox.replaceChildren();
-    if (!s) {
-      this.stateBox.appendChild(chip('接続待ち…', ''));
-    } else {
-      const champ = s.championId ? (s.championName ?? '指名中') : '未指名';
-      this.stateBox.append(
-        chip('💠 カルマ', s.karma.toFixed(1)),
-        chip('😇 善性', s.virtue.toFixed(2)),
-        chip('⭐ 推し', champ),
-      );
+    const verdictActive = this.world?.phase === 'ten' && this.world.trial?.stage === 'fate';
+    const verdictCooling = Date.now() < this.verdictCooldownUntil;
+    this.commandRow.style.display = verdictActive ? 'none' : 'flex';
+    this.verdictBox.style.display = this.showVerdict && verdictActive ? 'flex' : 'none';
+    if (verdictActive) this.closeDialog();
+
+    for (const btn of this.verdictBox.querySelectorAll('button')) {
+      (btn as HTMLButtonElement).disabled = !this.showVerdict || !verdictActive || verdictCooling;
     }
-    // コマンドボタンのコスト併記 + 応援クールダウン表示。
-    const cd = s ? Math.max(0, s.canCheerInMs) : 0;
-    for (const cmd of COMMAND_ORDER) {
+
+    const cheerCd = this.state ? Math.max(0, this.state.canCheerInMs) : 0;
+    for (const cmd of this.commands) {
       const btn = this.cmdButtons.get(cmd);
       if (!btn) continue;
       btn.replaceChildren();
@@ -206,78 +261,43 @@ export class PlayerControls {
       lab.textContent = COMMANDS[cmd].label;
       const cost = document.createElement('span');
       cost.className = 'dock-cmd-cost';
-      cost.textContent = costLabel(cmd, this.costOf(cmd), cd);
+      cost.textContent = this.costText(cmd);
       btn.append(lab, cost);
-      // 応援はクールダウン中は不可。
-      btn.disabled = cmd === 'cheer' && cd > 0;
+      btn.disabled = !this.world || !this.state || this.targetsFor(cmd).length === 0 || (cmd === 'cheer' && cheerCd > 0);
     }
-    // 実行ボタン。
-    const meta = COMMANDS[this.command];
-    const c = this.costOf(this.command);
-    this.execBtn.textContent = `${meta.label} を実行${c > 0 ? ` (−${c})` : ''}`;
-    this.execBtn.disabled = !this.selectedId || (this.command === 'cheer' && cd > 0);
   }
 
-  /** 実行 (②の後)。選択中のコマンド+対象でハンドラを呼ぶ。 */
-  private execute(): void {
-    const id = this.selectedId;
-    if (!id) return;
+  private executeTarget(id: string): void {
     if (this.command === 'champion') {
       this.h.onChampion(id);
-      return;
+    } else if (this.command === 'incite') {
+      this.h.onAction('incite', id, this.rumorAboutId ?? undefined);
+    } else {
+      this.h.onAction(this.command, id);
     }
-    if (this.command === 'incite' && this.rumorAboutId) this.h.onAction('incite', id, this.rumorAboutId);
-    else this.h.onAction(this.command, id);
+    this.closeDialog();
+  }
+
+  private voteVerdict(pick: 'kill' | 'spare'): void {
+    if (!(this.world?.phase === 'ten' && this.world.trial?.stage === 'fate')) return;
+    if (Date.now() < this.verdictCooldownUntil) return;
+    this.verdictCooldownUntil = Date.now() + 3500;
+    this.h.onVerdict(pick);
+    this.renderState();
   }
 }
 
-/** 生存どうぶつで select を作り直す共通処理。 */
-function fillSelect(sel: HTMLSelectElement, alive: { id: string; name: string; species: string }[], selectedId: string | null, emptyText: string): void {
-  sel.replaceChildren();
-  for (const v of alive) {
-    const opt = document.createElement('option');
-    opt.value = v.id;
-    opt.textContent = `${v.name} (${v.species})`;
-    if (v.id === selectedId) opt.selected = true;
-    sel.appendChild(opt);
-  }
-  if (alive.length === 0) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = emptyText;
-    sel.appendChild(opt);
-  }
+function verdictButton(label: string, cls: string, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.className = `dock-verdict-btn ${cls}`;
+  b.textContent = label;
+  b.addEventListener('click', onClick);
+  return b;
 }
 
-/** コマンドボタンに出すコスト文。応援はクールダウンを、無料系は「無料」を出す。 */
-function costLabel(cmd: Command, cost: number, cheerCdMs: number): string {
-  if (cmd === 'cheer') return cheerCdMs > 0 ? `あと${Math.ceil(cheerCdMs / 1000)}s` : '無料';
-  if (cost <= 0) return '無料';
-  return `−${cost}`;
-}
-
-function dockField(label: string, select: HTMLSelectElement): HTMLElement {
-  const box = document.createElement('div');
-  box.className = 'dock-field';
-  const l = document.createElement('span');
-  l.className = 'dock-field-label';
-  l.textContent = label;
-  box.append(l, select);
-  return box;
-}
-
-function chip(label: string, value: string): HTMLElement {
-  const box = document.createElement('div');
-  box.className = 'dock-chip';
-  const l = document.createElement('span');
-  l.className = 'dock-chip-label';
-  l.textContent = label;
-  box.appendChild(l);
-  if (value) {
-    const v = document.createElement('span');
-    v.className = 'dock-chip-val';
-    v.textContent = value;
-    box.appendChild(v);
-  }
-  return box;
+function div(text: string, cls: string): HTMLElement {
+  const el = document.createElement('div');
+  if (text) el.textContent = text;
+  el.className = cls;
+  return el;
 }

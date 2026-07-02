@@ -2,6 +2,7 @@
 // userId は投票の重み合算/投票し直しの単位として server に渡す。
 
 const UID_KEY = 'pagus_uid';
+const USER_NAME_KEY = 'pagus_user_name';
 
 /** この端末の安定したユーザ ID (localStorage 永続)。投票に添える。既存値が無ければ UUIDv4 を発行。 */
 export function getUserId(): string {
@@ -16,6 +17,23 @@ export function getUserId(): string {
 /** 別端末ログイン (§v1.3-F): userId をユーザーコードへ差し替えて永続化する。 */
 export function setUserId(id: string): void {
   localStorage.setItem(UID_KEY, id);
+}
+
+/** この端末で使う表示名。未設定なら null。 */
+export function getUserName(): string | null {
+  const name = localStorage.getItem(USER_NAME_KEY)?.trim() ?? '';
+  return name.length > 0 ? name : null;
+}
+
+/** 表示名を永続化する。空文字は未設定扱い。 */
+export function setUserName(name: string | null): string | null {
+  const normalized = (name ?? '').trim().replace(/\s+/g, ' ').slice(0, 20);
+  if (normalized.length === 0) {
+    localStorage.removeItem(USER_NAME_KEY);
+    return null;
+  }
+  localStorage.setItem(USER_NAME_KEY, normalized);
+  return normalized;
 }
 
 /** VAPID 公開鍵 (base64url) を applicationServerKey 用の Uint8Array へ。 */

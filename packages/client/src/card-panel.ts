@@ -4,6 +4,7 @@
 // クールダウンを表示し、カルマ不足のカードは無効化する。
 
 import type { WireWorld, CardName } from '@pagus/sim';
+import { villagerDisplayName } from './villager-display.js';
 
 /** カード送信の引数 (card 別に必要分だけ詰める)。 */
 export interface CardArgs {
@@ -141,7 +142,7 @@ export class CardPanel {
       for (const v of alive) {
         const opt = document.createElement('option');
         opt.value = v.id;
-        opt.textContent = `${v.name} (${v.species})`;
+        opt.textContent = `${villagerDisplayName(w, v)} (${v.species})`;
         sel.appendChild(opt);
       }
       // 退場していなければ前回選択を保つ。

@@ -12,6 +12,7 @@ export * from './behavior-rules.js';
 export * from './economy.js';
 export * from './items.js';
 export * from './mayor.js';
+export * from './villager-gacha.js';
 export * from './daily-engine.js';
 export * from './event-director.js';
 export * from './term-machine.js';

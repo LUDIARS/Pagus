@@ -7,7 +7,6 @@ import { TrialPanel } from './trial-panel.js';
 import { IncidentPanel } from './incident-panel.js';
 import { VillageStatus } from './village-status.js';
 import { LogOverlay } from './log-overlay.js';
-import { LlmPanel } from './llm-panel.js';
 import { ChronicleView } from './chronicle-view.js';
 import { StatusPanel } from './status-panel.js';
 import { PlayerControls, type ActionType } from './player-controls.js';
@@ -17,11 +16,13 @@ import { GovernancePanel } from './governance-panel.js';
 import { SpectaclePanel } from './spectacle-panel.js';
 import { BetPanel } from './bet-panel.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
-import { AccountPanel } from './account-panel.js';
+import { AccountPanel, AccountSettingsPanel } from './account-panel.js';
 import { ItemPanel } from './item-panel.js';
+import { ResidentGachaPanel, ResidentPanel, type ResidentPanelHandlers } from './resident-panel.js';
 import { ActionOverlay } from './action-overlay.js';
+import { ChatPanel } from './chat-panel.js';
 import { connect, type Conn } from './ws-client.js';
-import { getUserId, setUserId, enablePush } from './push-client.js';
+import { getUserId, getUserName, setUserId, setUserName, enablePush } from './push-client.js';
 
 // 既定は同一オリジンの /ws (Vite が game server 4310 へ proxy)。
 // → ローカルでもトンネル (pagus.vtn-game.com) 越しでも繋がる。VITE_WS_URL で上書き可。
@@ -44,36 +45,59 @@ async function main(): Promise<void> {
   const radar = new Radar(el('radar') as HTMLCanvasElement);
   const hud = new Hud(el('hud'), el('status'));
   const log = new LogOverlay(el('log'));
-  const incident = new IncidentPanel(el('left'));
+  const incident = new IncidentPanel(el('incident-info'));
   const vstatus = new VillageStatus(el('vstatus'));
-  const llmPanel = new LlmPanel(el('llm-head'), el('llm-body'));
-  const chronicle = new ChronicleView(el('chronicle'), el('chronicle-body'), el('hist-btn'), el('chronicle-close'), {
+  const ruleHandlers = {
     // しきたり改定 (§2): カルマを払って村のルールを増減。
-    onAddRule: (text) => conn.send({ t: 'addRule', text, userId }),
-    onRemoveRule: (ruleId) => conn.send({ t: 'removeRule', ruleId, userId }),
+    onAddRule: (text: string) => conn.send({ t: 'addRule', text, userId }),
+    onRemoveRule: (ruleId: string) => conn.send({ t: 'removeRule', ruleId, userId }),
+  };
+  const chronicle = new ChronicleView(el('chronicle'), el('chronicle-body'), el('hist-btn'), el('chronicle-close'), undefined, {
+    tabs: ['highlight', 'incidents', 'trial', 'life', 'education', 'calendar', 'rules', 'villagers', 'actions', 'other'],
+  });
+  const interventionRules = new ChronicleView(null, el('intervention-rules'), null, null, {
+    ...ruleHandlers,
+  }, {
+    tabs: ['rules'],
+    initialTab: 'rules',
+    showTabs: false,
+  });
+  const villageRules = new ChronicleView(null, el('village-rules'), null, null, undefined, {
+    tabs: ['rules'],
+    initialTab: 'rules',
+    showTabs: false,
   });
   const statusPanel = new StatusPanel(el('status-head'), el('status-body'));
 
   const userId = getUserId();
+  const userName = getUserName();
   let conn: Conn;
   const trial = new TrialPanel(el('trial'), (pick) => conn.send({ t: 'vote', pick, userId }));
   // 裁判ベット (§3): 運命段階で死刑/教育に賭ける。
   const betPanel = new BetPanel(el('bet'), (pick, amount) => conn.send({ t: 'bet', pick, amount, userId }));
   // スコアボード (§4): 称号・陣営・綱引き。陣営選択を送る。
-  const leaderboard = new LeaderboardPanel(el('leaderboard'), userId, (side) => conn.send({ t: 'faction', side, userId }));
+  const leaderboard = new LeaderboardPanel(el('leaderboard'), userId);
 
-  // アカウント (§v1.3-F): 課金モック / ユーザーコード表示 / 別端末ログイン。
-  const account = new AccountPanel(el('account'), userId, {
+  // アカウント (§v1.3-F): 課金モック。
+  const account = new AccountPanel(el('account'), {
     onTopup: (amount) => conn.send({ t: 'topup', amount, userId }),
+  });
+  // 設定内アカウント: ユーザー名 / ユーザーコード / 別端末ログイン。
+  const accountSettings = new AccountSettingsPanel(el('account-settings'), userId, userName, {
     onLogin: (code) => {
       // ユーザーコードで束ね直す → ローカルの userId を差し替えて全パネルを貼り直す (reload)。
       conn.send({ t: 'login', code });
       setUserId(code);
       setTimeout(() => location.reload(), 400); // login 送信を flush してから貼り直す
     },
+    onUserName: (name) => {
+      const normalized = setUserName(name);
+      accountSettings.setUserName(normalized, true);
+      conn.send({ t: 'setUserName', name: normalized ?? '', userId });
+    },
   });
 
-  // プレイヤー行動パネル (§4): 画面下の独立ドック (#action-dock) に常駐。対象を選んで 扇動 / 制裁 / 応援 を送る。
+  // プレイヤー行動パネル (§4): 課金以外はすべて介入タブへまとめる。
   // 扇動は noun (悪口の主 rumorAboutId) を任意で伴う (§4.2)。未選択なら省略。
   const sendAction = (type: ActionType, targetId: string, rumorAboutId?: string): void => {
     if (type === 'incite') {
@@ -83,14 +107,17 @@ async function main(): Promise<void> {
     // 行動の手応え: 対象どうぶつに即リアクション吹き出しを出す (扇動のリアクション無し問題への対応)。
     stage.reactToAction(targetId, type);
   };
-  const controls = new PlayerControls(el('controls'), {
+  const interventionControls = new PlayerControls(el('interventions'), {
     onAction: sendAction,
-    // 推し指名 (§1): 選択中の対象を推しにする。
     onChampion: (targetId) => {
       conn.send({ t: 'champion', targetId, userId });
       stage.reactToAction(targetId, 'champion');
     },
-  });
+    onVerdict: (pick) => {
+      conn.send({ t: 'vote', pick, userId });
+      stage.playerVerdict(pick === 'kill' ? 'guilty' : 'innocent');
+    },
+  }, { commands: ['incite', 'sanction', 'cheer', 'champion'], showVerdict: true });
 
   // カードパネル (§v1.3-A): カルマで切る一発介入カード 5 種。
   const cards = new CardPanel(el('cards'), {
@@ -101,7 +128,12 @@ async function main(): Promise<void> {
   const items = new ItemPanel(el('items'), {
     onPlace: (kind, toChampion) => conn.send({ t: 'placeItem', kind, toChampion, userId }),
   });
-  void items;
+
+  const residentHandlers: ResidentPanelHandlers = {
+    onGacha: (kind) => conn.send({ t: 'villagerGacha', kind, userId }),
+  };
+  new ResidentGachaPanel(el('resident-gacha'), residentHandlers);
+  const residents = new ResidentPanel(el('residents'), residentHandlers, { showGacha: false });
 
   // 経済パネル (§v1.3-B): 保険 / 闇市 / オークション (送金・銀行は廃止)。
   const economy = new EconomyPanel(el('economy'), {
@@ -125,17 +157,13 @@ async function main(): Promise<void> {
     onVoteMvp: (villagerId) => conn.send({ t: 'voteMvp', villagerId, userId }),
     onPray: () => conn.send({ t: 'pray', userId }),
     onRaidStrike: (amount) => conn.send({ t: 'raidStrike', amount, userId }),
-  });
+  }, { readOnly: true });
 
-  // 統合アクションオーバーレイ (§v1.3-E): 行動ドック以外の操作群 (カード/村/裁判/経済/課金/情報) を
-  // 1 つのタブ式パネルへ集約。各パネルは index.html のオーバーレイ内 id に既に mount 済み。
-  // ここでは枠 (タブ/ヘッダ/開閉) を起こす。課金 (account) は経済とは別タブ。
-  const overlay = new ActionOverlay(el('action-overlay'), el('ao-header'), el('ao-tabs'), el('btn-actions'), el('ao-backdrop'));
+  const chat = new ChatPanel(el('chat'), userId, (text) => conn.send({ t: 'chat', text, userId }));
 
-  const verdict = el('verdict');
-  // 死刑/教育ボタンは「殺す/活かす」を決める fate 段階でのみ出す (foolish=被告選びは裁判タブ)。
-  const showVerdict = (world: { phase: string; trial: { stage: string } | null }): boolean =>
-    world.phase === 'ten' && world.trial?.stage === 'fate';
+  // 統合アクションオーバーレイ (§v1.3-E): 左ペインに埋め込む介入パネル。
+  // 課金以外の操作群 (介入/カード/村/裁判/経済/チャット) をタブ式に集約する。
+  const overlay = new ActionOverlay(el('action-overlay'), el('ao-header'), el('ao-tabs'), null, el('ao-backdrop'), { embedded: true });
 
   conn = connect(WS_URL, {
     onSnapshot: (world) => {
@@ -145,32 +173,42 @@ async function main(): Promise<void> {
       trial.update(world);
       incident.update(world);
       vstatus.update(world);
-      llmPanel.setNames(world);
       chronicle.setWorld(world);
-      controls.setWorld(world);
+      interventionRules.setWorld(world);
+      villageRules.setWorld(world);
+      interventionControls.setWorld(world);
       cards.setWorld(world);
+      items.setWorld(world);
+      residents.setWorld(world);
       economy.setWorld(world);
       governance.setWorld(world); // 村長/世論調査 (§17) は snapshot から
       spectacle.setWorld(world);
       betPanel.update(world);
-      verdict.classList.toggle('show', showVerdict(world));
     },
     onLog: (phase, text) => log.add(phase, text),
     onStatus: (status) => {
       hud.setStatus(status);
       // 接続確立時にユーザを名乗る (per-user カルマ push 用)。
-      if (status.startsWith('●') && status.includes('接続')) conn.send({ t: 'hello', userId });
+      if (status.startsWith('●') && status.includes('接続')) {
+        const currentName = getUserName();
+        conn.send(currentName ? { t: 'hello', userId, userName: currentName } : { t: 'hello', userId });
+      }
     },
     onPlayers: (count) => vstatus.setPlayers(count),
     onTrialLines: (incidentId, lines) => stage.setTrialLines(incidentId, lines),
-    onLlm: (info) => llmPanel.setInfo(info),
-    onChronicle: (entries) => chronicle.setEntries(entries),
+    onLlm: () => undefined,
+    onChronicle: (entries) => {
+      chronicle.setEntries(entries);
+      villageRules.setEntries(entries);
+    },
     onSysStatus: (s) => statusPanel.setStatus(s),
     onPlayerState: (state) => {
-      controls.setState(state);
+      interventionControls.setState(state);
       cards.setKarma(state.karma);
       economy.setState(state.karma);
       account.setSpent(state.spent);
+      setUserName(state.userName);
+      accountSettings.setUserName(state.userName);
       // 常時ヘッダ (カルマ/善性/課金/推し/応援クールダウン) を更新。
       overlay.setPlayerState({
         karma: state.karma,
@@ -186,7 +224,10 @@ async function main(): Promise<void> {
       conn.close(); // 再接続を止める (握り潰さない)
       showLoggedOut(reason);
     },
-    onPlayerActions: (entries) => chronicle.setActions(entries),
+    onPlayerActions: (entries) => {
+      chronicle.setActions(entries);
+      villageRules.setActions(entries);
+    },
     onBetState: (s) => betPanel.setBetState(s),
     onLeaderboard: (s) => leaderboard.setLeaderboard(s),
     onAuction: (lots) => economy.setAuction(lots),
@@ -195,6 +236,7 @@ async function main(): Promise<void> {
     onMartial: (mode) => governance.setMartial(mode),
     onFund: (amount, threshold) => governance.setFund(amount, threshold),
     onHighlights: (cards) => spectacle.setHighlights(cards),
+    onChat: (messages) => chat.setMessages(messages),
     onMvp: (villagerId, name) => spectacle.setMvp(villagerId, name),
     onRaid: (active, villainName, hp, hpMax, endsInMs) => spectacle.setRaid(active, villainName, hp, hpMax, endsInMs),
     onSeason: (num, winner, leaderboard) => spectacle.setSeason(num, winner, leaderboard),
@@ -214,6 +256,9 @@ async function main(): Promise<void> {
 
   // 🔔 通知: 裁判が始まったら端末へ push (接続を閉じていても投票を促す)。
   const pushBtn = el('push-btn');
+  const settingsBtn = el('settings-btn');
+  const settingsMenu = el('settings-menu');
+  settingsBtn.addEventListener('click', () => settingsMenu.classList.toggle('show'));
   pushBtn.addEventListener('click', () => {
     pushBtn.textContent = '🔔 …';
     enablePush()
@@ -227,6 +272,8 @@ async function main(): Promise<void> {
       });
   });
 
+  setupAccountOverlay();
+  setupRightTabs();
   setupDrawers();
 }
 
@@ -256,6 +303,39 @@ function showLoggedOut(reason: string): void {
   box.append(title, msg);
   ov.appendChild(box);
   document.body.appendChild(ov);
+}
+
+/** 課金は上部ヘッダーの専用オーバーレイで開閉する。 */
+function setupAccountOverlay(): void {
+  const openBtn = el('account-btn');
+  const overlay = el('account-overlay');
+  const closeBtn = el('account-close');
+  const setOpen = (open: boolean): void => {
+    overlay.classList.toggle('show', open);
+  };
+  openBtn.addEventListener('click', () => setOpen(true));
+  closeBtn.addEventListener('click', () => setOpen(false));
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) setOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setOpen(false);
+  });
+}
+
+/** 右ペインの情報群をタブで切り替える。 */
+function setupRightTabs(): void {
+  const right = el('right');
+  const buttons = Array.from(right.querySelectorAll<HTMLButtonElement>('[data-right-tab]'));
+  const panels = Array.from(right.querySelectorAll<HTMLElement>('[data-right-panel]'));
+  const select = (id: string): void => {
+    for (const button of buttons) button.classList.toggle('active', button.dataset.rightTab === id);
+    for (const panel of panels) panel.hidden = panel.dataset.rightPanel !== id;
+  };
+  for (const button of buttons) {
+    button.addEventListener('click', () => select(button.dataset.rightTab ?? 'village'));
+  }
+  select(buttons.find((button) => button.classList.contains('active'))?.dataset.rightTab ?? 'village');
 }
 
 /** モバイル: 左右パネルをドロワーとして開閉する。 */

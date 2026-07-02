@@ -14,7 +14,7 @@ export class LeaderboardPanel {
   constructor(
     private readonly root: HTMLElement,
     private readonly myUserId: string,
-    private readonly sendFaction: (side: 'guide' | 'incite') => void,
+    private readonly sendFaction?: (side: 'guide' | 'incite') => void,
   ) {
     this.root.replaceChildren();
     const head = document.createElement('h3');
@@ -27,13 +27,15 @@ export class LeaderboardPanel {
     this.root.appendChild(this.tugBox);
 
     // 陣営選択ボタン。
-    const btns = document.createElement('div');
-    btns.className = 'faction-btns';
-    btns.append(
-      this.factionButton('🕊 善導につく', 'guide', 'faction-guide'),
-      this.factionButton('🔥 扇動につく', 'incite', 'faction-incite'),
-    );
-    this.root.appendChild(btns);
+    if (this.sendFaction) {
+      const btns = document.createElement('div');
+      btns.className = 'faction-btns';
+      btns.append(
+        this.factionButton('🕊 善導につく', 'guide', 'faction-guide'),
+        this.factionButton('🔥 扇動につく', 'incite', 'faction-incite'),
+      );
+      this.root.appendChild(btns);
+    }
 
     this.root.appendChild(subLabel('プレイヤー'));
     this.listBox.className = 'lb-list';
@@ -51,7 +53,7 @@ export class LeaderboardPanel {
     const btn = document.createElement('button');
     btn.textContent = text;
     btn.className = cls;
-    btn.addEventListener('click', () => this.sendFaction(side));
+    btn.addEventListener('click', () => this.sendFaction?.(side));
     return btn;
   }
 
@@ -95,7 +97,7 @@ export class LeaderboardPanel {
       top.className = 'lb-top';
       const name = document.createElement('span');
       name.className = 'lb-name';
-      name.textContent = isMe ? 'あなた' : shortId(p.userId);
+      name.textContent = p.userName ?? (isMe ? 'あなた' : shortId(p.userId));
       const tags = document.createElement('span');
       tags.className = 'lb-tags';
       const factionTag = FACTION_LABEL[p.faction];

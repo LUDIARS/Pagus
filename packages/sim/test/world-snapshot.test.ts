@@ -56,4 +56,27 @@ describe('world snapshot (toWire ↔ fromWire)', () => {
     expect(restored.incident?.damage).toBe(6);
     expect(restored.incident?.steps[0]?.action).toBe('挑発');
   });
+
+  it('scheduledParty and resident side data survive JSON restore', () => {
+    const world = sampleWorld();
+    world.scheduledParty = {
+      dayOfMonth: 12,
+      kind: 'harvest',
+      title: '収穫祭',
+      participantIds: ['a', 'b'],
+      fired: false,
+      incidentPlanted: false,
+    };
+    world.relationships.push({ from: 'a', to: 'b', affinity: -40, hates: true, note: 'test' });
+    world.villagerActionLog.push({ date: '6月1日', term: 12, villagerId: 'a', villagerName: '繝上リ', text: 'test action' });
+
+    const wire = JSON.parse(JSON.stringify(toWire(world)));
+    const restored = fromWire(wire);
+
+    expect(restored.scheduledParty?.title).toBe('収穫祭');
+    expect(restored.scheduledParty?.participantIds).toEqual(['a', 'b']);
+    expect(restored.relationships[0]?.hates).toBe(true);
+    expect(restored.villagerActionLog[0]?.text).toBe('test action');
+    expect(restored.residentHistory.length).toBeGreaterThan(0);
+  });
 });

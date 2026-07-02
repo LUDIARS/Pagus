@@ -1,26 +1,62 @@
-// 村の歴史ビュー (§8)。📜ボタンで開閉するモーダル。
+// 村の歴史ビュー (§8)。モーダル/埋め込みの両方で使う。
 // タブで多面化: ハイライト / 事件 / 住民 / 教育 / 村のルール / 人間の行動記録。
 //   データ源は chronicle (entry.kind で分類) / 最新 snapshot (住民・村のルール) / playerActions。
 //   分類は server が ChronicleEntry.kind を明示する (絵文字接頭辞依存を廃止, §2.2)。
 
 import { dominantAxis, PERSONALITY_LABELS } from '@pagus/sim';
 import type { ChronicleEntry, PlayerActionEntry, WireWorld, Villager } from '@pagus/sim';
+import { villagerDisplayName } from './villager-display.js';
 
-type Tab = 'highlight' | 'incidents' | 'villagers' | 'education' | 'rules' | 'actions';
+export type ChronicleTab =
+  | 'highlight'
+  | 'incidents'
+  | 'trial'
+  | 'life'
+  | 'education'
+  | 'calendar'
+  | 'rules'
+  | 'villagers'
+  | 'actions'
+  | 'other';
 
-const TABS: { id: Tab; label: string }[] = [
+const TABS: { id: ChronicleTab; label: string }[] = [
   { id: 'highlight', label: 'ハイライト' },
   { id: 'incidents', label: '事件' },
-  { id: 'villagers', label: '住民' },
+  { id: 'trial', label: '裁判' },
+  { id: 'life', label: '暮らし' },
   { id: 'education', label: '教育' },
+  { id: 'calendar', label: '月日' },
   { id: 'rules', label: '村のルール' },
-  { id: 'actions', label: '行動記録' },
+  { id: 'villagers', label: '住民' },
+  { id: 'actions', label: '介入記録' },
+  { id: 'other', label: 'その他' },
 ];
 
-const ACTION_JA: Record<PlayerActionEntry['type'], string> = {
+export interface ChronicleViewOptions {
+  tabs?: ChronicleTab[];
+  initialTab?: ChronicleTab;
+  showTabs?: boolean;
+}
+
+const ACTION_JA: Partial<Record<PlayerActionEntry['type'], string>> = {
   incite: '扇動',
   sanction: '制裁',
   cheer: '応援',
+  champion: '推し指定',
+  villagerGacha: '住民ガチャ',
+  placeItem: '贈与',
+  addRule: 'しきたり追加',
+  removeRule: 'しきたり廃止',
+  card: 'カード',
+  insure: '保険',
+  buyMarket: '闇市',
+  recallMayor: 'リコール',
+  proposeLaw: '法案提出',
+  voteLaw: '法案投票',
+  revolt: '蜂起',
+  martial: '戒厳令',
+  pray: '祈り',
+  raidStrike: 'レイド攻撃',
 };
 
 /** しきたり改定 (§2) のコスト表示。既定 env (PAGUS_RULE_ADD_COST/REMOVE_COST) に合わせる。 */
@@ -40,20 +76,32 @@ export class ChronicleView {
   private world: WireWorld | null = null;
   private actions: PlayerActionEntry[] = [];
   private open = false;
-  private tab: Tab = 'highlight';
+  private tab: ChronicleTab;
+  private readonly tabs: { id: ChronicleTab; label: string }[];
+  private readonly showTabs: boolean;
 
   constructor(
-    private readonly root: HTMLElement,
+    private readonly root: HTMLElement | null,
     private readonly body: HTMLElement,
-    openBtn: HTMLElement,
-    closeBtn: HTMLElement,
+    openBtn: HTMLElement | null,
+    closeBtn: HTMLElement | null,
     private readonly rules?: RuleHandlers,
+    options: ChronicleViewOptions = {},
   ) {
-    openBtn.addEventListener('click', () => this.toggle(true));
-    closeBtn.addEventListener('click', () => this.toggle(false));
-    this.root.addEventListener('click', (e) => {
+    this.tabs = options.tabs?.length
+      ? TABS.filter((t) => options.tabs?.includes(t.id))
+      : TABS;
+    this.tab = this.tabs.some((t) => t.id === options.initialTab)
+      ? options.initialTab!
+      : (this.tabs[0]?.id ?? 'highlight');
+    this.showTabs = options.showTabs ?? this.tabs.length > 1;
+    this.open = root === null;
+    openBtn?.addEventListener('click', () => this.toggle(true));
+    closeBtn?.addEventListener('click', () => this.toggle(false));
+    this.root?.addEventListener('click', (e) => {
       if (e.target === this.root) this.toggle(false);
     });
+    if (this.open) this.render();
   }
 
   setEntries(entries: ChronicleEntry[]): void {
@@ -74,6 +122,7 @@ export class ChronicleView {
   }
 
   private toggle(open: boolean): void {
+    if (!this.root) return;
     this.open = open;
     this.root.classList.toggle('show', open);
     if (open) this.render();
@@ -81,7 +130,7 @@ export class ChronicleView {
 
   private render(): void {
     this.body.replaceChildren();
-    this.body.appendChild(this.tabBar());
+    if (this.showTabs) this.body.appendChild(this.tabBar());
     const content = div('', 'hist-content');
     this.body.appendChild(content);
     this.renderTab(content);
@@ -89,7 +138,7 @@ export class ChronicleView {
 
   private tabBar(): HTMLElement {
     const bar = div('', 'hist-tabs');
-    for (const t of TABS) {
+    for (const t of this.tabs) {
       const btn = document.createElement('button');
       btn.textContent = t.label;
       btn.className = t.id === this.tab ? 'hist-tab active' : 'hist-tab';
@@ -105,13 +154,22 @@ export class ChronicleView {
   private renderTab(host: HTMLElement): void {
     switch (this.tab) {
       case 'highlight':
-        this.renderEntryList(host, this.incidentEntries().slice(-5).reverse(), '直近の大きな事件はまだありません。');
+        this.renderEntryList(host, this.highlightEntries(), 'ハイライトはまだありません。');
         break;
       case 'incidents':
         this.renderEntryList(host, this.incidentEntries(), 'まだ事件は起きていません。');
         break;
+      case 'trial':
+        this.renderEntryList(host, this.trialEntries(), 'まだ裁判の記録はありません。');
+        break;
+      case 'life':
+        this.renderEntryList(host, this.lifeEntries(), 'まだ暮らしの記録はありません。');
+        break;
       case 'education':
         this.renderEntryList(host, this.educationEntries(), 'まだ教育(改変)は行われていません。');
+        break;
+      case 'calendar':
+        this.renderEntryList(host, this.calendarEntries(), 'まだ月日ごとの記録はありません。');
         break;
       case 'villagers':
         this.renderVillagers(host);
@@ -122,19 +180,47 @@ export class ChronicleView {
       case 'actions':
         this.renderActions(host);
         break;
+      case 'other':
+        this.renderEntryList(host, this.otherEntries(), 'その他の記録はまだありません。');
+        break;
     }
+  }
+
+  private entriesOf(kinds: NonNullable<ChronicleEntry['kind']>[]): ChronicleEntry[] {
+    const set = new Set(kinds);
+    return this.entries.filter((e) => set.has(e.kind ?? 'other'));
+  }
+
+  private highlightEntries(): ChronicleEntry[] {
+    return this.entriesOf(['day', 'month', 'incident', 'trial', 'verdict', 'marriage', 'birth', 'holiday'])
+      .slice(-20)
+      .reverse();
   }
 
   /** 事件 = incident(発火/予兆) / reconcile(和解) / sanction(制裁) 種別 (§2.2)。 */
   private incidentEntries(): ChronicleEntry[] {
-    return this.entries.filter(
-      (e) => e.kind === 'incident' || e.kind === 'reconcile' || e.kind === 'sanction',
-    );
+    return this.entriesOf(['incident', 'reconcile', 'sanction']);
+  }
+
+  private trialEntries(): ChronicleEntry[] {
+    return this.entriesOf(['trial', 'verdict']);
+  }
+
+  private lifeEntries(): ChronicleEntry[] {
+    return this.entriesOf(['marriage', 'birth', 'holiday']);
   }
 
   /** 教育 = reform 種別 (§2.2)。 */
   private educationEntries(): ChronicleEntry[] {
-    return this.entries.filter((e) => e.kind === 'reform');
+    return this.entriesOf(['reform']);
+  }
+
+  private calendarEntries(): ChronicleEntry[] {
+    return this.entriesOf(['day', 'month']);
+  }
+
+  private otherEntries(): ChronicleEntry[] {
+    return this.entriesOf(['other']);
   }
 
   private renderEntryList(host: HTMLElement, list: ChronicleEntry[], emptyMsg: string): void {
@@ -169,7 +255,8 @@ export class ChronicleView {
     const row = div('', v.alive ? 'hist-villager' : 'hist-villager gone');
     const dom = PERSONALITY_LABELS[dominantAxis(v.persona.traits)];
     const originJa = v.origin === 'incident' ? '事件キャラ' : v.origin === 'born' ? '出生' : '元住民';
-    const title = `${v.alive ? '' : '✝ '}${v.name} (${v.species})`;
+    const displayName = this.world ? villagerDisplayName(this.world, v) : v.name;
+    const title = `${v.alive ? '' : '✝ '}${displayName} (${v.species})`;
     const meta = `気質: ${dom} ｜ 改変 ${v.reformCount}回 ｜ ${originJa}`;
     row.appendChild(div(title, 'hist-villager-name'));
     row.appendChild(div(meta, 'hist-villager-meta'));
@@ -178,13 +265,18 @@ export class ChronicleView {
 
   private renderRules(host: HTMLElement): void {
     const rules = this.world?.villageRules ?? [];
+    const behaviorRules = this.world?.behaviorRules ?? [];
     // しきたり改定 UI (§2): 新しい掟を定める入力 (ハンドラがあるときのみ)。
     if (this.rules) host.appendChild(this.addRuleForm());
-    if (rules.length === 0) {
+    if (rules.length === 0 && behaviorRules.length === 0) {
       host.appendChild(div('この村にはまだしきたりがありません。', 'muted'));
       return;
     }
-    host.appendChild(div('村のしきたり (事件の火種)', 'hist-date'));
+    if (rules.length === 0) {
+      host.appendChild(div('村のしきたりはまだありません。', 'muted'));
+    } else {
+      host.appendChild(div('村のしきたり (事件の火種)', 'hist-date'));
+    }
     for (const r of rules) {
       const row = div('', 'hist-rule-row');
       row.appendChild(div(`・${r.text}`, 'hist-line'));
@@ -196,6 +288,12 @@ export class ChronicleView {
         row.appendChild(rm);
       }
       host.appendChild(row);
+    }
+    if (behaviorRules.length > 0) {
+      host.appendChild(div('ふるまいの法則', 'hist-date'));
+      for (const r of behaviorRules) {
+        host.appendChild(div(`・${r.description}`, 'hist-line'));
+      }
     }
   }
 
@@ -236,7 +334,7 @@ export class ChronicleView {
         host.appendChild(div(a.date, 'hist-date'));
         lastDate = a.date;
       }
-      host.appendChild(div(`${ACTION_JA[a.type]} → ${a.target} （${a.userId}）`, 'hist-line'));
+      host.appendChild(div(`${ACTION_JA[a.type] ?? a.type} → ${a.target} （${a.userId}）`, 'hist-line'));
     }
   }
 }

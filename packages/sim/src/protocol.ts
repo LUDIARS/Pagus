@@ -1,7 +1,7 @@
 // WS 配線契約。World は Map を持ち JSON 化できないので、villagers を配列にした
 // WireWorld を介して server→client へ送る。client もこの型だけ見れば描画できる。
 
-import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll } from './types/index.js';
+import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, ScheduledParty, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll, ResidentHistoryEntry, VillagerRelationship, VillagerActionEntry, VillagerGachaKind } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 import { defaultBehaviorRules, type BehaviorRule } from './behavior-rules.js';
 
@@ -15,6 +15,7 @@ export interface WireWorld {
   incident: Incident | null;
   trial: TrialState | null;
   scheduledIncident: ScheduledIncident | null;
+  scheduledParty: ScheduledParty | null;
   villageRules: VillageRule[];
   behaviorRules: BehaviorRule[];
   /** フィールドに落ちているアイテム (§16)。 */
@@ -27,6 +28,9 @@ export interface WireWorld {
   mayorPoll: MayorPoll | null;
   /** 戒厳令 (§v1.3-C ⑨)。発動中のみ。 */
   martial?: MartialState;
+  residentHistory: ResidentHistoryEntry[];
+  relationships: VillagerRelationship[];
+  villagerActionLog: VillagerActionEntry[];
 }
 
 export function toWire(world: World): WireWorld {
@@ -40,12 +44,16 @@ export function toWire(world: World): WireWorld {
     incident: world.incident,
     trial: world.trial,
     scheduledIncident: world.scheduledIncident,
+    scheduledParty: world.scheduledParty,
     villageRules: world.villageRules,
     behaviorRules: world.behaviorRules,
     items: world.items,
     mayorId: world.mayorId,
     mayorTermsLeft: world.mayorTermsLeft,
     mayorPoll: world.mayorPoll,
+    residentHistory: world.residentHistory,
+    relationships: world.relationships,
+    villagerActionLog: world.villagerActionLog,
   };
   // exactOptionalPropertyTypes: 戒厳令は発動中のみキーを足す (§v1.3-C ⑨)。
   if (world.martial !== undefined) wire.martial = world.martial;
@@ -64,12 +72,16 @@ export function fromWire(wire: WireWorld): World {
     incident: wire.incident,
     trial: wire.trial,
     scheduledIncident: wire.scheduledIncident ?? null,
+    scheduledParty: wire.scheduledParty ?? null,
     villageRules: wire.villageRules ?? [],
     behaviorRules: wire.behaviorRules ?? defaultBehaviorRules(),
     items: wire.items ?? [],
     mayorId: wire.mayorId ?? null,
     mayorTermsLeft: wire.mayorTermsLeft ?? 0,
     mayorPoll: wire.mayorPoll ?? null,
+    residentHistory: wire.residentHistory ?? [],
+    relationships: wire.relationships ?? [],
+    villagerActionLog: wire.villagerActionLog ?? [],
   };
   if (wire.martial !== undefined) world.martial = wire.martial;
   return world;
@@ -81,7 +93,7 @@ export function fromWire(wire: WireWorld): World {
 // v7: Villager.wealth/hobby/admireId/scummy (§15 住民経済)。
 // v8: World.items (§16 フィールドアイテム)。
 // v9: World.mayorId/mayorTermsLeft/mayorPoll (§17 村人村長の選挙)。
-export const WORLD_SNAPSHOT_VERSION = 9;
+export const WORLD_SNAPSHOT_VERSION = 11;
 
 /**
  * 永続化する world スナップショット。WireWorld (JSON 化可能な world) に加え、
@@ -137,8 +149,26 @@ export interface PlayerActionEntry {
   /** ゲーム内日付 (例 "6月12日")。 */
   date: string;
   userId: string;
-  type: 'incite' | 'sanction' | 'cheer';
-  /** 操作対象のどうぶつ名。 */
+  type:
+    | 'incite'
+    | 'sanction'
+    | 'cheer'
+    | 'champion'
+    | 'villagerGacha'
+    | 'placeItem'
+    | 'addRule'
+    | 'removeRule'
+    | 'card'
+    | 'insure'
+    | 'buyMarket'
+    | 'recallMayor'
+    | 'proposeLaw'
+    | 'voteLaw'
+    | 'revolt'
+    | 'martial'
+    | 'pray'
+    | 'raidStrike';
+  /** 介入対象または公開表示する内容。 */
   target: string;
 }
 
@@ -219,6 +249,8 @@ export type SeasonWinner = 'guide' | 'incite' | 'draw';
 /** リーダーボードの 1 行 (§4.3, broadcast)。 */
 export interface LeaderboardEntry {
   userId: string;
+  /** 表示名。未設定なら null。 */
+  userName: string | null;
   /** 主称号 (最大保持者のみ。無ければ null, §4.2)。 */
   title: string | null;
   /** 陣営 (明示選択 or 行動推定)。 */
@@ -228,6 +260,15 @@ export interface LeaderboardEntry {
   stats: PlayerStats;
   /** 累計課金額 (§v1.3-F 課金モック)。状態一覧に ¥ 表記で出す。 */
   spent: number;
+}
+
+/** ユーザー間チャットの 1 件。 */
+export interface ChatMessage {
+  id: string;
+  userId: string;
+  userName: string | null;
+  text: string;
+  at: number;
 }
 
 /** LLM コストログの 1 件 (§7, 直近分を配信)。 */
@@ -287,6 +328,8 @@ export type ServerMessage =
       t: 'playerState'; // その接続ユーザの状態
       karma: number;
       virtue: number;
+      /** 表示名。未設定なら null。 */
+      userName: string | null;
       sanctionCost: number;
       /** いま扇動に必要なカルマ (固定コスト, §4 消費カルマ表示用)。 */
       inciteCost: number;
@@ -315,6 +358,7 @@ export type ServerMessage =
       /** 村の徳目綱引き (§4.3): guide=(善良+秩序)×100 / incite=悪辣×100。 */
       factions: { guide: number; incite: number };
     }
+  | { t: 'chat'; messages: ChatMessage[] } // ユーザー間チャット
   | { t: 'playerActions'; entries: PlayerActionEntry[] } // 人間の行動記録 (§8, broadcast)
   | {
       t: 'sysStatus'; // 状態パネル (§7): 稼働時間・ゲーム内日付・LLM コスト
@@ -349,14 +393,17 @@ export type MarketItem = 'revive' | 'card_disaster' | 'card_swap' | 'card_awaken
 
 /** client → server。 */
 export type ClientMessage =
-  | { t: 'hello'; userId: string } // 接続とユーザを紐付け (per-user カルマ push 用)
+  | { t: 'hello'; userId: string; userName?: string } // 接続とユーザを紐付け (per-user カルマ push 用)
   | { t: 'login'; code: string } // 別端末のユーザーコード (=userId UUIDv4) で現接続を束ね直す (§v1.3-F)
+  | { t: 'setUserName'; name: string; userId?: string } // ユーザー名を設定する (§v1.3-F)
+  | { t: 'chat'; text: string; userId?: string } // ユーザー間チャット
   | { t: 'topup'; amount: number; userId?: string } // 課金モック (§v1.3-F): 固定パックでカルマ+課金額を増やす
   | { t: 'incite'; targetId: string; rumorAboutId?: string; userId?: string } // 対象に偽情報を吹き込み事件化を促す (§4.2)
   | { t: 'sanction'; targetId: string; userId?: string } // 対象を即時つるし上げ裁判にかける (§4.3)
   | { t: 'cheer'; targetId: string; userId?: string } // 対象の気質を後押しする (§4.5)
   | { t: 'vote'; pick: string; userId?: string } // 裁判への 1 票 (foolish=候補id / fate='kill'|'spare')。userId で接続ユーザを区別 (重み合算)
   | { t: 'champion'; targetId: string; userId?: string } // 推しを 1 体指名 (§1)。再送で差し替え
+  | { t: 'villagerGacha'; kind: VillagerGachaKind; userId?: string }
   // フィールドアイテム配置 (§16)。カルマ消費なし・ランダム配布。kind='random'|'precious'|'drug'。
   // toChampion=true なら推しに直接送る (フィールドを介さない)。
   | { t: 'placeItem'; kind: 'random' | 'precious' | 'drug'; toChampion?: boolean; userId?: string }

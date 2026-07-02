@@ -50,12 +50,24 @@ export function createWorld(
     incident: null,
     trial: null,
     scheduledIncident: null,
+    scheduledParty: null,
     villageRules,
     behaviorRules,
     items: [],
     mayorId: null,
     mayorTermsLeft: 0,
     mayorPoll: null,
+    residentHistory: villagers.map((v) => ({
+      id: v.id,
+      name: v.name,
+      species: v.species,
+      origin: v.origin,
+      joinedTerm: 0,
+      llmBrain: null,
+      archetype: null,
+    })),
+    relationships: [],
+    villagerActionLog: [],
   };
 }
 

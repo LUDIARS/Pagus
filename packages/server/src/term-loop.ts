@@ -7,6 +7,7 @@ import { pacedSegmentMs, type PaceOptions } from './clock.js';
 export interface LoopHandlers {
   onSnapshot(world: World): void;
   onLog(phase: World['phase'], text: string): void;
+  onVillagerAction?(entry: { villager: string; action: string }): void;
   /** 裁判が開いた (承→転) ときに 1 度だけ呼ぶ。糾弾セリフ生成のフック。 */
   onTrialOpen?(world: World): void;
 }
@@ -109,6 +110,11 @@ export class TermLoop {
         this.h.onLog('kisho', `── ${cal.month}月${cal.dayOfMonth}日 (${cal.season}) はじまり ──`);
         break;
       case 'kisho': {
+        const party = this.tm.fireScheduledParty();
+        if (party) {
+          this.h.onLog('kisho', `🎉 ${party.narrative}`);
+          if (party.incidentDay !== null) this.h.onLog('kisho', `🗓 近日の事件予兆: ${party.incidentDay}日 / ${party.incidentSeed ?? party.party.title}`);
+        }
         // 月次事件 (§12.3) は組織的 kishoTick より先に発火させる。発火したら承へ。
         if (this.tm.fireScheduledIncident()) {
           this.h.onLog('sho', `⚡ 事件: ${w.incident?.description ?? ''}`);
@@ -116,7 +122,10 @@ export class TermLoop {
           return;
         }
         const r = await this.tm.kishoTick();
-        for (const a of r.actions) this.h.onLog('kisho', a.action);
+        for (const a of r.actions) {
+          this.h.onVillagerAction?.(a);
+          this.h.onLog('kisho', a.action);
+        }
         if (r.incidentStarted) {
           this.h.onLog('sho', `⚡ 事件: ${w.incident?.description ?? ''}`);
         } else {
@@ -171,6 +180,8 @@ export class TermLoop {
             this.h.onLog('kisho', `📅 今月の事件予定: ${m.dayOfMonth}日`);
             if (m.dayOfMonth <= 1) await this.designScheduled();
           }
+          const party = this.tm.scheduleMonthlyParty();
+          if (party) this.h.onLog('kisho', `🎉 今月のパーティー予定: ${party.dayOfMonth}日 ${party.title}`);
         }
         // 事件前日: 詳細デザイン + 事件用キャラ生成 (§12.3.2)。
         const sched = this.tm.world.scheduledIncident;

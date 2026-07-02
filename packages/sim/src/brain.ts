@@ -44,6 +44,8 @@ export interface ActionDecision {
   triggersIncident: boolean;
   /** 事件化する場合の種。 */
   incidentSeed: { description: string; involved: string[] } | null;
+  /** 会話・善行・嫌がらせで親密度を動かす対象。変化量は TermMachine が人格から算出する。 */
+  relationshipEffects?: Array<{ kind: 'harass' | 'chat' | 'good'; targetIds: VillagerId[] }>;
 }
 
 // --- 感情の初期化/更新 ---

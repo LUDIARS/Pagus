@@ -5,6 +5,7 @@
 // (commandRejected はトーストで既出)。ここでは入力を集めて送るだけ。
 
 import type { WireWorld, MarketItem, AuctionLotView } from '@pagus/sim';
+import { villagerDisplayName } from './villager-display.js';
 
 export interface EconomyHandlers {
   onInsure(targetId: string, premium: number): void;
@@ -125,7 +126,7 @@ export class EconomyPanel {
       }
       for (const v of alive) {
         const opt = document.createElement('option');
-        opt.value = v.id; opt.textContent = `${v.name} (${v.species})`;
+        opt.value = v.id; opt.textContent = `${villagerDisplayName(w, v)} (${v.species})`;
         sel.appendChild(opt);
       }
       if (alive.some((v) => v.id === prev)) sel.value = prev;

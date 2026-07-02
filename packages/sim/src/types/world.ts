@@ -6,6 +6,44 @@ import type { PersonalityAxis } from '../personality.js';
 import type { BehaviorRule } from '../behavior-rules.js';
 
 export type MartialMode = 'freeze' | 'surge';
+export type VillagerGachaKind = 'free' | 'karma';
+
+export interface ResidentHistoryEntry {
+  id: VillagerId;
+  name: string;
+  species: string;
+  origin: Villager['origin'] | 'freeGacha' | 'karmaGacha';
+  joinedTerm: number;
+  llmBrain: string | null;
+  archetype: string | null;
+}
+
+export interface VillagerRelationship {
+  from: VillagerId;
+  to: VillagerId;
+  affinity: number;
+  hates: boolean;
+  note: string;
+}
+
+export interface VillagerActionEntry {
+  date: string;
+  term: number;
+  villagerId: VillagerId;
+  villagerName: string;
+  text: string;
+}
+
+export type ScheduledPartyKind = 'wedding' | 'welcome' | 'harvest' | 'memorial';
+
+export interface ScheduledParty {
+  dayOfMonth: number;
+  kind: ScheduledPartyKind;
+  title: string;
+  participantIds: VillagerId[];
+  fired: boolean;
+  incidentPlanted: boolean;
+}
 
 /** ターム内の進行フェーズ (起承転結 + 後処理)。 */
 export type Phase =
@@ -161,6 +199,7 @@ export interface World {
   trial: TrialState | null;
   /** その月の事件スケジュール (§12.3)。未設定なら null。 */
   scheduledIncident: ScheduledIncident | null;
+  scheduledParty: ScheduledParty | null;
   /** 村のしきたり (§12.8.1)。事件の火種。 */
   villageRules: VillageRule[];
   /** ふるまいの法則 (§2.1)。日常の感情/行動を決めるルール群。Haiku が日末に増やす。 */
@@ -178,4 +217,7 @@ export interface World {
    * freeze=fireScheduledIncident を抑止 / surge=DailyEngine の事件化閾値を下げる。
    */
   martial?: MartialState;
+  residentHistory: ResidentHistoryEntry[];
+  relationships: VillagerRelationship[];
+  villagerActionLog: VillagerActionEntry[];
 }

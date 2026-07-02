@@ -1,6 +1,7 @@
 // 裁判 (転) の投票パネル。foolish 段階は候補へ、fate 段階は殺す/活かすへ投票する。
 
 import type { WireWorld } from '@pagus/sim';
+import { villagerDisplayName } from './villager-display.js';
 
 export class TrialPanel {
   constructor(
@@ -19,7 +20,10 @@ export class TrialPanel {
     this.root.style.display = 'block';
     this.root.replaceChildren();
 
-    const nameOf = (id: string): string => world.villagers.find((v) => v.id === id)?.name ?? id;
+    const nameOf = (id: string): string => {
+      const v = world.villagers.find((item) => item.id === id);
+      return v ? villagerDisplayName(world, v) : id;
+    };
 
     this.root.appendChild(this.title('⚖ 裁判: 最も愚かな行動は？'));
     for (const id of trial.candidates) {

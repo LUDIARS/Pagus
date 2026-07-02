@@ -6,7 +6,7 @@
 // 例外で env 維持: PAGUS_CONFIG_KEY (マスター鍵) / PAGUS_FRESH (その起動だけ world.json 無視) /
 // PAGUS_BRAIN (stub|llm の起動モード) / PAGUS_DATA_DIR (config 自体の置き場を解決するため)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, rollVillagerGacha, ensureResidentHistory, addVillagerActionLog, KARMA_GACHA_COST, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem, type VillagerGachaKind, type ChatMessage } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
 import { loadPagusConfig, type PagusConfig } from './config/pagus-config.js';
 import { TermLoop } from './term-loop.js';
@@ -107,6 +107,35 @@ function buildLlmInfo(registry: BackendRegistry | null, villagers: { id: string 
   };
 }
 
+function dateLabel(w: World): string {
+  return `${w.calendar.month}月${w.calendar.dayOfMonth}日`;
+}
+
+async function summarizeDailyHighlight(
+  client: Pick<CliLlmClient, 'invoke'> | null,
+  date: string,
+  logs: string[],
+  actions: string[],
+): Promise<string> {
+  const source = [
+    ...logs.slice(-20).map((s) => `出来事: ${s}`),
+    ...actions.slice(-40).map((s) => `住民行動: ${s}`),
+  ];
+  if (source.length === 0) return '目立った事件はなく、村は静かに一日を終えた。';
+  if (!client) return source.slice(-3).join(' / ');
+  try {
+    const res = await client.invoke({
+      system: 'あなたは村シミュレーションの編集者です。個別の住民行動を列挙せず、その日の結果と事件のあらましだけを日本語で80字以内に要約してください。',
+      prompt: `${date}の記録をハイライトにまとめてください。\n${source.join('\n')}`,
+      timeoutMs: 60_000,
+    });
+    return res.text.replace(/\s+/g, ' ').slice(0, 140);
+  } catch (e) {
+    console.error('[pagus] daily highlight summary failed', e);
+    return source.slice(-3).join(' / ');
+  }
+}
+
 function main(): void {
   const startedAt = Date.now(); // 状態パネル (§7) の稼働開始時刻
   const cfg = loadPagusConfig(); // 暗号化 config (旧 PAGUS_* env の集約先) を 1 回ロード
@@ -142,6 +171,8 @@ function main(): void {
     scheduleSysStatus();
   }, cfg);
   const llmInfo = buildLlmInfo(registry, villagers);
+  const brainFor = (id: string): string | null => (registry ? registry.assign(id).id : null);
+  ensureResidentHistory(world, brainFor);
   const director = new EventDirector({ maxRepsPerSegment: cfg.sim.reps });
   const tm = new TermMachine(world, brain, {
     director,
@@ -172,6 +203,9 @@ function main(): void {
 
   // 裁判の糾弾セリフ: llm モードでは Haiku 生成 (65%) + レパートリー蓄積。
   const llmMode = (process.env.PAGUS_BRAIN ?? 'stub') === 'llm';
+  const highlightClient = llmMode
+    ? new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: cfg.llm.cliRetries })
+    : null;
   const narrator = new TrialNarrator(
     llmMode
       ? { client: new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: cfg.llm.cliRetries }) }
@@ -263,6 +297,14 @@ function main(): void {
   // 人間の行動記録のリングバッファ (§8, 上限 200)。
   const PLAYER_ACTIONS_CAP = 200;
   const playerActions: PlayerActionEntry[] = [];
+  // ユーザー間チャットのリングバッファ。
+  const CHAT_CAP = 100;
+  const chatMessages: ChatMessage[] = [];
+  let dailyHighlightDate = dateLabel(tm.world);
+  let dailyHighlightPending = false;
+  let dailyHighlightDoneTerm = -1;
+  const dailyLogs: string[] = [];
+  const dailyActions: string[] = [];
 
   let loop: TermLoop;
   let ws: GameWsServer;
@@ -411,13 +453,55 @@ function main(): void {
     for (const id of currentAlive) prevAliveIds.add(id);
     return changed;
   };
-  /** 人間の行動を記録し全クライアントへ配る (target はどうぶつ名)。 */
-  const recordAction = (userId: string, type: PlayerActionEntry['type'], targetId: string): void => {
-    const cal = tm.world.calendar;
-    const name = tm.world.villagers.get(targetId)?.name ?? targetId;
-    playerActions.push({ date: `${cal.month}月${cal.dayOfMonth}日`, userId, type, target: name });
+  const interventionByUser = new Map<string, number>();
+  const tryIntervention = (userId: string): boolean => {
+    const term = tm.world.term;
+    const date = dateLabel(tm.world);
+    if (interventionByUser.get(userId) === term) {
+      ws.sendRejected(userId, `介入はゲーム内時間で1日1回までです (${date})`);
+      return false;
+    }
+    return true;
+  };
+
+  /** 人間の介入を記録し全クライアントへ配る。成功した介入だけが1日1回制限を消費する。 */
+  const recordAction = (
+    userId: string,
+    type: PlayerActionEntry['type'],
+    target: string,
+    targetIsVillagerId = true,
+  ): void => {
+    const date = dateLabel(tm.world);
+    const name = targetIsVillagerId ? (tm.world.villagers.get(target)?.name ?? target) : target;
+    interventionByUser.set(userId, tm.world.term);
+    playerActions.push({ date, userId, type, target: name });
     if (playerActions.length > PLAYER_ACTIONS_CAP) playerActions.shift();
     ws.broadcastPlayerActions(playerActions);
+  };
+
+  const recordVillagerAction = (villagerId: string, text: string): void => {
+    const v = tm.world.villagers.get(villagerId);
+    const villagerName = v?.name ?? villagerId;
+    const date = dateLabel(tm.world);
+    addVillagerActionLog(tm.world, { date, term: tm.world.term, villagerId, villagerName, text });
+    dailyActions.push(`${villagerName}: ${text}`);
+  };
+
+  const finalizeDailyHighlight = (): void => {
+    if (dailyHighlightPending || dailyHighlightDoneTerm === tm.world.term) return;
+    const logs = dailyLogs.splice(0);
+    const actions = dailyActions.splice(0);
+    const date = dailyHighlightDate;
+    dailyHighlightPending = true;
+    dailyHighlightDoneTerm = tm.world.term;
+    void summarizeDailyHighlight(highlightClient, date, logs, actions)
+      .then((summary) => {
+        spectacle.recordHighlight(date, '日次ハイライト', 'day', summary);
+      })
+      .finally(() => {
+        dailyHighlightPending = false;
+        dailyHighlightDate = dateLabel(tm.world);
+      });
   };
 
   // HTTP API (push 購読 / 通知経由の投票) と WS を同一ポートに相乗りさせる。
@@ -425,8 +509,9 @@ function main(): void {
     createRequestListener({ push, onVote: (pick, userId) => loop.vote(pick, userId) }),
   );
   ws = new GameWsServer(httpServer, {
-    onHello: (userId) => {
+    onHello: (userId, userName) => {
       knownUsers.add(userId);
+      if (userName !== undefined) ps.setUserName(userId, userName);
       pushState(userId);
       pushBetState(userId); // 進行中の裁判があればベット状態も
       scheduleSysStatus(); // 接続時に最新の状態を反映 (§2.3 イベント駆動)
@@ -454,13 +539,51 @@ function main(): void {
       scheduleSysStatus();
       scheduleLeaderboard();
     },
+    onSetUserName: (name, userId) => {
+      knownUsers.add(userId);
+      const normalized = ps.setUserName(userId, name);
+      for (const msg of chatMessages) {
+        if (msg.userId === userId) msg.userName = normalized;
+      }
+      pushState(userId);
+      scheduleLeaderboard();
+      if (chatMessages.length > 0) ws.broadcastChat(chatMessages);
+    },
+    onChat: (text, userId) => {
+      knownUsers.add(userId);
+      const trimmed = text.trim().replace(/\s+/g, ' ').slice(0, 160);
+      if (trimmed.length === 0) {
+        ws.sendRejected(userId, 'チャット本文が空です');
+        return;
+      }
+      chatMessages.push({
+        id: `${Date.now().toString(36)}-${chatMessages.length.toString(36)}`,
+        userId,
+        userName: ps.getUserName(userId),
+        text: trimmed,
+        at: Date.now(),
+      });
+      if (chatMessages.length > CHAT_CAP) chatMessages.shift();
+      ws.broadcastChat(chatMessages);
+    },
     onIncite: (targetId, rumorAboutId, userId) => {
       knownUsers.add(userId);
+      const target = tm.world.villagers.get(targetId);
+      if (!target || !target.alive) {
+        ws.sendRejected(userId, '扇動対象が不正です');
+        return;
+      }
+      if (!tryIntervention(userId)) return;
       if (!ps.spend(userId, ps.inciteCostValue)) {
         ws.sendRejected(userId, 'カルマが足りない');
         return;
       }
-      loop.inciteTarget(targetId, rumorAboutId);
+      if (!loop.inciteTarget(targetId, rumorAboutId)) {
+        ps.addKarma(userId, ps.inciteCostValue);
+        ws.sendRejected(userId, '扇動対象が不正です');
+        pushState(userId);
+        return;
+      }
       ps.bumpStat(userId, 'incites'); // 実績 (§4.1)
       recordAction(userId, 'incite', targetId);
       pushState(userId);
@@ -472,6 +595,12 @@ function main(): void {
         ws.sendRejected(userId, 'いま別の裁判が進行中');
         return;
       }
+      const target = tm.world.villagers.get(targetId);
+      if (!target || !target.alive) {
+        ws.sendRejected(userId, '制裁対象が不正です');
+        return;
+      }
+      if (!tryIntervention(userId)) return;
       // オークション落札の制裁無料券 (§v1.3-B ②) があれば消費して無料化。
       const sanctionFree = ps.consumeSanctionFree(userId);
       if (!sanctionFree && !ps.spend(userId, ps.sanctionCost(userId))) {
@@ -483,6 +612,9 @@ function main(): void {
         const name = tm.world.villagers.get(targetId)?.name ?? targetId;
         chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `⚖ 制裁: ${name} がつるし上げられた`, 'sanction');
         ws.updateChronicle(chronicle.recent());
+      } else {
+        ws.sendRejected(userId, '制裁対象が不正です');
+        return;
       }
       ps.bumpStat(userId, 'sanctions'); // 実績 (§4.1)
       recordAction(userId, 'sanction', targetId);
@@ -491,11 +623,20 @@ function main(): void {
     },
     onCheer: (targetId, userId) => {
       knownUsers.add(userId);
+      const target = tm.world.villagers.get(targetId);
+      if (!target || !target.alive) {
+        ws.sendRejected(userId, '応援対象が不正です');
+        return;
+      }
+      if (!tryIntervention(userId)) return;
       if (!ps.cheer(userId, Date.now())) {
         ws.sendRejected(userId, '応援はインターバル中');
         return;
       }
-      loop.cheer(targetId);
+      if (!loop.cheer(targetId)) {
+        ws.sendRejected(userId, '応援対象が不正です');
+        return;
+      }
       ps.bumpStat(userId, 'cheers'); // 実績 (§4.1)
       recordAction(userId, 'cheer', targetId);
       pushState(userId);
@@ -509,7 +650,31 @@ function main(): void {
         ws.sendRejected(userId, 'その推しは指名できない (生存どうぶつのみ)');
         return;
       }
+      if (!tryIntervention(userId)) return;
       ps.setChampion(userId, targetId);
+      recordAction(userId, 'champion', targetId);
+      pushState(userId);
+    },
+    onVillagerGacha: (kind: VillagerGachaKind, userId) => {
+      knownUsers.add(userId);
+      if (kind !== 'free' && kind !== 'karma') {
+        ws.sendRejected(userId, 'ガチャ種別が不正です');
+        return;
+      }
+      if (!tryIntervention(userId)) return;
+      if (kind === 'karma' && !ps.spend(userId, KARMA_GACHA_COST)) {
+        ws.sendRejected(userId, `カルマが足りません (${KARMA_GACHA_COST})`);
+        return;
+      }
+      const rolled = rollVillagerGacha(tm.world, kind, { llmBrain: null });
+      rolled.history.llmBrain = brainFor(rolled.villager.id);
+      if (aliveInitialized) prevAliveIds.add(rolled.villager.id);
+      const cal = tm.world.calendar;
+      const paid = kind === 'karma' ? `カルマ${KARMA_GACHA_COST}` : '無料';
+      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `🎲 ${paid}ガチャ: ${rolled.villager.name} (${rolled.history.archetype ?? '新入り'}) が村に来た`, 'other');
+      ws.updateChronicle(chronicle.recent());
+      ws.broadcastSnapshot(tm.world);
+      recordAction(userId, 'villagerGacha', rolled.villager.name, false);
       pushState(userId);
     },
     // フィールドアイテム配置 (§16): カルマ消費なし・ランダム配布。toChampion で推しに直送。
@@ -517,6 +682,7 @@ function main(): void {
       knownUsers.add(userId);
       const cal = tm.world.calendar;
       const date = `${cal.month}月${cal.dayOfMonth}日`;
+      if (!tryIntervention(userId)) return;
       if (toChampion) {
         const championId = ps.snapshot(userId, Date.now()).championId;
         if (!championId) {
@@ -529,9 +695,11 @@ function main(): void {
           return;
         }
         chronicle.add(date, `🎁 ${ITEM_LABELS[res.kind]}を推しの ${res.name} に渡した`, 'other');
+        recordAction(userId, 'placeItem', `${ITEM_LABELS[res.kind]} → ${res.name}`, false);
       } else {
         const item = tm.placeItem(kind);
         chronicle.add(date, `🎁 ${ITEM_LABELS[item.kind]}がフィールドに置かれた`, 'other');
+        recordAction(userId, 'placeItem', `${ITEM_LABELS[item.kind]} → フィールド`, false);
       }
       ws.updateChronicle(chronicle.recent());
       ws.broadcastSnapshot(tm.world);
@@ -547,6 +715,7 @@ function main(): void {
         ws.sendRejected(userId, 'しきたりが上限に達している');
         return;
       }
+      if (!tryIntervention(userId)) return;
       if (!ps.spend(userId, RULE_ADD_COST)) {
         ws.sendRejected(userId, 'カルマが足りない');
         return;
@@ -558,6 +727,7 @@ function main(): void {
       chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `📜 しきたり: 「${trimmed}」が定められた`, 'rule');
       ws.updateChronicle(chronicle.recent());
       ws.broadcastSnapshot(tm.world);
+      recordAction(userId, 'addRule', trimmed, false);
       pushState(userId);
       scheduleLeaderboard();
     },
@@ -568,6 +738,7 @@ function main(): void {
         ws.sendRejected(userId, 'そのしきたりは存在しない');
         return;
       }
+      if (!tryIntervention(userId)) return;
       if (!ps.spend(userId, RULE_REMOVE_COST)) {
         ws.sendRejected(userId, 'カルマが足りない');
         return;
@@ -578,6 +749,7 @@ function main(): void {
       chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `📜 しきたり: 「${text}」が廃された`, 'rule');
       ws.updateChronicle(chronicle.recent());
       ws.broadcastSnapshot(tm.world);
+      recordAction(userId, 'removeRule', text, false);
       pushState(userId);
     },
     onBet: (pick, amount, userId) => {
@@ -638,6 +810,7 @@ function main(): void {
         ws.sendRejected(userId, '不明なカード');
         return;
       }
+      if (!tryIntervention(userId)) return;
       const now = Date.now();
       if (!ps.canUseCard(userId, now)) {
         // オークション落札の「カード招待状」(§v1.3-B ②) があればクールダウンを 1 回無視。
@@ -725,6 +898,7 @@ function main(): void {
       chronicle.add(date, chronicleText, 'other');
       ws.updateChronicle(chronicle.recent());
       ws.broadcastSnapshot(w);
+      recordAction(userId, 'card', chronicleText, false);
       pushState(userId);
     },
     // --- 経済パック (§v1.3-B) ---------------------------------------------------
@@ -739,6 +913,7 @@ function main(): void {
         ws.sendRejected(userId, '保険料は正の整数');
         return;
       }
+      if (!tryIntervention(userId)) return;
       if (!ps.spend(userId, premium)) {
         ws.sendRejected(userId, 'カルマが足りない');
         return;
@@ -747,6 +922,7 @@ function main(): void {
       const cal = tm.world.calendar;
       chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `🛡 保険: ${target.name} に ${premium} カルマ (${INSURE_DAYS}日)`, 'other');
       ws.updateChronicle(chronicle.recent());
+      recordAction(userId, 'insure', `${target.name} / ${premium}`, false);
       pushState(userId);
     },
     onBid: (lotId, amount, userId) => {
@@ -763,6 +939,7 @@ function main(): void {
       const w = tm.world;
       const cal = w.calendar;
       const date = `${cal.month}月${cal.dayOfMonth}日`;
+      if (!tryIntervention(userId)) return;
       if (item === 'revive') {
         // 復活候補を新しい順に探す (alive=false で消えていない直近の死者)。
         let reviveId: string | null = null;
@@ -795,6 +972,7 @@ function main(): void {
         chronicle.add(date, `🛒 闇市: ${name} が闇の力で蘇った`, 'other');
         ws.updateChronicle(chronicle.recent());
         ws.broadcastSnapshot(w);
+        recordAction(userId, 'buyMarket', `復活: ${name}`, false);
         pushState(userId);
         return;
       }
@@ -860,6 +1038,7 @@ function main(): void {
       chronicle.add(date, text, 'other');
       ws.updateChronicle(chronicle.recent());
       ws.broadcastSnapshot(w);
+      recordAction(userId, 'buyMarket', text, false);
       pushState(userId);
     },
     // --- 政治パック (§v1.3-C) + 村長リコール (§17) -----------------------------
@@ -869,6 +1048,7 @@ function main(): void {
         ws.sendRejected(userId, '村長が空位 (リコール対象なし)');
         return;
       }
+      if (!tryIntervention(userId)) return;
       if (!ps.spend(userId, RECALL_STAKE)) {
         ws.sendRejected(userId, `カルマが足りない (請願に ${RECALL_STAKE})`);
         return;
@@ -885,26 +1065,35 @@ function main(): void {
       }
       ws.updateChronicle(chronicle.recent());
       ws.broadcastSnapshot(tm.world);
+      recordAction(userId, 'recallMayor', r.success && r.ousted ? `成功: ${r.ousted}` : '不成立', false);
     },
     onProposeLaw: (text, userId) => {
       knownUsers.add(userId);
+      if (!tryIntervention(userId)) return;
       const res = governance.proposeLaw(userId, text, Date.now());
       if (!res.ok) ws.sendRejected(userId, res.reason);
+      else recordAction(userId, 'proposeLaw', text.trim(), false);
     },
     onVoteLaw: (lawId, approve, userId) => {
       knownUsers.add(userId);
+      if (!tryIntervention(userId)) return;
       const res = governance.voteLaw(userId, lawId, approve, Date.now());
       if (!res.ok) ws.sendRejected(userId, res.reason);
+      else recordAction(userId, 'voteLaw', `${approve ? '賛成' : '反対'}: ${lawId}`, false);
     },
     onRevolt: (side, userId) => {
       knownUsers.add(userId);
+      if (!tryIntervention(userId)) return;
       const res = governance.revolt(userId, side, Date.now());
       if (!res.ok) ws.sendRejected(userId, res.reason);
+      else recordAction(userId, 'revolt', side === 'incite' ? '蜂起側' : '鎮圧側', false);
     },
     onMartial: (mode, userId) => {
       knownUsers.add(userId);
+      if (!tryIntervention(userId)) return;
       const res = governance.martial(userId, mode, Date.now());
       if (!res.ok) ws.sendRejected(userId, res.reason);
+      else recordAction(userId, 'martial', mode, false);
     },
     // --- 演出・協力パック (§v1.3-D) ---------------------------------------------
     onPredictDay: (dayOfMonth, userId) => {
@@ -926,7 +1115,9 @@ function main(): void {
     },
     onPray: (userId) => {
       knownUsers.add(userId);
+      if (!tryIntervention(userId)) return;
       const res = spectacle.pray(userId, Date.now()); // 無料 (協力要素, ㉕)
+      recordAction(userId, 'pray', res.fired ? `祈り発火 (${res.count}人)` : `祈り (${res.count}人)`, false);
       if (!res.fired) return;
       // 閾値到達 → 村バフ発火 (善良/活気 +0.05・全生存 stress-1)。
       tm.applyPrayerBuff();
@@ -938,8 +1129,10 @@ function main(): void {
     },
     onRaidStrike: (amount, userId) => {
       knownUsers.add(userId);
+      if (!tryIntervention(userId)) return;
       const res = raid.strike(userId, amount, Date.now());
       if (!res.ok) ws.sendRejected(userId, res.reason);
+      else recordAction(userId, 'raidStrike', `${amount}カルマ${res.defeated ? ' / 討伐' : ''}`, false);
     },
   });
   ws.setLlmInfo(llmInfo);
@@ -1134,6 +1327,7 @@ function main(): void {
     onSnapshot: (w) => {
       // 日末 (term 進行) を検知して保険の期限切れ掃除 (§v1.3-B ③)。
       if (w.term > lastEconomyTerm) {
+        finalizeDailyHighlight();
         lastEconomyTerm = w.term;
         ps.pruneExpiredInsurance(w.term);
         for (const uid of knownUsers) pushState(uid);
@@ -1186,9 +1380,19 @@ function main(): void {
       store.maybeSave(w, tm.getBornCount(), tm.getIncidentCount(), tm.getRuleCount()); // 揮発状態 (出生/改変/評判/法則) を間引いて永続化
       scheduleSysStatus(); // スナップショット送信時に状態を反映 (§2.3 イベント駆動)
     },
+    onVillagerAction: (entry) => {
+      recordVillagerAction(entry.villager, entry.action);
+    },
     onLog: (phase, text) => {
       ws.broadcastLog(phase, text);
       sessionLog.line(phase, text);
+      if (text.includes('はじまり')) {
+        dailyHighlightDate = dateLabel(tm.world);
+        dailyLogs.length = 0;
+        dailyActions.length = 0;
+      } else if (phase !== 'kisho' || isMilestone(text)) {
+        dailyLogs.push(text);
+      }
       if (isMilestone(text)) {
         const cal = tm.world.calendar;
         const kind = classifyKind(text);

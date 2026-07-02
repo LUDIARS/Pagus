@@ -118,6 +118,7 @@ export class DailyEngine {
     }
     // 最終カテゴリ (発火時は興奮 = harass 相当) でルール評価し感情・flavor を得る。
     const { emotion, flavor } = this.evalFor(villager, env, trigger ? 'harass' : 'wander');
+    const targetIds = trigger ? env.nearby.map((n) => n.id) : [];
     return {
       move,
       action: flavor ?? `${villager.name} は ${env.place} をうろついた`,
@@ -129,6 +130,7 @@ export class DailyEngine {
             involved: env.nearby.map((n) => n.id),
           }
         : null,
+      ...(targetIds.length > 0 ? { relationshipEffects: [{ kind: 'harass' as const, targetIds }] } : {}),
     };
   }
 
@@ -148,12 +150,21 @@ export class DailyEngine {
         newEmotion: emotion,
         triggersIncident: true,
         incidentSeed: { description: `${name} が嫌がらせをした`, involved: [d.target] },
+        relationshipEffects: [{ kind: 'harass', targetIds: [d.target] }],
       };
     }
     const category: RuleCategory = d.category === 'good' ? 'good' : 'chat';
     const { emotion, flavor } = this.evalFor(villager, env, category);
     const text = flavor ?? (d.category === 'good' ? `${name} は ${env.place} で良い行いをした` : `${name} は雑談した`);
-    return { move, action: text, newEmotion: emotion, triggersIncident: false, incidentSeed: null };
+    const targetIds = this.socialTargets(env, d.category === 'good' ? 3 : 2);
+    return {
+      move,
+      action: text,
+      newEmotion: emotion,
+      triggersIncident: false,
+      incidentSeed: null,
+      ...(targetIds.length > 0 ? { relationshipEffects: [{ kind: d.category === 'good' ? 'good' : 'chat', targetIds }] } : {}),
+    };
   }
 
   /** 1 マスのうろつき移動 (rng で 8 近傍 + 留まる)。 */
@@ -161,5 +172,17 @@ export class DailyEngine {
     const dx = Math.floor(this.rng() * 3) - 1;
     const dy = Math.floor(this.rng() * 3) - 1;
     return { x: villager.position.x + dx, y: villager.position.y + dy };
+  }
+
+  private socialTargets(env: EnvironmentView, max: number): string[] {
+    if (env.nearby.length === 0) return [];
+    const pool = [...env.nearby];
+    const out: string[] = [];
+    while (pool.length > 0 && out.length < max) {
+      const idx = Math.floor(this.rng() * pool.length);
+      const picked = pool.splice(idx, 1)[0];
+      if (picked) out.push(picked.id);
+    }
+    return out;
   }
 }

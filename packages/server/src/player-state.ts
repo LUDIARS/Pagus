@@ -48,6 +48,8 @@ export const DEFAULT_PLAYER_STATE_CONFIG: PlayerStateConfig = {
 interface PlayerEntry {
   karma: number;
   virtue: number;
+  /** スコアボード等に出す表示名。未設定は null。 */
+  userName: string | null;
   lastCheerMs: number;
   /** 推し (champion) の villager id。未指名は null (§1)。 */
   championId: string | null;
@@ -90,6 +92,8 @@ export interface InsurancePayout {
 export interface PlayerStateSnapshot {
   karma: number;
   virtue: number;
+  /** スコアボード等に出す表示名。未設定は null。 */
+  userName: string | null;
   sanctionCost: number;
   /** いま扇動に必要なカルマ (固定コスト, §4 消費カルマ表示用)。 */
   inciteCost: number;
@@ -148,10 +152,23 @@ export class PlayerState {
   get(userId: string): PlayerEntry {
     let e = this.players.get(userId);
     if (!e) {
-      e = { karma: 0, virtue: 0, lastCheerMs: 0, championId: null, stats: emptyStats(), faction: null, spent: 0 };
+      e = { karma: 0, virtue: 0, userName: null, lastCheerMs: 0, championId: null, stats: emptyStats(), faction: null, spent: 0 };
       this.players.set(userId, e);
     }
     return e;
+  }
+
+  /** ユーザー名を設定する。空文字は未設定扱いに戻す。 */
+  setUserName(userId: string, name: string): string | null {
+    const trimmed = name.trim().replace(/\s+/g, ' ');
+    const normalized = trimmed.length === 0 ? null : trimmed.slice(0, 20);
+    this.get(userId).userName = normalized;
+    return normalized;
+  }
+
+  /** ユーザー名を返す。未設定なら null。 */
+  getUserName(userId: string): string | null {
+    return this.get(userId).userName;
   }
 
   /**
@@ -396,6 +413,7 @@ export class PlayerState {
       const e = this.get(uid);
       return {
         userId: uid,
+        userName: e.userName,
         title: titles.get(uid) ?? null,
         faction: this.factionOf(uid),
         karma: e.karma,
@@ -412,6 +430,7 @@ export class PlayerState {
     return {
       karma: e.karma,
       virtue: e.virtue,
+      userName: e.userName,
       sanctionCost: this.sanctionCost(userId),
       inciteCost: this.inciteCostValue,
       canCheerInMs: this.canCheerInMs(userId, now),

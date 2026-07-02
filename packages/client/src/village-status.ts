@@ -3,6 +3,7 @@
 
 import { VIRTUES, VIRTUE_LABELS, wealthTier, HOBBY_LABELS } from '@pagus/sim';
 import type { WireWorld, Virtue } from '@pagus/sim';
+import { villagerDisplayName } from './villager-display.js';
 
 const VIRTUE_COLOR: Record<Virtue, string> = {
   benevolence: '#6fcf97',
@@ -48,7 +49,7 @@ export class VillageStatus {
     this.root.appendChild(row('💰 富裕 / 貧困', `${rich} / ${poor} 匹`));
     if (scum > 0) this.root.appendChild(row('🤑 クズ化', `${scum} 匹`));
     this.root.appendChild(
-      row('👑 最富裕', `${richest.name} (${Math.round(richest.wealth)} / ${HOBBY_LABELS[richest.hobby]})`),
+      row('👑 最富裕', `${villagerDisplayName(w, richest)} (${Math.round(richest.wealth)} / ${HOBBY_LABELS[richest.hobby]})`),
     );
     // §16 フィールドアイテム (拾われるまでの落とし物)。
     if (w.items.length > 0) {
@@ -81,7 +82,10 @@ export class VillageStatus {
       this.root.appendChild(p('muted', '進行中の裁判はありません。'));
       return;
     }
-    const nameOf = (id: string): string => w.villagers.find((x) => x.id === id)?.name ?? id;
+    const nameOf = (id: string): string => {
+      const v = w.villagers.find((x) => x.id === id);
+      return v ? villagerDisplayName(w, v) : id;
+    };
 
     // 狂人の扇動を明示する。
     const madVote = t.votes.find((v) => v.voter === 'madman');

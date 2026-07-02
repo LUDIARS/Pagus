@@ -1,7 +1,7 @@
-// 統合アクションオーバーレイ (§v1.3-E)。増えたユーザ操作 (操作/カード/村/裁判/経済/情報) を
+// 統合介入パネル (§v1.3-E)。増えたユーザ操作 (操作/カード/村/裁判/経済/情報) を
 // 1 つのタブ式パネルへ集約し、上部に常時ヘッダ (カルマ残高 / 善性 / 課金 / 推し / クールダウン) を出す。
 //
-// 本クラスは「枠」の責務だけを持つ: タブ切替・ヘッダ描画・開閉 (ドロワー)。
+// 本クラスは「枠」の責務だけを持つ: タブ切替・ヘッダ描画・開閉 (ドロワー/埋め込み)。
 // 各操作パネル (PlayerControls / CardPanel / EconomyPanel / GovernancePanel / TrialPanel /
 // BetPanel / LeaderboardPanel / SpectaclePanel / StatusPanel / AccountPanel) は従来どおり
 // それぞれのクラスが該当タブ内の DOM (#controls 等) へ mount する (送信/受信ロジックは無改変)。
@@ -17,6 +17,11 @@ export interface OverlayPlayerState {
   canCheerInMs: number;
 }
 
+export interface ActionOverlayOptions {
+  /** 左ペインなど通常レイアウト内に埋め込む時は、開閉 transform を使わない。 */
+  embedded?: boolean;
+}
+
 export class ActionOverlay {
   private state: OverlayPlayerState | null = null;
   /** state を受信した時刻 (クールダウン残のローカル減算用)。 */
@@ -29,14 +34,17 @@ export class ActionOverlay {
     private readonly root: HTMLElement,
     private readonly headerBox: HTMLElement,
     private readonly tabBar: HTMLElement,
-    toggleBtn: HTMLElement,
+    toggleBtn: HTMLElement | null,
     private readonly backdrop: HTMLElement,
+    private readonly options: ActionOverlayOptions = {},
   ) {
     // data-tab セクションを集め、data-label でタブボタンを生成する。
     this.sections = Array.from(root.querySelectorAll<HTMLElement>('.ao-tab'));
     for (const sec of this.sections) {
       const id = sec.dataset.tab ?? '';
       const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.role = 'tab';
       btn.className = 'ao-tab-btn';
       btn.textContent = sec.dataset.label ?? id;
       btn.addEventListener('click', () => this.selectTab(id));
@@ -45,11 +53,11 @@ export class ActionOverlay {
     }
     this.selectTab(this.sections[0]?.dataset.tab ?? '');
 
-    toggleBtn.addEventListener('click', () => this.setOpen(!this.openFlag));
+    toggleBtn?.addEventListener('click', () => this.setOpen(!this.openFlag));
     this.backdrop.addEventListener('click', () => this.setOpen(false));
 
-    // 起動時: 広い画面は開、狭い画面 (モバイル) はドロワーを閉じておく。
-    this.setOpen(!this.isNarrow());
+    // 起動時: 埋め込み時は常時表示。浮遊ドロワー時は狭い画面だけ閉じておく。
+    this.setOpen(this.options.embedded ? true : !this.isNarrow());
 
     this.renderHeader();
     // クールダウン残を毎秒詰める (playerState の再送を待たずに表示を進める)。
@@ -73,6 +81,12 @@ export class ActionOverlay {
   }
 
   private setOpen(open: boolean): void {
+    if (this.options.embedded) {
+      this.openFlag = true;
+      this.root.classList.remove('closed');
+      this.backdrop.classList.remove('show');
+      return;
+    }
     this.openFlag = open;
     this.root.classList.toggle('closed', !open);
     // backdrop は狭い画面でのみ (デスクトップは中央ステージを覆わない)。

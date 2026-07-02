@@ -23,6 +23,8 @@ import {
   type MartialMode,
   type HighlightCard,
   type SeasonWinner,
+  type VillagerGachaKind,
+  type ChatMessage,
 } from '@pagus/sim';
 import type { PlayerStateSnapshot } from './player-state.js';
 import { isValidUserCode, connectionsToLogout } from './user-code.js';
@@ -46,15 +48,18 @@ export interface MarketArgs {
 type SysStatusMessage = Extract<ServerMessage, { t: 'sysStatus' }>;
 
 export interface WsHandlers {
-  onHello(userId: string): void;
+  onHello(userId: string, userName?: string): void;
   // 課金モック / 別端末ログイン (§v1.3-F)。
   onTopup(amount: number, userId: string): void;
   onLogin(userId: string): void;
+  onSetUserName(name: string, userId: string): void;
+  onChat(text: string, userId: string): void;
   onIncite(targetId: string, rumorAboutId: string | undefined, userId: string): void;
   onSanction(targetId: string, userId: string): void;
   onCheer(targetId: string, userId: string): void;
   onVote(pick: string, userId?: string): void;
   onChampion(targetId: string, userId: string): void;
+  onVillagerGacha(kind: VillagerGachaKind, userId: string): void;
   /** フィールドアイテム配置 (§16)。toChampion=true で推しに直接送る。 */
   onPlaceItem(kind: 'random' | 'precious' | 'drug', toChampion: boolean, userId: string): void;
   onAddRule(text: string, userId: string): void;
@@ -86,6 +91,8 @@ export class GameWsServer {
   private playerActions: PlayerActionEntry[] = [];
   /** リーダーボード (§4.3) の最新値。接続時に現値を送る。 */
   private leaderboard: Extract<ServerMessage, { t: 'leaderboard' }> | null = null;
+  /** ユーザー間チャットの最新履歴。接続時に現値を送る。 */
+  private chat: Extract<ServerMessage, { t: 'chat' }> | null = null;
   /** 状態パネル (§7) の最新値。接続時に現値を送る。 */
   private sysStatus: SysStatusMessage | null = null;
   /** オークション (§v1.3-B ②) の最新ロット状態。接続時に現値を送る。 */
@@ -130,6 +137,7 @@ export class GameWsServer {
     ws.send(JSON.stringify({ t: 'playerActions', entries: this.playerActions } satisfies ServerMessage));
     if (this.sysStatus) ws.send(JSON.stringify(this.sysStatus));
     if (this.leaderboard) ws.send(JSON.stringify(this.leaderboard));
+    if (this.chat) ws.send(JSON.stringify(this.chat));
     if (this.auction) ws.send(JSON.stringify(this.auction));
     if (this.laws) ws.send(JSON.stringify(this.laws));
     if (this.revolt) ws.send(JSON.stringify(this.revolt));
@@ -187,12 +195,18 @@ export class GameWsServer {
   private handle(ws: WebSocket, msg: ClientMessage): void {
     if (msg.t === 'hello') {
       this.bind(ws, msg.userId);
-      this.h.onHello(msg.userId);
+      this.h.onHello(msg.userId, msg.userName);
     } else if (msg.t === 'topup') {
       this.bind(ws, msg.userId);
       this.h.onTopup(msg.amount, this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'login') {
       this.loginConn(ws, msg.code);
+    } else if (msg.t === 'setUserName') {
+      this.bind(ws, msg.userId);
+      this.h.onSetUserName(msg.name, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'chat') {
+      this.bind(ws, msg.userId);
+      this.h.onChat(msg.text, this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'incite') {
       this.bind(ws, msg.userId);
       this.h.onIncite(msg.targetId, msg.rumorAboutId, this.resolveUser(ws, msg.userId));
@@ -208,6 +222,9 @@ export class GameWsServer {
     } else if (msg.t === 'champion') {
       this.bind(ws, msg.userId);
       this.h.onChampion(msg.targetId, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'villagerGacha') {
+      this.bind(ws, msg.userId);
+      this.h.onVillagerGacha(msg.kind, this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'placeItem') {
       this.bind(ws, msg.userId);
       this.h.onPlaceItem(msg.kind, msg.toChampion ?? false, this.resolveUser(ws, msg.userId));
@@ -293,6 +310,7 @@ export class GameWsServer {
           t: 'playerState',
           karma: state.karma,
           virtue: state.virtue,
+          userName: state.userName,
           sanctionCost: state.sanctionCost,
           inciteCost: state.inciteCost,
           canCheerInMs: state.canCheerInMs,
@@ -303,6 +321,7 @@ export class GameWsServer {
           t: 'playerState',
           karma: state.karma,
           virtue: state.virtue,
+          userName: state.userName,
           sanctionCost: state.sanctionCost,
           inciteCost: state.inciteCost,
           canCheerInMs: state.canCheerInMs,
@@ -392,6 +411,13 @@ export class GameWsServer {
   broadcastLeaderboard(players: LeaderboardEntry[], factions: { guide: number; incite: number }): void {
     const msg: Extract<ServerMessage, { t: 'leaderboard' }> = { t: 'leaderboard', players, factions };
     this.leaderboard = msg;
+    this.fanout(JSON.stringify(msg));
+  }
+
+  /** ユーザー間チャットを更新し全クライアントへ配る。接続時にも現値を送る。 */
+  broadcastChat(messages: ChatMessage[]): void {
+    const msg: Extract<ServerMessage, { t: 'chat' }> = { t: 'chat', messages };
+    this.chat = msg;
     this.fanout(JSON.stringify(msg));
   }
 

@@ -4,6 +4,7 @@
 import { PERSONALITY_AXES, PERSONALITY_LABELS, dominantAxis } from '@pagus/sim';
 import type { WireWorld, Villager, PersonalityAxis } from '@pagus/sim';
 import { animalFor } from './assets.js';
+import { villagerDisplayName } from './villager-display.js';
 
 const AXIS_COLOR: Record<PersonalityAxis, string> = {
   kindness: '#6fcf97',
@@ -31,7 +32,7 @@ export class IncidentPanel {
       return;
     }
 
-    this.root.appendChild(this.identity(target));
+    this.root.appendChild(this.identity(world, target));
 
     if (inc) {
       this.root.appendChild(h('div', '事件', 'sub'));
@@ -51,14 +52,14 @@ export class IncidentPanel {
     this.root.appendChild(p('muted', `改変回数 ${target.reformCount}　信条: ${target.persona.values.join(' / ') || 'なし'}`));
   }
 
-  private identity(v: Villager): HTMLElement {
+  private identity(world: WireWorld, v: Villager): HTMLElement {
     const box = document.createElement('div');
     box.className = 'ident';
     const img = document.createElement('img');
     img.className = 'ident-face';
     img.src = `/assets/animals/${animalFor(v)}.png`;
     const txt = document.createElement('div');
-    txt.appendChild(h('div', v.madman ? `😈 ${v.name}` : v.name, 'ident-name'));
+    txt.appendChild(h('div', villagerDisplayName(world, v), 'ident-name'));
     txt.appendChild(p('muted', `${v.species}・${activityJa(v.activity)}${v.madman ? '・狂人' : ''}`));
     box.append(img, txt);
     return box;

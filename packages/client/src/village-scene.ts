@@ -8,6 +8,7 @@ import { dominantAxis, isAwake, timeOfDayForSegment } from '@pagus/sim';
 import type { WireWorld, PersonalityAxis, TimeOfDay } from '@pagus/sim';
 import { animalFor, type AnimalName } from './assets.js';
 import { AnimatedBubble, type BubbleTone } from './animated-bubble.js';
+import { villagerDisplayName } from './villager-display.js';
 
 const AXIS_COLOR: Record<PersonalityAxis, number> = {
   kindness: 0x6fcf97,
@@ -225,7 +226,7 @@ export class VillageScene {
       const size = cell * 0.95 * big;
       u.sprite.width = size;
       u.sprite.height = size;
-      u.label.text = v.madman ? `😈${v.name}` : v.name;
+      u.label.text = villagerDisplayName(world, v);
       const ringColor = isPerp
         ? 0xeb5757
         : isVictim

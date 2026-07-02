@@ -1,5 +1,5 @@
-// アカウントパネル (§v1.3-F)。課金モック (固定パック) / 自分のユーザーコード表示 (コピー) /
-// 別端末ログイン入力を扱う。userId はユーザーコード = UUIDv4。
+// アカウント関連 UI (§v1.3-F)。
+// 課金は課金タブ、ユーザーコード/別端末ログイン/ユーザー名は設定メニューへ分ける。
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -11,8 +11,13 @@ export function isValidUserCode(code: string): boolean {
 export interface AccountHandlers {
   /** 課金 (モック): 固定パック額でカルマ + 課金額を増やす。 */
   onTopup(amount: number): void;
+}
+
+export interface AccountSettingsHandlers {
   /** 別端末ログイン: ユーザーコードで現セッションを束ね直す。 */
   onLogin(code: string): void;
+  /** ユーザー名を保存する。空文字は未設定。 */
+  onUserName(name: string): void;
 }
 
 /** 課金パック (モック)。固定 3 種。 */
@@ -23,12 +28,11 @@ export class AccountPanel {
 
   constructor(
     private readonly root: HTMLElement,
-    private readonly myUserId: string,
     private readonly h: AccountHandlers,
   ) {
     this.root.replaceChildren();
     const head = document.createElement('h3');
-    head.textContent = '💴 アカウント';
+    head.textContent = '💴 課金';
     this.root.appendChild(head);
 
     // 課金 (モック) ボタン。
@@ -50,6 +54,52 @@ export class AccountPanel {
       packBtns.appendChild(btn);
     }
     this.root.appendChild(packBtns);
+  }
+
+  /** 自分の累計課金額を反映する (playerState 受信時)。 */
+  setSpent(spent: number): void {
+    this.spentEl.textContent = `¥${spent}`;
+  }
+}
+
+export class AccountSettingsPanel {
+  private readonly nameInput = document.createElement('input');
+  private readonly nameBtn = document.createElement('button');
+
+  constructor(
+    private readonly root: HTMLElement,
+    private readonly myUserId: string,
+    initialUserName: string | null,
+    private readonly h: AccountSettingsHandlers,
+  ) {
+    this.root.replaceChildren();
+
+    const head = document.createElement('div');
+    head.className = 'settings-section-title';
+    head.textContent = 'アカウント';
+    this.root.appendChild(head);
+
+    // ユーザー名。
+    this.root.appendChild(subLabel('ユーザー名'));
+    const nameRow = document.createElement('div');
+    nameRow.className = 'acct-code-row';
+    this.nameInput.className = 'acct-login';
+    this.nameInput.maxLength = 20;
+    this.nameInput.placeholder = '未設定';
+    this.nameInput.value = initialUserName ?? '';
+    this.nameBtn.className = 'acct-login-btn';
+    this.nameBtn.textContent = '保存';
+    const saveName = (): void => {
+      this.h.onUserName(this.nameInput.value);
+      this.nameBtn.textContent = '✓';
+      setTimeout(() => (this.nameBtn.textContent = '保存'), 1200);
+    };
+    this.nameBtn.addEventListener('click', saveName);
+    this.nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') saveName();
+    });
+    nameRow.append(this.nameInput, this.nameBtn);
+    this.root.appendChild(nameRow);
 
     // 自分のユーザーコード (コピー可能)。
     this.root.appendChild(subLabel('あなたのユーザーコード'));
@@ -106,9 +156,10 @@ export class AccountPanel {
     this.root.appendChild(loginRow);
   }
 
-  /** 自分の累計課金額を反映する (playerState 受信時)。 */
-  setSpent(spent: number): void {
-    this.spentEl.textContent = `¥${spent}`;
+  /** サーバから返った現在名を反映する。 */
+  setUserName(name: string | null, force = false): void {
+    if (!force && document.activeElement === this.nameInput) return;
+    this.nameInput.value = name ?? '';
   }
 }
 

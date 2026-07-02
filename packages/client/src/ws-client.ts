@@ -1,6 +1,6 @@
 // WS 接続。server からの snapshot/log を受け、扇動/沈静化コマンドを送る。自動再接続。
 
-import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView, LawView, MartialMode, HighlightCard, SeasonWinner } from '@pagus/sim';
+import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView, LawView, MartialMode, HighlightCard, SeasonWinner, ChatMessage } from '@pagus/sim';
 
 /** 裁判ベットのプール状態 (§3 betState 受信ペイロード)。 */
 export interface BetStateView {
@@ -33,7 +33,7 @@ export interface WsHandlers {
   onLlm(info: LlmInfo): void;
   onChronicle(entries: ChronicleEntry[]): void;
   /** その接続ユーザのカルマ/善性状態 (§4.4)。推し (§1)・預金 (§v1.3-B ④)・課金額 (§v1.3-F) を含む。 */
-  onPlayerState?(state: { karma: number; virtue: number; sanctionCost: number; inciteCost: number; canCheerInMs: number; championId: string | null; championName?: string; spent: number }): void;
+  onPlayerState?(state: { karma: number; virtue: number; userName: string | null; sanctionCost: number; inciteCost: number; canCheerInMs: number; championId: string | null; championName?: string; spent: number }): void;
   /** 別端末ログインで現セッションが追い出された (§v1.3-F)。 */
   onLoggedOut?(reason: string): void;
   /** コマンド却下 (カルマ不足/インターバル中など)。 */
@@ -60,6 +60,8 @@ export interface WsHandlers {
   onHighlights?(cards: HighlightCard[]): void;
   /** 月間MVP (§v1.3-D ㉔)。 */
   onMvp?(villagerId: string, name: string): void;
+  /** ユーザー間チャット。 */
+  onChat?(messages: ChatMessage[]): void;
   /** 共闘レイド状態 (§v1.3-D ㉙)。 */
   onRaid?(active: boolean, villainName: string, hp: number, hpMax: number, endsInMs: number): void;
   /** シーズン確定 (§v1.3-D ㉚)。 */
@@ -75,10 +77,19 @@ export interface Conn {
 export function connect(url: string, h: WsHandlers): Conn {
   let ws: WebSocket | null = null;
   let stopped = false; // true なら再接続しない (close() で立てる)
+  const pending: ClientMessage[] = [];
+
+  const flush = (): void => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    for (const msg of pending.splice(0)) ws.send(JSON.stringify(msg));
+  };
 
   const open = (): void => {
     ws = new WebSocket(url);
-    ws.onopen = () => h.onStatus('● 接続');
+    ws.onopen = () => {
+      h.onStatus('● 接続');
+      flush();
+    };
     ws.onerror = () => h.onStatus('● エラー');
     ws.onclose = () => {
       if (stopped) return; // 意図的な close は再接続しない
@@ -102,6 +113,7 @@ export function connect(url: string, h: WsHandlers): Conn {
         h.onPlayerState?.({
           karma: msg.karma,
           virtue: msg.virtue,
+          userName: msg.userName,
           sanctionCost: msg.sanctionCost,
           inciteCost: msg.inciteCost,
           canCheerInMs: msg.canCheerInMs,
@@ -130,6 +142,7 @@ export function connect(url: string, h: WsHandlers): Conn {
       else if (msg.t === 'martial') h.onMartial?.(msg.mode, msg.endsInMs);
       else if (msg.t === 'fund') h.onFund?.(msg.amount, msg.threshold);
       else if (msg.t === 'highlights') h.onHighlights?.(msg.cards);
+      else if (msg.t === 'chat') h.onChat?.(msg.messages);
       else if (msg.t === 'mvp') h.onMvp?.(msg.villagerId, msg.name);
       else if (msg.t === 'raid') h.onRaid?.(msg.active, msg.villainName, msg.hp, msg.hpMax, msg.endsInMs);
       else if (msg.t === 'season') h.onSeason?.(msg.number, msg.winner, msg.leaderboard);
@@ -139,10 +152,17 @@ export function connect(url: string, h: WsHandlers): Conn {
 
   return {
     send(msg) {
-      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+        return;
+      }
+      pending.push(msg);
+      if (pending.length > 20) pending.shift();
+      h.onStatus('○ 接続待ち (送信予約)');
     },
     close() {
       stopped = true;
+      pending.length = 0;
       ws?.close();
     },
   };

@@ -2,10 +2,10 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Pagus — AI村</title>
     <style>
-      :root { color-scheme: dark; --dock-h: 84px; }
+      :root { color-scheme: dark; --dock-h: 0px; }
       * { box-sizing: border-box; }
       html, body { height: 100%; }
       body {
@@ -14,23 +14,47 @@
         display: flex; flex-direction: column; height: 100vh; overflow: hidden;
       }
       #topbar {
-        display: flex; align-items: center; gap: 12px;
-        padding: 10px 16px; background: #11151f; border-bottom: 1px solid #222; flex: 0 0 auto;
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 8px 16px; background: #11151f; border-bottom: 1px solid #222; flex: 0 0 auto;
       }
+      .topbar-info, .topbar-actions { display: flex; align-items: center; gap: 12px; width: 100%; }
+      .topbar-actions { flex-wrap: wrap; }
       #hud { font-size: 14px; }
       #status { font-size: 12px; color: #7f8aa3; margin-left: auto; }
+      #settings-wrap { position: relative; }
+      #settings-menu {
+        display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 100;
+        width: 360px; max-width: calc(100vw - 24px); padding: 10px; background: #11151f; border: 1px solid #38405a; border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+      }
+      #settings-menu.show { display: block; }
+      #settings-menu > button { width: 100%; }
+      .settings-section-title { font-size: 13px; font-weight: bold; color: #f2c94c; margin-bottom: 4px; }
+      .settings-menu-action { margin-top: 10px; border-color: #56ccf2; color: #cdeeff; }
       button { background: #1e2533; color: #cdd6e4; border: 1px solid #38405a; border-radius: 6px; padding: 7px 14px; cursor: pointer; }
       button:hover { background: #283044; }
 
-      /* 3 カラム: 左=当事者 / 中央=ステージ+ログ / 右=村ステータス。 */
+      /* PC: 左=介入 / 中央=ステージ。 */
       #main { display: flex; gap: 12px; padding: 12px; flex: 1 1 auto; min-height: 0; }
       .col {
         display: flex; flex-direction: column; gap: 10px;
         background: #0e121b; border: 1px solid #222; border-radius: 8px;
         padding: 12px; overflow-y: auto;
       }
-      #left { width: 300px; flex: 0 0 300px; }
-      #right { width: 340px; flex: 0 0 340px; }
+      #left { width: 400px; flex: 0 0 400px; padding: 0; overflow: hidden; }
+      #right { width: 360px; flex: 0 0 360px; overflow: hidden; }
+      .side-tabs {
+        display: flex; flex-wrap: wrap; gap: 2px; flex: 0 0 auto;
+        margin: -4px -4px 0; padding: 0 4px; border-bottom: 1px solid #222;
+      }
+      .side-tab-btn {
+        background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+        min-height: 36px; padding: 7px 10px; font-size: 12px; color: #8b96ad;
+      }
+      .side-tab-btn:hover { background: rgba(86,204,242,0.08); color: #e6ebf5; }
+      .side-tab-btn.active { border-bottom-color: #56ccf2; color: #9be3ff; font-weight: 700; }
+      .side-tab-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-top: 10px; }
+      .side-tab-panel[hidden] { display: none; }
 
       /* 中央: ステージは全面、ログは中央ちょい下に重ねる。 */
       #center { flex: 1 1 auto; min-width: 0; position: relative; border: 1px solid #222; border-radius: 8px; overflow: hidden; }
@@ -74,27 +98,8 @@
       .log-ten { color: #f2994a; }
       .log-ketsu { color: #eb5757; }
 
-      /* 村の歴史モーダル。 */
-      #chronicle { display: none; position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; }
-      #chronicle.show { display: flex; }
-      #chronicle-box { width: min(560px, 92vw); max-height: 82vh; display: flex; flex-direction: column;
-        background: #11151f; border: 1px solid #38405a; border-radius: 12px; overflow: hidden; }
-      #chronicle-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;
-        font-weight: bold; font-size: 16px; color: #f2c94c; border-bottom: 1px solid #222; }
-      #chronicle-close { padding: 2px 10px; font-size: 18px; }
-      #chronicle-body { overflow-y: auto; padding: 12px 16px; }
       .hist-date { margin: 10px 0 4px; font-weight: bold; color: #56ccf2; border-bottom: 1px solid #1b2231; padding-bottom: 2px; }
       .hist-line { font-size: 13px; line-height: 1.6; padding: 1px 0 1px 8px; }
-
-      /* 右上の LLM 設定パネル。 */
-      #llm-panel { position: fixed; top: 56px; right: 12px; z-index: 40; width: 230px;
-        background: rgba(14,18,27,0.92); border: 1px solid #2a3346; border-radius: 8px; font-size: 12px; }
-      #llm-head { padding: 6px 10px; cursor: pointer; user-select: none; color: #9be3ff; font-weight: bold; }
-      #llm-head:hover { background: #1a2230; }
-      #llm-body { padding: 0 10px 8px; max-height: 50vh; overflow-y: auto; }
-      #llm-body .sub { margin-top: 6px; color: #8b96ad; border-top: 1px solid #1b2231; padding-top: 4px; }
-      #llm-body .mono { font-family: ui-monospace, monospace; font-size: 11px; padding: 1px 0; }
-      #llm-body .muted { color: #6b7689; font-size: 10px; }
 
       /* 状態パネル (§7)。アクションオーバーレイ「情報」タブ内のウィジェット。 */
       .ao-status { background: rgba(14,18,27,0.6); border: 1px solid #2a3346; border-radius: 8px; font-size: 12px; }
@@ -106,40 +111,44 @@
       #status-body .kv { font-size: 12px; }
 
       /* プレイヤー行動ドック (§4): 画面下に独立した横並びバー。PC・モバイル共通。 */
-      #action-dock {
-        flex: 0 0 auto; min-height: var(--dock-h);
-        background: #11151b; border-top: 1px solid #2a3346;
-        padding: 8px 14px; overflow-x: auto;
-      }
-      #controls { width: 100%; }
+      #interventions { background: #181016; border: 1px solid #5a3a52; border-radius: 8px; padding: 10px; }
+      #interventions .dock-row { min-height: 0; }
+      #interventions .dock-commands { flex-direction: column; }
+      #interventions .dock-cmd-btn { width: 100%; flex: none; min-width: 0; }
       .dock-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 12px; min-height: 60px; }
-      .dock-title { font-size: 14px; font-weight: bold; color: #f2c94c; white-space: nowrap; }
-      .dock-state { display: flex; flex-wrap: wrap; gap: 6px; }
-      .dock-chip { display: flex; gap: 5px; align-items: baseline; white-space: nowrap;
-        background: #141a26; border: 1px solid #2a3346; border-radius: 6px; padding: 4px 9px; font-size: 12px; }
-      .dock-chip-label { color: #8b96ad; }
-      .dock-chip-val { font-weight: bold; color: #e6ebf5; }
-      .dock-field { display: flex; flex-direction: column; gap: 2px; }
-      .dock-field-label { font-size: 10px; color: #8b96ad; }
-      .dock-select { min-width: 140px; max-width: 220px; background: #0e121b; color: #cdd6e4;
-        border: 1px solid #38405a; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
-      /* ① コマンド選択 (消費カルマ併記)。選択中は枠を強調する。 */
-      .dock-commands { display: flex; gap: 6px; }
+      .dock-action-row { justify-content: center; }
+      .dock-commands { display: flex; gap: 8px; width: 100%; }
       .dock-cmd-btn { display: flex; flex-direction: column; align-items: center; gap: 1px;
-        white-space: nowrap; padding: 5px 10px; font-size: 13px; line-height: 1.15; }
-      .dock-cmd-btn.active { background: #283044; box-shadow: 0 0 0 1px currentColor inset; }
+        flex: 1; min-width: 120px; white-space: nowrap; padding: 8px 10px; font-size: 13px; line-height: 1.15; }
       .dock-cmd-btn:disabled { opacity: 0.45; cursor: not-allowed; }
       .dock-cmd-label { font-weight: bold; }
       .dock-cmd-cost { font-size: 10px; color: #8b96ad; }
-      .dock-cmd-btn.active .dock-cmd-cost { color: #cdd6e4; }
       .dock-cmd-btn.cmd-incite { border-color: #eb5757; color: #ff8a8a; }
       .dock-cmd-btn.cmd-sanction { border-color: #f2994a; color: #f2b988; }
       .dock-cmd-btn.cmd-cheer { border-color: #6fcf97; color: #9be0b5; }
       .dock-cmd-btn.cmd-champion { border-color: #f2c94c; color: #f2e0a0; }
-      /* ② 実行ボタン。 */
-      .dock-btn { white-space: nowrap; padding: 8px 12px; font-size: 13px; }
-      .dock-exec { margin-left: auto; border-color: #56ccf2; color: #9be3ff; font-weight: bold; }
-      .dock-exec:disabled { opacity: 0.45; cursor: not-allowed; }
+      .dock-verdict { display: flex; gap: 10px; margin-top: 8px; }
+      .dock-verdict-btn { flex: 1; padding: 10px 12px; font-size: 16px; font-weight: bold; }
+      .dock-verdict-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+      .dock-verdict-kill { border-color: #eb5757; color: #ffb3b3; }
+      .dock-verdict-spare { border-color: #56ccf2; color: #cdeeff; }
+      .dock-dialog-backdrop { display: none; position: fixed; inset: 0; z-index: 90;
+        background: rgba(0,0,0,0.58); align-items: center; justify-content: center; padding: 16px; }
+      .dock-dialog-backdrop.show { display: flex; }
+      .dock-dialog { width: 560px; max-width: calc(100vw - 28px); max-height: calc(100vh - 32px);
+        display: flex; flex-direction: column; background: #11151f; border: 1px solid #38405a;
+        border-radius: 10px; overflow: hidden; box-shadow: 0 18px 48px rgba(0,0,0,0.55); }
+      .dock-dialog-head { display: flex; align-items: center; justify-content: space-between;
+        padding: 10px 14px; border-bottom: 1px solid #222; }
+      .dock-dialog-title { font-size: 15px; font-weight: bold; color: #f2c94c; }
+      .dock-dialog-close { padding: 2px 10px; font-size: 18px; }
+      .dock-dialog-body { overflow-y: auto; padding: 12px 14px 14px; }
+      .dock-dialog-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+      .dock-dialog-label { font-size: 12px; color: #8b96ad; }
+      .dock-dialog-select { width: 100%; background: #0e121b; color: #cdd6e4;
+        border: 1px solid #38405a; border-radius: 6px; padding: 8px; font-size: 13px; }
+      .dock-target-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+      .dock-target-btn { min-height: 42px; text-align: left; }
 
       /* カードパネル (§v1.3-A)。 */
       #cards { background: #131019; border: 1px solid #4a3a5a; border-radius: 8px; padding: 10px; }
@@ -151,6 +160,8 @@
       .item-kinds { display: flex; gap: 6px; margin: 4px 0 8px; }
       .item-kind-btn { flex: 1; padding: 7px 4px; font-size: 13px; border-color: #c0a04f; color: #f2e6c0; }
       .item-kind-btn.active { background: #283044; box-shadow: 0 0 0 1px #f2c94c inset; }
+      .item-counts { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
+      .item-count { flex: 1 1 92px; padding: 5px 7px; background: #11100c; border: 1px solid #3a321f; border-radius: 6px; font-size: 12px; color: #f2e6c0; }
       .item-btn { width: 100%; margin: 4px 0 2px; }
       .item-btn.item-field { border-color: #6fcf97; color: #d0f2e0; }
       .item-btn.item-champion { border-color: #f2c94c; color: #f2e0a0; }
@@ -182,8 +193,30 @@
       .spc-hp-bar > i { display: block; height: 100%; background: #eb5757; }
       .spc-highlights { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
       .spc-hl { padding: 6px 8px; background: #120e14; border: 1px solid #2c2436; border-radius: 6px; }
+      .spc-hl-month { margin-top: 4px; font-size: 12px; color: #f2c94c; font-weight: bold; }
       .spc-hl-head { font-size: 12px; color: #f29bd0; }
       .spc-hl-body { font-size: 12px; color: #b9c2d6; line-height: 1.4; }
+
+      /* 住民パネル。 */
+      #residents { background: #10171a; border: 1px solid #31545a; border-radius: 8px; padding: 10px; }
+      #residents h3 { color: #9be3ff; }
+      .resident-gacha { display: flex; gap: 6px; margin: 4px 0 8px; }
+      .resident-gacha-status { min-height: 16px; font-size: 11px; }
+      .resident-btn { flex: 1; padding: 7px 4px; font-size: 12px; border-color: #56ccf2; color: #cdeeff; }
+      .resident-karma { border-color: #f2c94c; color: #f2e0a0; }
+      .resident-list { display: flex; flex-direction: column; gap: 5px; }
+      .relationship-graph { background: #0d1417; border: 1px solid #24353a; border-radius: 6px; overflow: hidden; }
+      .relationship-svg { display: block; width: 100%; height: 240px; }
+      .rel-edge-pos { stroke: #6fcf97; }
+      .rel-edge-neg { stroke: #eb5757; }
+      .rel-node-dot { fill: #11151f; stroke: #56ccf2; stroke-width: 1.5; }
+      .rel-node-label { fill: #e6ebf5; font-size: 9px; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+      .rel-legend { display: flex; gap: 10px; padding: 5px 7px; border-top: 1px solid #24353a; font-size: 11px; color: #8b96ad; }
+      .rel-legend-pos { color: #9be0b5; }
+      .rel-legend-neg { color: #ffb3b3; }
+      .resident-row { padding: 6px 8px; background: #0d1417; border: 1px solid #24353a; border-radius: 6px; }
+      .resident-title { font-size: 13px; font-weight: bold; }
+      .resident-meta { font-size: 11px; color: #8b96ad; line-height: 1.35; }
 
       /* 経済パネル (§v1.3-B)。 */
       #economy { background: #101813; border: 1px solid #3a5a45; border-radius: 8px; padding: 10px; }
@@ -243,11 +276,29 @@
       .hist-rule-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
       .rule-remove-btn { white-space: nowrap; border-color: #eb5757; color: #ffb3b3; font-size: 11px; padding: 3px 8px; }
 
-      /* アカウントパネル (§v1.3-F): 課金モック / ユーザーコード / 別端末ログイン。 */
+      /* アカウントパネル (§v1.3-F): 課金モック。 */
       #account { background: #14110e; border: 1px solid #5a4a2a; border-radius: 8px; padding: 10px; }
       #account h3 { color: #f2d08a; margin: 0 0 6px; }
       .topup-btns { display: flex; gap: 6px; margin: 4px 0 2px; }
       .topup-btn { flex: 1; padding: 8px 4px; font-size: 13px; border-color: #c0a04f; color: #f2e6c0; }
+      #account-overlay {
+        display: none; position: fixed; inset: 0; z-index: 78;
+        background: rgba(0,0,0,0.62); align-items: center; justify-content: center; padding: 18px;
+      }
+      #account-overlay.show { display: flex; }
+      #account-box {
+        width: min(430px, 94vw); max-height: 86vh; display: flex; flex-direction: column;
+        background: #0e121b; border: 1px solid #38405a; border-radius: 10px;
+        box-shadow: 0 18px 54px rgba(0,0,0,0.58); overflow: hidden;
+      }
+      #account-head {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 11px 14px; background: #11151f; border-bottom: 1px solid #222;
+        font-weight: 700; color: #f2c94c;
+      }
+      #account-close { padding: 3px 10px; font-size: 18px; }
+      #account-body { overflow-y: auto; padding: 14px; }
+      #account-body #account { background: transparent; border: 0; border-radius: 0; padding: 0; }
       .acct-code-row { display: flex; gap: 6px; margin: 4px 0 2px; }
       .acct-code, .acct-login { flex: 1; min-width: 0; background: #0e121b; color: #cdd6e4;
         border: 1px solid #38405a; border-radius: 6px; padding: 6px 8px; font-size: 12px; }
@@ -270,15 +321,39 @@
         transition: opacity 0.2s ease, transform 0.2s ease; }
       #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+      #chronicle {
+        display: none; position: fixed; inset: 0; z-index: 75;
+        background: rgba(0,0,0,0.62); align-items: center; justify-content: center; padding: 18px;
+      }
+      #chronicle.show { display: flex; }
+      #chronicle-box {
+        width: min(860px, 94vw); max-height: 86vh; display: flex; flex-direction: column;
+        background: #0e121b; border: 1px solid #38405a; border-radius: 10px;
+        box-shadow: 0 18px 54px rgba(0,0,0,0.58); overflow: hidden;
+      }
+      #chronicle-head {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 11px 14px; background: #11151f; border-bottom: 1px solid #222;
+        font-weight: 700; color: #f2c94c;
+      }
+      #chronicle-close { padding: 3px 10px; font-size: 18px; }
+      #chronicle-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+
       /* 村の歴史タブ。 */
-      .hist-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; position: sticky; top: 0;
-        background: #11151f; padding-bottom: 6px; border-bottom: 1px solid #222; }
-      .hist-tab { font-size: 12px; padding: 4px 10px; }
-      .hist-tab.active { background: #283044; border-color: #56ccf2; color: #9be3ff; }
+      .hist-tabs { display: flex; flex-wrap: wrap; gap: 2px; flex: 0 0 auto;
+        background: #11151f; padding: 8px 12px 0; border-bottom: 1px solid #222; }
+      .hist-tab { background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+        min-height: 36px; font-size: 12px; padding: 7px 11px; color: #8b96ad; }
+      .hist-tab:hover { background: rgba(86,204,242,0.08); color: #e6ebf5; }
+      .hist-tab.active { background: transparent; border-bottom-color: #56ccf2; color: #9be3ff; font-weight: 700; }
+      .hist-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 18px 18px; }
       .hist-villager { padding: 5px 8px; border-bottom: 1px solid #1b2231; }
       .hist-villager.gone { opacity: 0.5; }
       .hist-villager-name { font-size: 13px; font-weight: bold; }
       .hist-villager-meta { font-size: 11px; color: #8b96ad; }
+      #village-rules, #intervention-rules { background: #11151f; border: 1px solid #2a3346; border-radius: 8px; overflow: hidden; min-height: 320px; display: flex; flex-direction: column; }
+      #village-rules { min-height: 260px; }
+      #intervention-rules { margin-top: 10px; min-height: 0; }
 
       /* 裁判の有罪/無罪ボタン (中央上寄り、裁判中のみ表示)。 */
       #verdict { display: none; position: absolute; top: 12%; left: 0; right: 0; justify-content: center; gap: 40px; pointer-events: none; }
@@ -298,9 +373,9 @@
       .verdict-btn.innocent { border-color: #56ccf2; color: #9be3ff; box-shadow: 0 0 22px rgba(86,204,242,0.35); }
       .verdict-btn.innocent:hover { box-shadow: 0 0 30px rgba(86,204,242,0.6); }
 
-      /* 統合アクションオーバーレイ (§v1.3-E): 全ユーザ操作を 1 つのタブ式パネルへ集約。 */
+      /* 左ペインの統合介入パネル (§v1.3-E): 全ユーザ操作を 1 つのタブ式パネルへ集約。 */
       #action-overlay {
-        position: fixed; top: 52px; right: 12px; bottom: calc(var(--dock-h) + 8px); z-index: 55;
+        position: fixed; top: 88px; right: 12px; bottom: calc(var(--dock-h) + 8px); z-index: 55;
         width: 384px; max-width: calc(100vw - 24px);
         display: flex; flex-direction: column;
         background: #0e121b; border: 1px solid #2a3346; border-radius: 10px;
@@ -314,13 +389,29 @@
         background: #141a26; border: 1px solid #2a3346; border-radius: 6px; padding: 4px 9px; font-size: 12px; }
       .ao-chip-label { color: #8b96ad; }
       .ao-chip-val { font-weight: bold; color: #e6ebf5; }
-      #ao-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px; border-bottom: 1px solid #222; }
-      .ao-tab-btn { font-size: 12px; padding: 5px 10px; }
-      .ao-tab-btn.active { background: #283044; border-color: #56ccf2; color: #9be3ff; }
+      #ao-tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid #222; background: #11151f; }
+      .ao-tab-btn { background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+        min-height: 38px; padding: 8px 11px; font-size: 12px; color: #8b96ad; }
+      .ao-tab-btn:hover { background: rgba(86,204,242,0.08); color: #e6ebf5; }
+      .ao-tab-btn.active { background: transparent; border-bottom-color: #56ccf2; color: #9be3ff; font-weight: 700; }
       #ao-content { flex: 1 1 auto; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
       .ao-tab { display: flex; flex-direction: column; gap: 10px; }
       #ao-backdrop { display: none; }
-      #btn-actions { border-color: #56ccf2; color: #9be3ff; }
+      #left #action-overlay { position: static; inset: auto; z-index: auto; width: 100%; max-width: none;
+        flex: 1 1 auto; min-height: 0; height: 100%; border: 0; border-radius: 8px; box-shadow: none; transform: none; }
+      #left #action-overlay.closed { transform: none; pointer-events: auto; }
+
+      /* ユーザーチャット。 */
+      #chat { background: #10151d; border: 1px solid #2a405a; border-radius: 8px; padding: 10px; }
+      #chat h3 { color: #9be3ff; }
+      .chat-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; margin-bottom: 8px; }
+      .chat-row { padding: 6px 8px; background: #0d121a; border: 1px solid #1d2a3c; border-radius: 6px; }
+      .chat-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: #8b96ad; margin-bottom: 2px; }
+      .chat-name { color: #9be3ff; font-weight: bold; }
+      .chat-text { font-size: 13px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .chat-form { display: flex; gap: 6px; }
+      .chat-input { flex: 1; min-width: 0; background: #0e121b; color: #cdd6e4; border: 1px solid #38405a; border-radius: 6px; padding: 7px 8px; font-size: 13px; }
+      .chat-send { white-space: nowrap; border-color: #56ccf2; color: #cdeeff; }
 
       /* モバイル: 中央を全画面、左右はスライドインのドロワー。 */
       .drawer-toggle { display: none; }
@@ -328,20 +419,28 @@
       /* タブレット〜モバイル: 中央を全画面、左右はスライドインのドロワー。
          行動ドックは画面下に残し、ドロワー/オーバーレイ/バックドロップはドックの上で止める。 */
       @media (max-width: 860px) {
-        :root { --dock-h: 160px; }
+        :root { --dock-h: 0px; }
         #hud { font-size: 12px; }
         .drawer-toggle { display: inline-block; }
         #main { padding: 8px; gap: 0; }
         #center { flex: 1 1 auto; }
         #left, #right {
-          position: fixed; top: 52px; bottom: var(--dock-h); z-index: 30;
-          width: 80%; max-width: 340px;
+          display: flex; flex-direction: column; gap: 10px;
+          background: #0e121b; border: 1px solid #222; padding: 12px; overflow-y: auto;
+          position: fixed; top: 88px; bottom: 0; z-index: 30;
+          width: 92%; max-width: 420px;
           transition: transform 0.25s ease; box-shadow: 0 0 24px rgba(0,0,0,0.6);
         }
-        #left { left: 0; transform: translateX(-105%); border-radius: 0 10px 10px 0; }
+        #left {
+          top: auto; left: 0; right: 0; bottom: 0;
+          width: 100%; max-width: none; height: min(78dvh, 680px); max-height: calc(100dvh - 88px);
+          overflow: hidden; padding: 8px;
+          transform: translateY(105%); border-radius: 14px 14px 0 0;
+        }
         #right { right: 0; transform: translateX(105%); border-radius: 10px 0 0 10px; }
         #left.open, #right.open { transform: translateX(0); }
-        #backdrop.show { display: block; position: fixed; inset: 52px 0 var(--dock-h) 0; background: rgba(0,0,0,0.5); z-index: 20; }
+        #left.open { transform: translateY(0); }
+        #backdrop.show { display: block; position: fixed; inset: 88px 0 0 0; background: rgba(0,0,0,0.5); z-index: 20; }
         #log { width: 86%; bottom: 10%; }
         .ov-line { font-size: 15px; }
         #verdict { gap: 16px; top: 8%; }
@@ -349,38 +448,40 @@
         .vb-ja { font-size: 22px; }
         .vb-en { font-size: 11px; }
         /* メニューオーバーレイはモバイルで右からのドロワー (ドックの上で止める)。 */
-        #action-overlay { top: 52px; right: 0; bottom: var(--dock-h); width: 92%; max-width: 420px;
+        #action-overlay { top: 88px; right: 0; bottom: var(--dock-h); width: 92%; max-width: 420px;
           border-radius: 10px 0 0 10px; z-index: 60; }
-        #ao-backdrop.show { display: block; position: fixed; inset: 52px 0 var(--dock-h) 0; background: rgba(0,0,0,0.5); z-index: 56; }
-        /* 行動ドック: 横幅が足りないので折り返し、高さは上限内でスクロール。 */
-        #action-dock { max-height: var(--dock-h); overflow-y: auto; overflow-x: hidden; }
+        #ao-backdrop.show { display: block; position: fixed; inset: 88px 0 var(--dock-h) 0; background: rgba(0,0,0,0.5); z-index: 56; }
         .dock-row { flex-wrap: wrap; min-height: 0; }
-        .dock-actions { margin-left: 0; }
-        .dock-field { flex: 1 1 140px; }
-        .dock-select { max-width: none; width: 100%; }
+        .dock-commands { flex-wrap: wrap; }
       }
 
       /* スマホ縦: タイトルを省き、行動ボタンを等分配置して指で押しやすく。 */
       @media (max-width: 520px) {
-        :root { --dock-h: 208px; }
-        .dock-title { display: none; }
-        .dock-state { gap: 4px; }
-        .dock-chip { padding: 3px 7px; font-size: 11px; }
+        :root { --dock-h: 0px; }
         .dock-commands { width: 100%; }
-        .dock-cmd-btn { flex: 1; padding: 5px 2px; }
-        .dock-exec { width: 100%; margin-left: 0; }
+        .dock-cmd-btn { flex: 1 1 calc(50% - 8px); min-width: 0; padding: 7px 2px; }
       }
     </style>
   </head>
   <body>
     <div id="topbar">
-      <button id="btn-left" class="drawer-toggle">🔥 当事者</button>
-      <span id="hud">接続待ち…</span>
-      <button id="hist-btn">📜 歴史</button>
-      <button id="push-btn">🔔 通知</button>
-      <button id="btn-actions">🎛 メニュー</button>
-      <button id="btn-right" class="drawer-toggle">📊 村</button>
-      <span id="status"></span>
+      <div class="topbar-info">
+        <span id="hud">接続待ち…</span>
+        <span id="status"></span>
+      </div>
+      <div class="topbar-actions">
+        <button id="btn-left" class="drawer-toggle">🎛 介入</button>
+        <button id="hist-btn">📜 歴史</button>
+        <button id="account-btn">💴 課金</button>
+        <div id="settings-wrap">
+          <button id="settings-btn">⚙ 設定</button>
+          <div id="settings-menu">
+            <div id="account-settings"></div>
+            <button id="push-btn" class="settings-menu-action">🔔 通知</button>
+          </div>
+        </div>
+        <button id="btn-right" class="drawer-toggle">📊 情報</button>
+      </div>
     </div>
     <div id="chronicle">
       <div id="chronicle-box">
@@ -388,13 +489,46 @@
         <div id="chronicle-body"></div>
       </div>
     </div>
-    <div id="llm-panel">
-      <div id="llm-head">🧠 LLM ▸</div>
-      <div id="llm-body"></div>
+    <div id="account-overlay">
+      <div id="account-box">
+        <div id="account-head"><span>💴 課金</span><button id="account-close">×</button></div>
+        <div id="account-body"><div id="account"></div></div>
+      </div>
     </div>
     <div id="toast"></div>
     <div id="main">
-      <div id="left" class="col"></div>
+      <div id="left" class="col">
+        <div id="action-overlay">
+          <div id="ao-header"></div>
+          <div id="ao-tabs"></div>
+          <div id="ao-content">
+            <section class="ao-tab" data-tab="intervention" data-label="🎛 介入">
+              <div id="resident-gacha"></div>
+              <div id="interventions"></div>
+            </section>
+            <section class="ao-tab" data-tab="card" data-label="🃏 カード">
+              <div id="cards"></div>
+            </section>
+            <section class="ao-tab" data-tab="item" data-label="🎁 アイテム">
+              <div id="items"></div>
+            </section>
+            <section class="ao-tab" data-tab="village" data-label="🏛 村">
+              <div id="governance"></div>
+              <div id="intervention-rules"></div>
+            </section>
+            <section class="ao-tab" data-tab="trial" data-label="⚖ 裁判">
+              <div id="trial"></div>
+              <div id="bet"></div>
+            </section>
+            <section class="ao-tab" data-tab="econ" data-label="💰 経済">
+              <div id="economy"></div>
+            </section>
+            <section class="ao-tab" data-tab="chat" data-label="💬 チャット">
+              <div id="chat"></div>
+            </section>
+          </div>
+        </div>
+      </div>
       <div id="center">
         <div id="stage"></div>
         <div id="verdict">
@@ -404,42 +538,24 @@
         <div id="log"></div>
       </div>
       <div id="right" class="col">
-        <canvas id="radar" width="316" height="250"></canvas>
-        <div id="vstatus"></div>
-      </div>
-      <div id="backdrop"></div>
-    </div>
-    <!-- プレイヤー行動パネル (§4): PC・モバイル共通で画面下に独立表示するドック。 -->
-    <div id="action-dock">
-      <div id="controls"></div>
-    </div>
-    <div id="ao-backdrop"></div>
-    <!-- 統合アクションオーバーレイ (§v1.3-E)。各 id は従来パネルの mount 先を兼ねる。
-         操作 (行動) は #action-dock へ独立したので、ここは カード/村/裁判/経済/課金/情報。 -->
-    <div id="action-overlay">
-      <div id="ao-header"></div>
-      <div id="ao-tabs"></div>
-      <div id="ao-content">
-        <section class="ao-tab" data-tab="card" data-label="🃏 カード">
-          <div id="cards"></div>
+        <div class="side-tabs">
+          <button class="side-tab-btn active" data-right-tab="village">村の情報</button>
+          <button class="side-tab-btn" data-right-tab="incident">事件</button>
+          <button class="side-tab-btn" data-right-tab="residents">住民</button>
+          <button class="side-tab-btn" data-right-tab="status">状態</button>
+        </div>
+        <section class="side-tab-panel" data-right-panel="village">
+          <canvas id="radar" width="316" height="250"></canvas>
+          <div id="vstatus"></div>
+          <div id="village-rules"></div>
         </section>
-        <section class="ao-tab" data-tab="item" data-label="🎁 アイテム">
-          <div id="items"></div>
+        <section class="side-tab-panel" data-right-panel="incident" hidden>
+          <div id="incident-info"></div>
         </section>
-        <section class="ao-tab" data-tab="village" data-label="🏛 村">
-          <div id="governance"></div>
+        <section class="side-tab-panel" data-right-panel="residents" hidden>
+          <div id="residents"></div>
         </section>
-        <section class="ao-tab" data-tab="trial" data-label="⚖ 裁判">
-          <div id="trial"></div>
-          <div id="bet"></div>
-        </section>
-        <section class="ao-tab" data-tab="econ" data-label="💰 経済">
-          <div id="economy"></div>
-        </section>
-        <section class="ao-tab" data-tab="account" data-label="💴 課金">
-          <div id="account"></div>
-        </section>
-        <section class="ao-tab" data-tab="info" data-label="📊 情報">
+        <section class="side-tab-panel" data-right-panel="status" hidden>
           <div class="ao-status">
             <div id="status-head">📊 状態 ▸</div>
             <div id="status-body"></div>
@@ -448,7 +564,9 @@
           <div id="spectacle"></div>
         </section>
       </div>
+      <div id="backdrop"></div>
     </div>
+    <div id="ao-backdrop"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

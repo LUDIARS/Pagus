@@ -7,6 +7,7 @@ import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import type { WireWorld, Villager, TrialLine } from '@pagus/sim';
 import { animalFor, type AnimalName } from './assets.js';
 import { AnimatedBubble, type BubbleColors } from './animated-bubble.js';
+import { villagerDisplayName } from './villager-display.js';
 
 /** プレイヤーの吹き出し色 (村人と区別)。有罪=紫系 / 無罪=青系。 */
 const PLAYER_COLORS: Record<'guilty' | 'innocent', BubbleColors> = {
@@ -125,7 +126,7 @@ export class TrialScene {
     // 被告: 中央壇上。
     if (target) {
       keep.add(target.id);
-      this.placeChar(target, w / 2, h * 0.34, base * 0.2, true);
+      this.placeChar(world, target, w / 2, h * 0.34, base * 0.2, true);
     }
     // 非難する側: 下段に整列。
     const n = Math.max(1, accusers.length);
@@ -133,7 +134,7 @@ export class TrialScene {
     const span = w - margin * 2;
     accusers.forEach((v, i) => {
       keep.add(v.id);
-      this.placeChar(v, margin + (span * (i + 0.5)) / n, h * 0.74, base * 0.12, false);
+      this.placeChar(world, v, margin + (span * (i + 0.5)) / n, h * 0.74, base * 0.12, false);
     });
     this.clearChars(keep);
 
@@ -141,7 +142,7 @@ export class TrialScene {
     const key = `${trial.incidentId}:${trial.verdict ?? trial.stage}`;
     if (key !== this.scriptKey) {
       this.scriptKey = key;
-      this.buildScript(trial.verdict, target, accusers, victims, byId);
+      this.buildScript(world, trial.verdict, target, accusers, victims, byId);
     }
   }
 
@@ -210,6 +211,7 @@ export class TrialScene {
   }
 
   private buildScript(
+    world: WireWorld,
     verdict: string | null,
     target: Villager | null,
     accusers: Villager[],
@@ -219,7 +221,7 @@ export class TrialScene {
     this.idx = -1;
     this.timer = 0;
     this.active = null;
-    const dname = target?.name ?? '被告';
+    const dname = target ? villagerDisplayName(world, target) : '被告';
 
     if (verdict && target) {
       // 判決後: 敗者の悲鳴 (処刑) or 安堵 (教育)。
@@ -239,20 +241,21 @@ export class TrialScene {
       const text = sLines?.get(v.id) ?? pick(DENOUNCE, v.id).replace('{d}', dname);
       out.push({ speaker: v.id, text });
       if (target && i % 2 === 1) {
-        const tname = victims.length ? byId.get(victims[i % victims.length] ?? '')?.name ?? '被害者' : accusers[0]?.name ?? '誰か';
+        const victim = victims.length ? byId.get(victims[i % victims.length] ?? '') : null;
+        const tname = victim ? villagerDisplayName(world, victim) : accusers[0] ? villagerDisplayName(world, accusers[0]) : '誰か';
         out.push({ speaker: target.id, text: pick(RETORT, `${target.id}${i}`).replace('{t}', tname) });
       }
     });
     this.script = out.length ? out : [{ speaker: target?.id ?? accusers[0]?.id ?? '', text: '…' }];
   }
 
-  private placeChar(v: Villager, x: number, y: number, size: number, defendant: boolean): void {
+  private placeChar(world: WireWorld, v: Villager, x: number, y: number, size: number, defendant: boolean): void {
     let c = this.chars.get(v.id);
     if (!c) {
       const node = new Container();
       const sprite = new Sprite(this.tex.get(animalFor(v))!);
       sprite.anchor.set(0.5);
-      const label = new Text({ text: v.name, style: { fontSize: 12, fill: 0xffffff, fontWeight: 'bold' } });
+      const label = new Text({ text: villagerDisplayName(world, v), style: { fontSize: 12, fill: 0xffffff, fontWeight: 'bold' } });
       label.anchor.set(0.5);
       const tag = new Text({ text: '被告', style: { fontSize: 13, fill: 0xeb5757, fontWeight: 'bold' } });
       tag.anchor.set(0.5);
@@ -263,6 +266,7 @@ export class TrialScene {
       this.chars.set(v.id, c);
     }
     c.sprite.texture = this.tex.get(animalFor(v))!;
+    c.label.text = villagerDisplayName(world, v);
     c.sprite.width = size;
     c.sprite.height = size;
     c.sprite.tint = 0xffffff;

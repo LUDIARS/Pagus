@@ -2,6 +2,8 @@
 // 種別 (ランダム / 貴金属 / 薬物) を選び、「フィールドに置く」か「推しに送る」。
 // カルマ消費なし・ランダム配布 (置く位置は server がランダムに決める)。
 
+import type { WireWorld } from '@pagus/sim';
+
 type ItemKind = 'random' | 'precious' | 'drug';
 
 export interface ItemHandlers {
@@ -17,6 +19,8 @@ const KINDS: { value: ItemKind; label: string }[] = [
 
 export class ItemPanel {
   private kind: ItemKind = 'random';
+  private world: WireWorld | null = null;
+  private readonly countBox = document.createElement('div');
   private readonly kindButtons = new Map<ItemKind, HTMLButtonElement>();
 
   constructor(
@@ -42,6 +46,8 @@ export class ItemPanel {
       this.kindButtons.set(k.value, btn);
     }
     this.root.appendChild(kindRow);
+    this.countBox.className = 'item-counts';
+    this.root.appendChild(this.countBox);
 
     // 配置ボタン。
     this.root.appendChild(this.actionBtn('🗺 フィールドに置く', 'item-field', () => this.h.onPlace(this.kind, false)));
@@ -51,9 +57,34 @@ export class ItemPanel {
     this.selectKind('random');
   }
 
+  setWorld(world: WireWorld): void {
+    this.world = world;
+    this.renderCounts();
+  }
+
   private selectKind(kind: ItemKind): void {
     this.kind = kind;
     for (const [k, btn] of this.kindButtons) btn.classList.toggle('active', k === kind);
+    this.renderCounts();
+  }
+
+  private counts(): Record<ItemKind, number> {
+    const precious = this.world?.items.filter((i) => i.kind === 'precious').length ?? 0;
+    const drug = this.world?.items.filter((i) => i.kind === 'drug').length ?? 0;
+    return { random: precious + drug, precious, drug };
+  }
+
+  private renderCounts(): void {
+    const counts = this.counts();
+    this.countBox.replaceChildren(
+      countChip('所持合計', counts.random),
+      countChip('貴金属', counts.precious),
+      countChip('薬物', counts.drug),
+    );
+    for (const k of KINDS) {
+      const btn = this.kindButtons.get(k.value);
+      if (btn) btn.textContent = `${k.label} (${counts[k.value]})`;
+    }
   }
 
   private actionBtn(label: string, cls: string, onClick: () => void): HTMLButtonElement {
@@ -75,5 +106,11 @@ function hint(text: string): HTMLElement {
   const el = document.createElement('div');
   el.className = 'muted';
   el.textContent = text;
+  return el;
+}
+function countChip(label: string, value: number): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'item-count';
+  el.textContent = `${label}: ${value}`;
   return el;
 }

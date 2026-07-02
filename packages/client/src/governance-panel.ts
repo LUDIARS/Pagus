@@ -5,6 +5,7 @@
 // 受理可否の最終判定は server (commandRejected はトーストで既出)。
 
 import type { LawView, MartialMode, WireWorld } from '@pagus/sim';
+import { villagerDisplayName } from './villager-display.js';
 
 export interface GovernanceHandlers {
   /** 村長リコールを請求する (§17)。 */
@@ -157,7 +158,7 @@ export class GovernancePanel {
       return;
     }
     const mayor = w.mayorId ? w.villagers.find((v) => v.id === w.mayorId) : null;
-    this.mayorBox.appendChild(kv('👑 村長', mayor ? `${mayor.name} (${mayor.species})` : '(空位)'));
+    this.mayorBox.appendChild(kv('👑 村長', mayor ? `${villagerDisplayName(w, mayor)} (${mayor.species})` : '(空位)'));
     this.mayorBox.appendChild(kv('🗳 次の選挙', `あと ${w.mayorTermsLeft}日`));
 
     const poll = w.mayorPoll;
@@ -168,7 +169,8 @@ export class GovernancePanel {
     this.pollBox.appendChild(subLabel('匿名世論調査'));
     this.pollBox.appendChild(kv('📊 村長支持率', pct(poll.approval)));
     for (const c of poll.candidates) {
-      this.pollBox.appendChild(kv(`⭐ ${c.name}`, pct(c.support)));
+      const candidate = w.villagers.find((v) => v.id === c.id);
+      this.pollBox.appendChild(kv(`⭐ ${candidate ? villagerDisplayName(w, candidate) : c.name}`, pct(c.support)));
     }
     this.pollBox.appendChild(kv('🤷 わからない', pct(poll.dontKnow)));
     this.pollBox.appendChild(kv('😠 みんなきらい', pct(poll.hate)));

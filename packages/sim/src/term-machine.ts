@@ -2,7 +2,7 @@
 // 1 日 = 1 ターム = 12 セグメント。時間制御 (segmentRealMs のペース) は server が所有し、
 // 本クラスは純粋な遷移ロジックを提供する。
 
-import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign, InfoItem, MartialMode } from './types/index.js';
+import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign, InfoItem, MartialMode, ScheduledParty, ScheduledPartyKind } from './types/index.js';
 import type { Brain, ActionDecision } from './brain.js';
 import { aliveVillagers, awakeVillagers, environmentView, clampPos, bumpEventParam } from './world.js';
 import { DailyEngine, REACTION_EXPOSURE, type DailyEngineOptions } from './daily-engine.js';
@@ -31,6 +31,7 @@ import {
   type RecallResult,
 } from './mayor.js';
 import type { EventDirector } from './event-director.js';
+import { addResidentHistory, connectNewVillager, generateUniqueVillagerName } from './villager-gacha.js';
 
 export type IdGen = () => string;
 
@@ -58,6 +59,8 @@ function maxItemIndex(items: FieldItem[]): number {
 const SPAWN_SPECIES = ['猫', '兎', '梟', '熊', '栗鼠'] as const;
 /** 出生どうぶつの活動特性の候補。 */
 const SPAWN_ACTIVITIES: readonly ActivityPattern[] = ['diurnal', 'nocturnal', 'crepuscular', 'always'];
+const REL_HATE_THRESHOLD = -35;
+const REL_LIKE_THRESHOLD = 45;
 
 export interface TermMachineOptions {
   /** 起のイベント差配 (省略時は全 awake どうぶつの自由行動)。 */
@@ -104,6 +107,13 @@ export interface TermMachineOptions {
 export interface LifeEvents {
   marriages: Array<{ a: VillagerId; b: VillagerId; aName: string; bName: string }>;
   births: Array<{ childId: VillagerId; childName: string; parents: string }>;
+}
+
+export interface PartyEventResult {
+  party: ScheduledParty;
+  narrative: string;
+  incidentDay: number | null;
+  incidentSeed: string | null;
 }
 
 /** 改変(いじられ方)の要約。server がログ表示する。 */
@@ -697,6 +707,143 @@ export class TermMachine {
     return true;
   }
 
+  scheduleMonthlyParty(): ScheduledParty | null {
+    const alive = aliveVillagers(this.world).filter((v) => !v.madman);
+    if (alive.length === 0) {
+      this.world.scheduledParty = null;
+      return null;
+    }
+    const cal = this.world.calendar;
+    const reserved = this.world.scheduledIncident?.dayOfMonth ?? -1;
+    const days: number[] = [];
+    for (let d = 2; d <= cal.daysInMonth; d += 1) {
+      if (d !== reserved && d !== reserved - 1) days.push(d);
+    }
+    const dayOfMonth = days[Math.floor(this.rng() * days.length)] ?? Math.min(cal.daysInMonth, 2);
+    const party = this.buildParty(dayOfMonth, alive);
+    this.world.scheduledParty = party;
+    return party;
+  }
+
+  fireScheduledParty(): PartyEventResult | null {
+    const party = this.world.scheduledParty;
+    if (!party || party.fired) return null;
+    if (this.world.calendar.dayOfMonth !== party.dayOfMonth) return null;
+    if (this.world.phase !== 'kisho' && this.world.phase !== 'idle') return null;
+    if (this.world.incident || this.world.trial) return null;
+
+    party.fired = true;
+    const participants = party.participantIds
+      .map((id) => this.world.villagers.get(id))
+      .filter((v): v is Villager => v !== undefined && v.alive);
+    const names = participants.map((v) => v.name).join('、') || '村のみんな';
+    this.world.reputation.vitality = clamp01(this.world.reputation.vitality + 0.04);
+    this.world.reputation.benevolence = clamp01(this.world.reputation.benevolence + 0.03);
+
+    if (party.kind === 'wedding' && participants.length >= 2) {
+      const a = participants[0]!;
+      const b = participants[1]!;
+      if (a.partnerId === null && b.partnerId === null) {
+        a.partnerId = b.id;
+        b.partnerId = a.id;
+      }
+    }
+
+    for (let i = 0; i < participants.length; i += 1) {
+      for (let j = i + 1; j < participants.length; j += 1) {
+        this.adjustRelationship(participants[i]!, participants[j]!, 14, `${party.title}で距離が近づいた`);
+        this.adjustRelationship(participants[j]!, participants[i]!, 14, `${party.title}で距離が近づいた`);
+      }
+    }
+
+    const avgAggression =
+      participants.reduce((sum, v) => sum + v.persona.traits.aggression + v.stress * 0.08, 0) / Math.max(1, participants.length);
+    const troubleChance = Math.min(0.55, 0.08 + this.world.reputation.malice * 0.35 + avgAggression * 0.18);
+    let incidentDay: number | null = null;
+    let incidentSeed: string | null = null;
+    if (this.rng() < troubleChance) {
+      for (const v of participants) v.stress += 1;
+      incidentSeed = `${party.title}の席で起きた不和。参加者: ${names}`;
+      incidentDay = this.plantPartyIncident(incidentSeed);
+      if (incidentDay !== null) party.incidentPlanted = true;
+    }
+
+    const narrative =
+      incidentDay === null
+        ? `${party.title}: ${names}が集まり、村に穏やかな熱が残った`
+        : `${party.title}: ${names}の祝いの席に不穏な火種が残り、${incidentDay}日に事件の予兆となった`;
+    return { party, narrative, incidentDay, incidentSeed };
+  }
+
+  private buildParty(dayOfMonth: number, alive: Villager[]): ScheduledParty {
+    const singles = alive.filter((v) => v.partnerId === null);
+    let kind: ScheduledPartyKind = 'harvest';
+    if (singles.length >= 2 && this.rng() < 0.28) kind = 'wedding';
+    else if (this.world.residentHistory.some((h) => h.joinedTerm >= this.world.term - 3)) kind = 'welcome';
+    else if (this.rng() < 0.25) kind = 'memorial';
+
+    let participantIds: VillagerId[] = [];
+    if (kind === 'wedding') {
+      participantIds = singles.slice(0, 2).map((v) => v.id);
+    } else if (kind === 'welcome') {
+      const newest = [...this.world.residentHistory].sort((a, b) => b.joinedTerm - a.joinedTerm)[0];
+      const guest = newest ? this.world.villagers.get(newest.id) : undefined;
+      participantIds = guest && guest.alive ? [guest.id] : [];
+    }
+    if (participantIds.length === 0) {
+      participantIds = [...alive]
+        .sort(() => this.rng() - 0.5)
+        .slice(0, Math.min(4, alive.length))
+        .map((v) => v.id);
+    } else {
+      for (const v of alive) {
+        if (participantIds.length >= Math.min(4, alive.length)) break;
+        if (!participantIds.includes(v.id)) participantIds.push(v.id);
+      }
+    }
+
+    const title =
+      kind === 'wedding'
+        ? '結婚祝い'
+        : kind === 'welcome'
+          ? '歓迎会'
+          : kind === 'memorial'
+            ? '追悼の集い'
+            : '収穫祭';
+    return { dayOfMonth, kind, title, participantIds, fired: false, incidentPlanted: false };
+  }
+
+  private adjustRelationship(from: Villager, to: Villager, delta: number, note: string): void {
+    let rel = this.world.relationships.find((r) => r.from === from.id && r.to === to.id);
+    if (!rel) {
+      rel = { from: from.id, to: to.id, affinity: 0, hates: false, note };
+      this.world.relationships.push(rel);
+    }
+    rel.affinity = Math.max(-100, Math.min(100, rel.affinity + delta));
+    rel.hates = rel.affinity <= REL_HATE_THRESHOLD;
+    rel.note = rel.hates
+      ? `${from.name}は${to.name}を警戒している`
+      : rel.affinity >= REL_LIKE_THRESHOLD
+        ? `${from.name}は${to.name}に心を許している`
+        : note;
+  }
+
+  private plantPartyIncident(themeSeed: string): number | null {
+    const current = this.world.calendar.dayOfMonth;
+    const dayOfMonth = Math.min(this.world.calendar.daysInMonth, current + 1 + Math.floor(this.rng() * 2));
+    if (dayOfMonth <= current) return null;
+    const existing = this.world.scheduledIncident;
+    if (existing && !existing.fired && existing.dayOfMonth > current) return null;
+    this.world.scheduledIncident = {
+      dayOfMonth,
+      themeSeed,
+      designed: false,
+      fired: false,
+      design: null,
+    };
+    return dayOfMonth;
+  }
+
   /** その日 (ターム) を開始する。idle → 起。 */
   startDay(): void {
     this.world.phase = 'kisho';
@@ -745,6 +892,7 @@ export class TermMachine {
   ): boolean {
     if (decision.move) actor.position = clampPos(this.world, decision.move);
     actor.emotion = decision.newEmotion;
+    this.applyRelationshipEffects(actor, decision);
     actions.push({ villager: actor.id, action: decision.action });
     if (decision.triggersIncident && decision.incidentSeed && !this.world.incident) {
       const seed = decision.incidentSeed;
@@ -760,6 +908,37 @@ export class TermMachine {
       return true;
     }
     return false;
+  }
+
+  private applyRelationshipEffects(actor: Villager, decision: ActionDecision): void {
+    for (const effect of decision.relationshipEffects ?? []) {
+      for (const targetId of effect.targetIds) {
+        if (targetId === actor.id) continue;
+        const target = this.world.villagers.get(targetId);
+        if (!target || !target.alive) continue;
+        if (effect.kind === 'harass') {
+          const targetDrop = -Math.round(12 * this.relationshipVolatility(target) * (1 + target.persona.traits.kindness * 0.25));
+          const actorDrop = -Math.round(4 * this.relationshipVolatility(actor) * (1 + actor.persona.traits.aggression * 0.35));
+          this.adjustRelationship(target, actor, targetDrop, `${target.name}は${actor.name}の嫌がらせを忘れていない`);
+          this.adjustRelationship(actor, target, actorDrop, `${actor.name}は${target.name}を疎ましく感じた`);
+        } else {
+          const base = effect.kind === 'good' ? 8 : 5;
+          const actorGain = Math.round(base * this.relationshipVolatility(actor) * (1 + actor.persona.traits.kindness * 0.25));
+          const targetGain = Math.round(base * this.relationshipVolatility(target) * (1 + target.persona.traits.sociability * 0.25));
+          const note = effect.kind === 'good'
+            ? `${actor.name}と${target.name}は良い出来事を共有した`
+            : `${actor.name}と${target.name}は言葉を交わした`;
+          this.adjustRelationship(actor, target, actorGain, note);
+          this.adjustRelationship(target, actor, targetGain, note);
+        }
+      }
+    }
+  }
+
+  private relationshipVolatility(v: Villager): number {
+    const t = v.persona.traits;
+    const raw = 0.65 + t.sociability * 0.45 + t.curiosity * 0.25 + t.aggression * 0.28 + t.ambition * 0.18 - t.discipline * 0.32 + Math.min(0.35, v.stress * 0.018);
+    return Math.max(0.35, Math.min(1.8, raw));
   }
 
   /** 被害者の平均ストレス耐性で嫌がらせを受け流すか判定。 */
@@ -1200,7 +1379,7 @@ export class TermMachine {
     }
     const child = createVillager({
       id: `born_${this.bornCount}`,
-      name: `${p1.name}の子${this.bornCount}`,
+      name: generateUniqueVillagerName(this.world, this.rng),
       position: {
         x: Math.floor(this.rng() * this.world.config.gridWidth),
         y: Math.floor(this.rng() * this.world.config.gridHeight),
@@ -1211,6 +1390,8 @@ export class TermMachine {
       origin: 'born',
     });
     this.world.villagers.set(child.id, child);
+    addResidentHistory(this.world, child, { origin: 'born', archetype: '子供' });
+    connectNewVillager(this.world, child, this.rng);
     return child;
   }
 
@@ -1345,7 +1526,7 @@ export class TermMachine {
       };
       const villager = createVillager({
         id: `born_${this.bornCount}`,
-        name: `新入り${this.bornCount}`,
+        name: generateUniqueVillagerName(this.world, this.rng),
         position,
         species,
         activity,
@@ -1353,6 +1534,8 @@ export class TermMachine {
         origin: 'born',
       });
       this.world.villagers.set(villager.id, villager);
+      addResidentHistory(this.world, villager, { origin: 'born', archetype: '新入り' });
+      connectNewVillager(this.world, villager, this.rng);
     }
   }
 }
