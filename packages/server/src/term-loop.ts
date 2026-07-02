@@ -1,7 +1,7 @@
 // TermMachine をフェーズに応じて 1 ステップずつ駆動するループ。
 // 時間制御はここが所有する: 起のセグメントはカレンダー導出ペース、事件の局面は速めに刻む。
 
-import type { TermMachine, World } from '@pagus/sim';
+import type { TermMachine, World, HeckleSide, HeckleResult, TestifyOutcome, GiftKind, GiftResult } from '@pagus/sim';
 import { pacedSegmentMs, type PaceOptions } from './clock.js';
 
 export interface LoopHandlers {
@@ -75,6 +75,21 @@ export class TermLoop {
     this.tm.addUserVote(pick, userId);
   }
 
+  /** プレイヤーの野次 (§v1.4-A): 進行中の事件を煽る/なだめる。事件中でなければ null。 */
+  heckle(side: HeckleSide): HeckleResult | null {
+    return this.tm.heckle(side);
+  }
+
+  /** プレイヤーの証言 (§v1.4-A): 裁判の fate 段階へ 1 グループ分の票を上乗せする。 */
+  testify(userId: string, stance: 'accuse' | 'defend', text?: string): TestifyOutcome {
+    return this.tm.testify(userId, stance, text);
+  }
+
+  /** プレイヤーの贈り物 (§v1.4-A): 差し入れ/毒饅頭を対象へ即適用する。不在なら null。 */
+  gift(targetId: string, kind: GiftKind): GiftResult | null {
+    return this.tm.giveGift(targetId, kind);
+  }
+
   /** 事件前日の詳細デザイン + 事件用キャラ生成を実行し、予兆をログに出す (§12.3.2)。 */
   private async designScheduled(): Promise<void> {
     const result = await this.tm.designScheduledIncident();
@@ -117,6 +132,10 @@ export class TermLoop {
         }
         const r = await this.tm.kishoTick();
         for (const a of r.actions) this.h.onLog('kisho', a.action);
+        // フィールドアイテムの回収 (§v1.4-A 体感即時化): 最寄りが取りに歩き、届いたら拾う。
+        for (const p of this.tm.tickItems()) {
+          this.h.onLog('kisho', p.kind === 'precious' ? `💎 ${p.name} が貴金属を拾った` : `💊 ${p.name} が薬物に手を出した`);
+        }
         if (r.incidentStarted) {
           this.h.onLog('sho', `⚡ 事件: ${w.incident?.description ?? ''}`);
         } else {

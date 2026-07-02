@@ -44,7 +44,22 @@
     "ruleAddCost": 15,
     "ruleRemoveCost": 25,
     "villageRulesMax": 12,
-    "topupPacks": [100, 500, 1000]
+    "topupPacks": [
+      100,
+      500,
+      1000
+    ]
+  },
+  "intervene": {
+    "heckleCost": 3,
+    "heckleCooldownMs": 10000,
+    "heckleDamage": 1,
+    "heckleBias": 0.08,
+    "testifyCost": 8,
+    "giftTreatCost": 5,
+    "giftPoisonCost": 15,
+    "giftTreatWealth": 25,
+    "giftTreatJoy": 0.2
   },
   "politics": {
     "revoltThreshold": 0.7,

@@ -7,7 +7,7 @@
 // フィールド上のアイテムは日末に最寄りの生存住民が拾って消える。
 
 import type { World, Villager, FieldItem, FieldItemKind, GridPos } from './types/index.js';
-import { bumpEventParam } from './world.js';
+import { bumpEventParam, awakeVillagers } from './world.js';
 
 /** プレイヤーが選べる種別。'random' は配置時に precious/drug へ解決する。 */
 export type ItemKindChoice = 'random' | FieldItemKind;
@@ -64,6 +64,49 @@ export interface ItemPickup {
 
 function chebyshev(a: GridPos, b: GridPos): number {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+/** 1 軸ぶんの符号 (対象へ 1 歩近づく移動量)。 */
+function stepToward(from: number, to: number): number {
+  return Math.sign(to - from);
+}
+
+/** これ以下の距離なら「手が届く」= その場で拾える。 */
+const PICKUP_RANGE = 1;
+
+/**
+ * セグメントごとのアイテム回収 (§v1.4-A 体感即時化): 各アイテムへ最寄りの起きている住民が
+ * 1 歩ずつ取りに歩き、手が届いたら (chebyshev <= 1) その場で拾って効果適用する。
+ * 旧「日末に一括拾得」だと配置の手応えが翌日まで見えないため、数セグメント以内に回収される。
+ * 起きている住民がいなければ動かさない (アイテムは残る)。server が kisho の各 tick で呼ぶ。
+ */
+export function stepItemPickups(world: World, cfg: ItemConfig = DEFAULT_ITEMS): ItemPickup[] {
+  if (world.items.length === 0) return [];
+  const awake = awakeVillagers(world);
+  if (awake.length === 0) return [];
+  const pickups: ItemPickup[] = [];
+  const remaining: FieldItem[] = [];
+  for (const item of world.items) {
+    let nearest = awake[0];
+    if (!nearest) continue;
+    for (const v of awake) {
+      if (chebyshev(v.position, item.position) < chebyshev(nearest.position, item.position)) nearest = v;
+    }
+    if (chebyshev(nearest.position, item.position) <= PICKUP_RANGE) {
+      applyItemEffect(nearest, item.kind, cfg);
+      pickups.push({ villagerId: nearest.id, name: nearest.name, kind: item.kind });
+    } else {
+      // 最寄りが 1 歩近づく (拾いに向かう姿が見える)。うろつき移動の後に上書きされうるが、
+      // 毎セグメント寄るので数 tick で到達する。
+      nearest.position = {
+        x: nearest.position.x + stepToward(nearest.position.x, item.position.x),
+        y: nearest.position.y + stepToward(nearest.position.y, item.position.y),
+      };
+      remaining.push(item);
+    }
+  }
+  world.items = remaining;
+  return pickups;
 }
 
 /**

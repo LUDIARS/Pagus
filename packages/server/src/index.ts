@@ -154,6 +154,13 @@ function main(): void {
     birthChance: cfg.sim.birthChance, // 日末の出産確率
     rulesMax: cfg.sim.rulesMax, // ふるまいの法則の上限 (§2.1)
     martialSurgeBonus: cfg.sim.martialSurgeBonus, // 戒厳令 surge の事件化閾値ボーナス (§v1.3-C ⑨)
+    // 即効介入 (§v1.4-A) の sim 側効果量。コスト/クールダウンは PlayerState 側。
+    interveneConfig: {
+      heckleDamage: cfg.intervene.heckleDamage,
+      heckleBias: cfg.intervene.heckleBias,
+      giftTreatWealth: cfg.intervene.giftTreatWealth,
+      giftTreatJoy: cfg.intervene.giftTreatJoy,
+    },
     bornCount: restored?.bornCount ?? 0, // 出生 id の通し番号を引き継ぐ
     incidentCount: restored?.incidentCount ?? 0, // 事件用キャラ id の通し番号を引き継ぐ
     ruleCount: restored?.ruleCount ?? 0, // ふるまいの法則 id の通し番号を引き継ぐ
@@ -201,6 +208,14 @@ function main(): void {
     championKarmaMult: cfg.karma.championKarmaMult,
     championDeathPenalty: cfg.karma.championDeathPenalty,
     cardCooldownMs: cfg.karma.cardCooldownMs,
+    // 即効介入 (§v1.4-A) のコスト/クールダウン。
+    intervene: {
+      heckleCost: cfg.intervene.heckleCost,
+      heckleCooldownMs: cfg.intervene.heckleCooldownMs,
+      testifyCost: cfg.intervene.testifyCost,
+      giftTreatCost: cfg.intervene.giftTreatCost,
+      giftPoisonCost: cfg.intervene.giftPoisonCost,
+    },
   });
   const knownUsers = new Set<string>();
 
@@ -500,6 +515,108 @@ function main(): void {
       recordAction(userId, 'cheer', targetId);
       pushState(userId);
       scheduleLeaderboard();
+    },
+    // --- 即効介入 (§v1.4-A): 野次 / 証言 / 差し入れ・毒饅頭 ----------------------
+    onHeckle: (side, userId) => {
+      knownUsers.add(userId);
+      if (side !== 'agitate' && side !== 'soothe') {
+        ws.sendRejected(userId, '野次は agitate / soothe のいずれか');
+        return;
+      }
+      const incident = tm.world.incident;
+      if (tm.world.phase !== 'sho' || !incident) {
+        ws.sendRejected(userId, '野次は事件の進行中のみ');
+        return;
+      }
+      const now = Date.now();
+      if (!ps.canHeckle(userId, now)) {
+        ws.sendRejected(userId, '野次はインターバル中');
+        return;
+      }
+      if (!ps.spend(userId, ps.interveneCosts.heckle)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      const r = loop.heckle(side);
+      if (!r) {
+        ps.addKarma(userId, ps.interveneCosts.heckle); // 想定外の失敗は返金 (握り潰さない)
+        ws.sendRejected(userId, '野次を飛ばせなかった');
+        return;
+      }
+      ps.markHeckle(userId, now);
+      const heckleText = side === 'agitate'
+        ? `📣 野次: 観客が ${r.perpetratorName} の騒ぎを煽った (被害${r.damage})`
+        : `📣 野次: 観客が場をなだめた`;
+      ws.broadcastLog('sho', heckleText);
+      sessionLog.line('sho', heckleText);
+      recordAction(userId, 'heckle', incident.perpetrator);
+      pushState(userId);
+      ws.broadcastSnapshot(tm.world);
+    },
+    onTestify: (stance, text, userId) => {
+      knownUsers.add(userId);
+      if (stance !== 'accuse' && stance !== 'defend') {
+        ws.sendRejected(userId, '証言は accuse / defend のいずれか');
+        return;
+      }
+      const trial = tm.world.trial;
+      if (!trial || trial.stage !== 'fate') {
+        ws.sendRejected(userId, '証言は裁判の運命段階のみ');
+        return;
+      }
+      if (!ps.spend(userId, ps.interveneCosts.testify)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      const r = loop.testify(userId, stance, text);
+      if (!r.ok) {
+        ps.addKarma(userId, ps.interveneCosts.testify); // 不成立は返金 (握り潰さない)
+        ws.sendRejected(userId, r.reason);
+        return;
+      }
+      const say = r.record.text ? `「${r.record.text}」` : '';
+      const testifyText = stance === 'accuse'
+        ? `🗣 証言: ${r.defendantName} の有罪を訴える声${say}が法廷に響いた (重み${r.record.weight})`
+        : `🗣 証言: ${r.defendantName} を弁護する声${say}が法廷に響いた (重み${r.record.weight})`;
+      ws.broadcastLog('ten', testifyText);
+      sessionLog.line('ten', testifyText);
+      if (trial.defendant) recordAction(userId, 'testify', trial.defendant);
+      pushState(userId);
+      ws.broadcastSnapshot(tm.world);
+    },
+    onGift: (targetId, kind, userId) => {
+      knownUsers.add(userId);
+      if (kind !== 'treat' && kind !== 'poison') {
+        ws.sendRejected(userId, '贈り物は treat / poison のいずれか');
+        return;
+      }
+      const target = targetId ? tm.world.villagers.get(targetId) : undefined;
+      if (!targetId || !target || !target.alive) {
+        ws.sendRejected(userId, '贈り物の相手が不正 (生存どうぶつのみ)');
+        return;
+      }
+      const cost = kind === 'treat' ? ps.interveneCosts.giftTreat : ps.interveneCosts.giftPoison;
+      if (!ps.spend(userId, cost)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      const r = loop.gift(targetId, kind);
+      if (!r) {
+        ps.addKarma(userId, cost); // 想定外の失敗は返金 (握り潰さない)
+        ws.sendRejected(userId, '贈り物を渡せなかった');
+        return;
+      }
+      const cal = tm.world.calendar;
+      const feed = kind === 'treat'
+        ? `🍬 差し入れ: ${r.villagerName} が贈り物に喜んだ`
+        : `☠ 毒饅頭: ${r.villagerName} の様子がおかしくなった`;
+      ws.broadcastLog('kisho', feed);
+      sessionLog.line('kisho', feed);
+      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, feed, 'other');
+      ws.updateChronicle(chronicle.recent());
+      recordAction(userId, 'gift', targetId);
+      pushState(userId);
+      ws.broadcastSnapshot(tm.world);
     },
     onVote: (pick, userId) => loop.vote(pick, userId),
     onChampion: (targetId, userId) => {

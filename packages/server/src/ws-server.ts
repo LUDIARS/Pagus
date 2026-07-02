@@ -53,6 +53,10 @@ export interface WsHandlers {
   onIncite(targetId: string, rumorAboutId: string | undefined, userId: string): void;
   onSanction(targetId: string, userId: string): void;
   onCheer(targetId: string, userId: string): void;
+  // 即効介入 (§v1.4-A): 野次 / 証言 / 差し入れ・毒饅頭。
+  onHeckle(side: 'agitate' | 'soothe', userId: string): void;
+  onTestify(stance: 'accuse' | 'defend', text: string | undefined, userId: string): void;
+  onGift(targetId: string, kind: 'treat' | 'poison', userId: string): void;
   onVote(pick: string, userId?: string): void;
   onChampion(targetId: string, userId: string): void;
   /** フィールドアイテム配置 (§16)。toChampion=true で推しに直接送る。 */
@@ -202,6 +206,15 @@ export class GameWsServer {
     } else if (msg.t === 'cheer') {
       this.bind(ws, msg.userId);
       this.h.onCheer(msg.targetId, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'heckle') {
+      this.bind(ws, msg.userId);
+      this.h.onHeckle(msg.side, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'testify') {
+      this.bind(ws, msg.userId);
+      this.h.onTestify(msg.stance, msg.text, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'gift') {
+      this.bind(ws, msg.userId);
+      this.h.onGift(msg.targetId, msg.kind, this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'vote') {
       this.bind(ws, msg.userId);
       this.h.onVote(msg.pick, msg.userId);
@@ -288,28 +301,22 @@ export class GameWsServer {
    */
   sendPlayerState(userId: string, state: PlayerStateSnapshot, championName?: string): void {
     // exactOptionalPropertyTypes: championName は値があるときだけキーを足す。
-    const msg: ServerMessage = championName === undefined
-      ? {
-          t: 'playerState',
-          karma: state.karma,
-          virtue: state.virtue,
-          sanctionCost: state.sanctionCost,
-          inciteCost: state.inciteCost,
-          canCheerInMs: state.canCheerInMs,
-          championId: state.championId,
-          spent: state.spent,
-        }
-      : {
-          t: 'playerState',
-          karma: state.karma,
-          virtue: state.virtue,
-          sanctionCost: state.sanctionCost,
-          inciteCost: state.inciteCost,
-          canCheerInMs: state.canCheerInMs,
-          championId: state.championId,
-          championName,
-          spent: state.spent,
-        };
+    const msg: ServerMessage = {
+      t: 'playerState',
+      karma: state.karma,
+      virtue: state.virtue,
+      sanctionCost: state.sanctionCost,
+      inciteCost: state.inciteCost,
+      canCheerInMs: state.canCheerInMs,
+      heckleCost: state.heckleCost,
+      canHeckleInMs: state.canHeckleInMs,
+      testifyCost: state.testifyCost,
+      giftTreatCost: state.giftTreatCost,
+      giftPoisonCost: state.giftPoisonCost,
+      championId: state.championId,
+      spent: state.spent,
+      ...(championName !== undefined ? { championName } : {}),
+    };
     this.sendToUser(userId, JSON.stringify(msg));
   }
 

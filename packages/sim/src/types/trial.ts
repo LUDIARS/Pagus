@@ -13,14 +13,25 @@ export type TrialStage = 'foolish' | 'fate' | 'decided';
 
 /** グループ bloc または ユーザの 1 票。 */
 export interface VoteRecord {
-  /** 投票主体: グループは性格軸、ユーザは 'user'、狂人の扇動は 'madman'、真犯人の擦り付けは 'culprit'。 */
-  voter: PersonalityAxis | 'user' | 'madman' | 'culprit';
+  /** 投票主体: グループは性格軸、ユーザは 'user'、狂人の扇動は 'madman'、真犯人の擦り付けは 'culprit'、証言 (§v1.4-A) は 'testimony'。 */
+  voter: PersonalityAxis | 'user' | 'madman' | 'culprit' | 'testimony';
   /** bloc の重み (グループ人数 / ユーザは 1)。 */
   weight: number;
   /** foolish 段階は候補 VillagerId、fate 段階は 'kill'|'spare'。 */
   pick: string;
   /** ユーザ票のとき、どの接続ユーザの票か (重み合算 + 投票し直しの単位)。 */
   userId?: string;
+}
+
+/** プレイヤーの証言 1 件 (§v1.4-A)。fate 段階の票へ 1 グループ分の重みを上乗せした記録。 */
+export interface TestimonyRecord {
+  userId: string;
+  /** accuse=有罪 (死刑側) / defend=弁護 (教育側)。 */
+  stance: 'accuse' | 'defend';
+  /** 上乗せした重み (= 1 グループ分)。 */
+  weight: number;
+  /** 証言の一言 (任意、法廷の吹き出し用)。 */
+  text?: string;
 }
 
 /** 転: 投票による裁判の状態。 */
@@ -41,6 +52,8 @@ export interface TrialState {
   votes: VoteRecord[];
   /** 確定した審判 (未確定なら null)。 */
   verdict: Verdict | null;
+  /** プレイヤーの証言 (§v1.4-A)。1 ユーザ 1 裁判 1 回。無ければキー自体なし (旧 snapshot 互換)。 */
+  testimonies?: TestimonyRecord[];
 }
 
 /** 結: 教育 (改変) の指示。sim が村人へ適用する。 */

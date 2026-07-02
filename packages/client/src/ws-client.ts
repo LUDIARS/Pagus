@@ -32,8 +32,22 @@ export interface WsHandlers {
   onTrialLines(incidentId: string, lines: TrialLine[]): void;
   onLlm(info: LlmInfo): void;
   onChronicle(entries: ChronicleEntry[]): void;
-  /** その接続ユーザのカルマ/善性状態 (§4.4)。推し (§1)・預金 (§v1.3-B ④)・課金額 (§v1.3-F) を含む。 */
-  onPlayerState?(state: { karma: number; virtue: number; sanctionCost: number; inciteCost: number; canCheerInMs: number; championId: string | null; championName?: string; spent: number }): void;
+  /** その接続ユーザのカルマ/善性状態 (§4.4)。推し (§1)・課金額 (§v1.3-F)・即効介入コスト (§v1.4-A) を含む。 */
+  onPlayerState?(state: {
+    karma: number;
+    virtue: number;
+    sanctionCost: number;
+    inciteCost: number;
+    canCheerInMs: number;
+    heckleCost: number;
+    canHeckleInMs: number;
+    testifyCost: number;
+    giftTreatCost: number;
+    giftPoisonCost: number;
+    championId: string | null;
+    championName?: string;
+    spent: number;
+  }): void;
   /** 別端末ログインで現セッションが追い出された (§v1.3-F)。 */
   onLoggedOut?(reason: string): void;
   /** コマンド却下 (カルマ不足/インターバル中など)。 */
@@ -105,6 +119,11 @@ export function connect(url: string, h: WsHandlers): Conn {
           sanctionCost: msg.sanctionCost,
           inciteCost: msg.inciteCost,
           canCheerInMs: msg.canCheerInMs,
+          heckleCost: msg.heckleCost,
+          canHeckleInMs: msg.canHeckleInMs,
+          testifyCost: msg.testifyCost,
+          giftTreatCost: msg.giftTreatCost,
+          giftPoisonCost: msg.giftPoisonCost,
           championId: msg.championId ?? null,
           ...(msg.championName !== undefined ? { championName: msg.championName } : {}),
           spent: msg.spent,

@@ -137,7 +137,7 @@ export interface PlayerActionEntry {
   /** ゲーム内日付 (例 "6月12日")。 */
   date: string;
   userId: string;
-  type: 'incite' | 'sanction' | 'cheer';
+  type: 'incite' | 'sanction' | 'cheer' | 'heckle' | 'testify' | 'gift';
   /** 操作対象のどうぶつ名。 */
   target: string;
 }
@@ -291,6 +291,17 @@ export type ServerMessage =
       /** いま扇動に必要なカルマ (固定コスト, §4 消費カルマ表示用)。 */
       inciteCost: number;
       canCheerInMs: number;
+      // --- 即効介入 (§v1.4-A) のコスト/クールダウン表示用 ---
+      /** 野次の固定コスト。 */
+      heckleCost: number;
+      /** 次に野次できるまでの残りミリ秒 (0 = いま可能)。 */
+      canHeckleInMs: number;
+      /** 証言の固定コスト。 */
+      testifyCost: number;
+      /** 差し入れ (treat) の固定コスト。 */
+      giftTreatCost: number;
+      /** 毒饅頭 (poison) の固定コスト。 */
+      giftPoisonCost: number;
       /** 推し (champion) の villager id。未指名は null (§1)。 */
       championId?: string | null;
       /** 推しの名前 (index が world から補完)。未指名/不在なら省略。 */
@@ -355,6 +366,10 @@ export type ClientMessage =
   | { t: 'incite'; targetId: string; rumorAboutId?: string; userId?: string } // 対象に偽情報を吹き込み事件化を促す (§4.2)
   | { t: 'sanction'; targetId: string; userId?: string } // 対象を即時つるし上げ裁判にかける (§4.3)
   | { t: 'cheer'; targetId: string; userId?: string } // 対象の気質を後押しする (§4.5)
+  // --- 即効介入 (§v1.4-A): 短期に見えて環境に爪痕を残す操作 ---
+  | { t: 'heckle'; side: 'agitate' | 'soothe'; userId?: string } // 進行中の事件へ野次を飛ばす
+  | { t: 'testify'; stance: 'accuse' | 'defend'; text?: string; userId?: string } // 裁判の fate 段階へ証言を投げ込む
+  | { t: 'gift'; targetId: string; kind: 'treat' | 'poison'; userId?: string } // 差し入れ/毒饅頭を手渡す
   | { t: 'vote'; pick: string; userId?: string } // 裁判への 1 票 (foolish=候補id / fate='kill'|'spare')。userId で接続ユーザを区別 (重み合算)
   | { t: 'champion'; targetId: string; userId?: string } // 推しを 1 体指名 (§1)。再送で差し替え
   // フィールドアイテム配置 (§16)。カルマ消費なし・ランダム配布。kind='random'|'precious'|'drug'。

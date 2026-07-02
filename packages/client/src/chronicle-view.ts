@@ -21,6 +21,9 @@ const ACTION_JA: Record<PlayerActionEntry['type'], string> = {
   incite: '扇動',
   sanction: '制裁',
   cheer: '応援',
+  heckle: '野次',
+  testify: '証言',
+  gift: '贈り物',
 };
 
 /** しきたり改定 (§2) のコスト表示。既定 env (PAGUS_RULE_ADD_COST/REMOVE_COST) に合わせる。 */
