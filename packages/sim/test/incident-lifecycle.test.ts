@@ -124,7 +124,11 @@ describe('事件ライフサイクル (§12.3)', () => {
     const inno = createVillager({ id: 'inno', name: 'イノ', position: { x: 12, y: 12 }, activity: 'always', traits: { kindness: 0.9 } });
     const culprit = createVillager({ id: 'culprit1', name: '真犯人', position: { x: 13, y: 12 }, activity: 'always', traits: { aggression: 0.9 }, origin: 'incident' });
     const world = createWorld([inno, culprit], { ...DEFAULT_CONFIG, damageThreshold: 8 }, { year: 2026, month: 6 });
-    const tm = new TermMachine(world, new StubBrain({ damagePerStep: 4 }), { worldBrain: new StubWorldBrain() });
+    // 擦り付けの成立そのものを検証する: 真犯人発覚 (reveal, §v1.4-B) は無効化。
+    const tm = new TermMachine(world, new StubBrain({ damagePerStep: 4 }), {
+      worldBrain: new StubWorldBrain(),
+      trialComposeConfig: { witnessMax: 0, witnessWeight: 0, revealChance: 0 },
+    });
 
     // scapegoat デザインを直接組む (真犯人が inno に罪を擦り付ける)。
     world.scheduledIncident = {

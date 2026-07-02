@@ -39,6 +39,25 @@ import {
   type FanFlamesResult,
 } from './interventions.js';
 import { defaultBehaviorRules } from './behavior-rules.js';
+import {
+  addThread,
+  decayThreads,
+  heatThreadsInvolving,
+  resolveThread,
+  DEFAULT_PLOT,
+  type PlotConfig,
+  type AddThreadInput,
+} from './plot-threads.js';
+import { pickArcTheme, DEFAULT_ARCS, type ArcRule, type ArcPick } from './incident-arc.js';
+import { playMinorIncident, DEFAULT_MINOR, type MinorConfig } from './minor-incident.js';
+import {
+  composeWitnesses,
+  maybeReveal,
+  DEFAULT_TRIAL_COMPOSE,
+  type TrialComposeConfig,
+  type RevealResult,
+} from './trial-composer.js';
+import type { PlotThread, TrialWitness } from './types/index.js';
 import type { FieldItem, FieldItemKind } from './types/index.js';
 import {
   tickMayor,
@@ -68,6 +87,16 @@ function maxItemIndex(items: FieldItem[]): number {
   let max = 0;
   for (const it of items) {
     const n = Number(it.id.replace(/^item_/, ''));
+    if (Number.isInteger(n) && n > max) max = n;
+  }
+  return max;
+}
+
+/** 復元した world.plotThreads の id (thread_N) から最大番号を求める (§v1.4-B, 通し番号の続き)。 */
+function maxThreadIndex(threads: PlotThread[]): number {
+  let max = 0;
+  for (const t of threads) {
+    const n = Number(t.id.replace(/^thread_/, ''));
     if (Number.isInteger(n) && n > max) max = n;
   }
   return max;
@@ -119,6 +148,16 @@ export interface TermMachineOptions {
   mayorConfig?: MayorConfig;
   /** 即効介入 (§v1.4-A 野次/証言/差し入れ) のチューニング。省略時は DEFAULT_INTERVENTION。 */
   interveneConfig?: InterventionConfig;
+  /** 火種 (§v1.4-B) のチューニング。省略時は DEFAULT_PLOT。 */
+  plotConfig?: PlotConfig;
+  /** 事件アークの派生表 (§v1.4-B)。省略時は DEFAULT_ARCS (server は data/incident-arcs.json を注入可)。 */
+  incidentArcs?: ArcRule[];
+  /** 小騒動 (§v1.4-B) のチューニング。省略時は DEFAULT_MINOR。 */
+  minorConfig?: MinorConfig;
+  /** 裁判バリエーション (§v1.4-B) のチューニング。省略時は DEFAULT_TRIAL_COMPOSE。 */
+  trialComposeConfig?: TrialComposeConfig;
+  /** スナップショット復元時の火種通し番号 (thread_N 衝突回避)。既定 = 既存 id の最大から続ける。 */
+  threadCount?: number;
 }
 
 /** 日末の生活イベント (結婚/出産)。server がログ表示する。 */
@@ -151,6 +190,8 @@ export interface KishoTickResult {
 export interface AdvanceDayResult {
   /** 月が変わったか (= 実 1 日境界の「大きな転換」)。 */
   monthRolled: boolean;
+  /** 日末の減衰で消えた火種 (§v1.4-B)。 */
+  burntThreads: PlotThread[];
   /** 新しい日が祝日ならその名前。 */
   holiday: string | null;
   /** 村長選挙イベント (§17, 起きた時のみ)。server がログ。 */
@@ -191,6 +232,16 @@ export class TermMachine {
   private readonly mayorConfig: MayorConfig;
   /** 即効介入 (§v1.4-A) のチューニング。 */
   private readonly interveneConfig: InterventionConfig;
+  /** 火種 (§v1.4-B) のチューニング。 */
+  private readonly plotConfig: PlotConfig;
+  /** 事件アークの派生表 (§v1.4-B)。 */
+  private readonly incidentArcs: ArcRule[];
+  /** 小騒動 (§v1.4-B) のチューニング。 */
+  private readonly minorConfig: MinorConfig;
+  /** 裁判バリエーション (§v1.4-B) のチューニング。 */
+  private readonly trialComposeConfig: TrialComposeConfig;
+  /** 火種の通し番号 (thread_N)。復元 world の既存 id 最大から続ける。 */
+  private threadCount: number;
   /** その日の裁判結末。applyReform が incident/trial を null にする前に ketsuStep で捕捉する。 */
   private dayOutcome: { incident: Incident; verdict: Verdict; defendantId: VillagerId } | null = null;
 
@@ -221,6 +272,11 @@ export class TermMachine {
     this.martialSurgeBonus = opts.martialSurgeBonus ?? 4;
     this.mayorConfig = opts.mayorConfig ?? DEFAULT_MAYOR;
     this.interveneConfig = opts.interveneConfig ?? DEFAULT_INTERVENTION;
+    this.plotConfig = opts.plotConfig ?? DEFAULT_PLOT;
+    this.incidentArcs = opts.incidentArcs ?? DEFAULT_ARCS;
+    this.minorConfig = opts.minorConfig ?? DEFAULT_MINOR;
+    this.trialComposeConfig = opts.trialComposeConfig ?? DEFAULT_TRIAL_COMPOSE;
+    this.threadCount = opts.threadCount ?? maxThreadIndex(world.plotThreads);
     // 村長 (§17): 復元時は world.mayorId を尊重し、未設定なら初回選挙で人気の村人を据える。
     if (world.mayorId === null && aliveVillagers(world).length > 0) {
       electMayor(world, this.mayorConfig);
@@ -416,6 +472,22 @@ export class TermMachine {
     return pruneExpiredPlaceStates(this.world);
   }
 
+  // --- 火種 (§v1.4-B PlotThread) --------------------------------------------------
+
+  /**
+   * 火種を 1 件足す (§v1.4-B)。sim 内の生成点 (判決/和解/偽予言) と server の生成点
+   * (推しの死/しきたり追加) の両方から呼ばれる。id は thread_N の通し番号。
+   */
+  addPlotThread(input: AddThreadInput): PlotThread {
+    this.threadCount += 1;
+    return addThread(this.world, input, `thread_${this.threadCount}`, this.plotConfig);
+  }
+
+  /** スナップショット保存用: 火種通し番号。 */
+  getThreadCount(): number {
+    return this.threadCount;
+  }
+
   // --- カードパック (§v1.3-A) ----------------------------------------------------
 
   /** 天災カード等の一時 BehaviorRule を村に足す (§v1.3-A ⑯)。TTL は rule.expiresAtTerm。 */
@@ -497,6 +569,8 @@ export class TermMachine {
    */
   falseProphecy(text?: string): number {
     const body = text && text.trim().length > 0 ? text.trim() : '村に災いが訪れるという不吉な予言を聞いた';
+    // 偽予言は村を覆う噂の火種 (§v1.4-B) になる。
+    this.addPlotThread({ kind: 'rumor', actors: [], heat: 0.5, note: `予言「${body}」が村をざわつかせている` });
     let n = 0;
     for (const v of aliveVillagers(this.world)) {
       this.rumorCount += 1;
@@ -659,15 +733,25 @@ export class TermMachine {
    * 月初: その月の事件発生日を世界側 LLM が 1 つ決める (§12.3.1)。worldBrain が無ければ null。
    * dayOfMonth は [1, daysInMonth] にクランプし scheduledIncident を設定する。
    */
-  async scheduleMonthlyIncident(): Promise<MonthlySchedule | null> {
+  async scheduleMonthlyIncident(): Promise<(MonthlySchedule & { arcNote?: string }) | null> {
     if (!this.worldBrain) return null;
     const cal = this.world.calendar;
-    const m = await this.worldBrain.scheduleMonthlyIncident({
+    // 事件アーク (§v1.4-B): 火種があれば派生表からテーマを選び、LLM には肉付けだけさせる。
+    const arcPick: ArcPick | null = pickArcTheme(this.world, this.incidentArcs, this.rng);
+    const ctx: Parameters<WorldBrain['scheduleMonthlyIncident']>[0] = {
       calendar: cal,
       reputation: this.world.reputation,
       villagers: aliveVillagers(this.world),
       villageRules: this.world.villageRules,
-    });
+    };
+    if (arcPick) {
+      ctx.arcHint = {
+        themeSeed: arcPick.themeSeed,
+        threadNote: arcPick.thread.note,
+        actorNames: arcPick.thread.actors.map((a) => a.name),
+      };
+    }
+    const m = await this.worldBrain.scheduleMonthlyIncident(ctx);
     const dayOfMonth = Math.min(cal.daysInMonth, Math.max(1, Math.round(m.dayOfMonth)));
     this.world.scheduledIncident = {
       dayOfMonth,
@@ -675,7 +759,9 @@ export class TermMachine {
       designed: false,
       fired: false,
       design: null,
+      ...(arcPick ? { arcThreadId: arcPick.thread.id } : {}),
     };
+    if (arcPick) return { dayOfMonth, themeSeed: m.themeSeed, arcNote: arcPick.thread.note };
     return { dayOfMonth, themeSeed: m.themeSeed };
   }
 
@@ -697,6 +783,7 @@ export class TermMachine {
       villageRules: this.world.villageRules,
       themeSeed: sched.themeSeed,
       survivingCulprits,
+      plotThreads: this.world.plotThreads,
     });
 
     // 事件用キャラを spawn して村に追加する。
@@ -836,6 +923,27 @@ export class TermMachine {
         actions.push({ villager: v0?.id ?? actor.id, action: `${v0?.name ?? '相手'}は慣れっこで受け流した` });
         return false;
       }
+      // 小騒動 (§v1.4-B): 日常由来の事件化の一部は裁判に至らない寸劇として即時決着する。
+      // 大事件 (月次) の谷を埋める山になり、遺恨が残れば火種 (rumor) が立つ。
+      // 扇動 (forceNext/forceFor) 由来はカルマを払った操作なのでフル事件へ直行させる。
+      const firstVictim = victimIds[0] ? this.world.villagers.get(victimIds[0]) : undefined;
+      if (!decision.forcedTrigger && firstVictim && this.rng() < this.minorConfig.minorChance) {
+        const minor = playMinorIncident(actor, firstVictim, this.rng, this.minorConfig);
+        for (const line of minor.lines) actions.push({ villager: actor.id, action: line });
+        if (minor.residue) {
+          this.addPlotThread({
+            kind: 'rumor',
+            actors: [
+              { id: actor.id, name: actor.name },
+              { id: firstVictim.id, name: firstVictim.name },
+            ],
+            heat: 0.4,
+            note: `${actor.name}と${firstVictim.name}の諍いがくすぶっている`,
+          });
+        }
+        heatThreadsInvolving(this.world, [actor.id, firstVictim.id], this.plotConfig);
+        return false;
+      }
       this.world.incident = this.startIncident(actor.id, seed);
       this.world.phase = 'sho';
       return true;
@@ -888,6 +996,8 @@ export class TermMachine {
         bumpEventParam(v, REACTION_EXPOSURE, 1);
       }
     }
+    // 関係者が絡む火種は加熱される (§v1.4-B)。
+    heatThreadsInvolving(this.world, [perpetrator, ...involved], this.plotConfig);
     const incident: Incident = {
       id: this.newIncidentId(),
       perpetrator,
@@ -948,6 +1058,19 @@ export class TermMachine {
     const chance = this.reconcileChance + this.reconcileBias - damageRatio * 0.1;
     if (incident.steps.length >= 1 && this.rng() < chance) {
       incident.resolved = true;
+      // 和解はめでたいが、くすぶる遺恨が火種 (§v1.4-B) として残る。
+      const perpName = this.world.villagers.get(incident.perpetrator)?.name ?? incident.perpetrator;
+      const v0 = incident.involved[0];
+      const v0v = v0 ? this.world.villagers.get(v0) : undefined;
+      this.addPlotThread({
+        kind: 'rumor',
+        actors: [
+          { id: incident.perpetrator, name: perpName },
+          ...(v0v ? [{ id: v0v.id, name: v0v.name }] : []),
+        ],
+        heat: 0.35,
+        note: `${perpName}の諍いは和解したが、遺恨がくすぶる`,
+      });
       this.world.incident = null;
       this.world.phase = 'kisho';
       return { outcome: 'reconciled', secondaryVictim };
@@ -966,7 +1089,7 @@ export class TermMachine {
 
   private openTrial(incident: Incident): TrialState {
     this.userVotes.clear();
-    return {
+    const trial: TrialState = {
       incidentId: incident.id,
       judge: { kind: 'nekomori' },
       candidates: [incident.perpetrator, ...incident.involved],
@@ -978,6 +1101,10 @@ export class TermMachine {
       votes: [],
       verdict: null,
     };
+    // 目撃者 (§v1.4-B witness): 開廷時に傍観者が証言し foolish 票へ重みを乗せる。
+    // 擦り付け (framed) があれば目撃者は framed を指し、冤罪に説得力が生まれる。
+    composeWitnesses(this.world, incident, trial, this.rng, this.trialComposeConfig);
+    return trial;
   }
 
   /**
@@ -1041,14 +1168,16 @@ export class TermMachine {
   }
 
   // --- 転: グループ bloc 投票 (1 グループ/ステップ) ---
-  async tenStep(): Promise<void> {
+  // 戻り値: 真犯人の発覚 (§v1.4-B reveal) が起きたらその内容 (server がログ)。
+  async tenStep(): Promise<{ reveal: RevealResult | null }> {
     if (this.world.phase !== 'ten' || !this.world.trial || !this.world.incident) {
       throw new Error(`tenStep without active trial (phase ${this.world.phase})`);
     }
     const trial = this.world.trial;
     const incident = this.world.incident;
+    let reveal: RevealResult | null = null;
     const axis = trial.pendingGroups.shift();
-    if (!axis) return; // 念のため (グループ無し)
+    if (!axis) return { reveal }; // 念のため (グループ無し)
     const voters = this.votersOf(axis);
 
     if (trial.stage === 'foolish') {
@@ -1078,6 +1207,8 @@ export class TermMachine {
         trial.defendant = this.argmaxCandidate(trial);
         trial.stage = 'fate';
         trial.pendingGroups = this.groupAxes();
+        // 真犯人の発覚 (§v1.4-B reveal): 冤罪被告が確定した瞬間、確率で逆転が起きる。
+        reveal = maybeReveal(this.world, incident, trial, this.rng, this.trialComposeConfig);
       }
     } else if (trial.stage === 'fate') {
       const defendant = this.get(trial.defendant as VillagerId);
@@ -1098,6 +1229,7 @@ export class TermMachine {
         this.world.phase = 'ketsu';
       }
     }
+    return { reveal };
   }
 
   /** 最多得票の候補 (同票は candidates の並び順で先勝ち)。 */
@@ -1127,6 +1259,8 @@ export class TermMachine {
       verdict: trial.verdict as Verdict,
       defendantId: trial.defendant as VillagerId,
     };
+    // 判決は次の火種 (§v1.4-B) を残す: 冤罪/遺恨/更生/偽証。アーク由来の事件は火種を回収する。
+    this.spawnVerdictThreads(trial, this.world.incident, defendant);
     if (trial.verdict === 'death') {
       // 殺す → 追放 (退場)。
       this.pendingReform = { kind: 'exile', villager: defendant.id, rationale: '村の投票により処刑された' };
@@ -1139,6 +1273,79 @@ export class TermMachine {
       });
     }
     this.world.phase = 'reform';
+  }
+
+  /**
+   * 判決が残す火種 (§v1.4-B)。ketsuStep から呼ぶ:
+   * - 冤罪死 (framed のまま処刑 + 真犯人生存) → 遺恨 + 未解決
+   * - 通常の死刑 → 配偶者がいれば遺恨、いなければ噂
+   * - 教育 (spared) → 更生 (再犯か模範かの分岐持ち)
+   * - 有罪証言つきで生き延びた → 偽証への遺恨
+   * また、この事件がアーク由来 (scheduledIncident.arcThreadId) なら火種を回収する。
+   */
+  private spawnVerdictThreads(trial: TrialState, incident: Incident, defendant: Villager): void {
+    const verdict = trial.verdict;
+    const framedConviction =
+      verdict === 'death' && incident.framedTargetId === defendant.id && (this.world.villagers.get(incident.perpetrator)?.alive ?? false);
+
+    if (framedConviction) {
+      const culprit = this.get(incident.perpetrator);
+      this.addPlotThread({
+        kind: 'grudge',
+        actors: [{ id: defendant.id, name: defendant.name }],
+        heat: 0.7,
+        note: `${defendant.name}は冤罪で処刑された`,
+      });
+      this.addPlotThread({
+        kind: 'unresolved',
+        actors: [{ id: culprit.id, name: culprit.name }],
+        heat: 0.6,
+        note: `真犯人の${culprit.name}は野放しのまま村に居座る`,
+      });
+    } else if (verdict === 'death') {
+      const partner = defendant.partnerId ? this.world.villagers.get(defendant.partnerId) : undefined;
+      if (partner?.alive) {
+        this.addPlotThread({
+          kind: 'grudge',
+          actors: [
+            { id: partner.id, name: partner.name },
+            { id: defendant.id, name: defendant.name },
+          ],
+          heat: 0.5,
+          note: `${partner.name}は${defendant.name}の処刑を忘れない`,
+        });
+      } else {
+        this.addPlotThread({
+          kind: 'rumor',
+          actors: [{ id: defendant.id, name: defendant.name }],
+          heat: 0.3,
+          note: `${defendant.name}の処刑の噂がささやかれる`,
+        });
+      }
+    } else if (verdict === 'spared') {
+      this.addPlotThread({
+        kind: 'redemption',
+        actors: [{ id: defendant.id, name: defendant.name }],
+        heat: 0.5,
+        note: `${defendant.name}は教育で作り替えられた — 再犯か、模範か`,
+      });
+      // 有罪証言 (§v1.4-A testify accuse) を受けて生き延びた → 偽証への遺恨。
+      if (trial.testimonies?.some((t) => t.stance === 'accuse')) {
+        this.addPlotThread({
+          kind: 'grudge',
+          actors: [{ id: defendant.id, name: defendant.name }],
+          heat: 0.5,
+          note: `${defendant.name}は法廷で偽証された恨みを抱えている`,
+        });
+      }
+    }
+
+    // アーク由来の事件 (§v1.4-B): 拾った火種は裁判の決着で回収される。
+    const sched = this.world.scheduledIncident;
+    if (incident.origin === 'designed' && sched?.arcThreadId) {
+      resolveThread(this.world, sched.arcThreadId);
+      delete sched.arcThreadId;
+    }
   }
 
   /** 結の保留中の改変を適用し、その日の残りセグメントへ復帰 (起)。改変内容を要約で返す。 */
@@ -1329,9 +1536,11 @@ export class TermMachine {
       cal.season = season(cal.month);
     }
     this.world.phase = 'idle';
+    // 火種 (§v1.4-B) は日末に減衰し、冷え切ったものは消える。
+    const burntThreads = decayThreads(this.world, this.plotConfig);
     // 村長選挙 (§17): 補欠/通常選挙・世論調査更新を日末に進める。
     const mayor = tickMayor(this.world, this.mayorConfig);
-    return { monthRolled, holiday: holidayName(cal.year, cal.month, cal.dayOfMonth), mayor };
+    return { monthRolled, burntThreads, holiday: holidayName(cal.year, cal.month, cal.dayOfMonth), mayor };
   }
 
   /** 村長リコールを判定する (§17)。server の recallMayor コマンドから呼ぶ。 */

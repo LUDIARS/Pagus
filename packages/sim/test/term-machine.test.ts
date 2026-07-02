@@ -20,7 +20,8 @@ describe('TermMachine 起承転結 (セグメント駆動)', () => {
     const world = twoAnimalWorld();
     // 日常エンジン (LLM 非依存) が 1 行動目で事件化するよう dailyTriggerAfter:1。
     // 承の被害量は StubBrain.advanceIncident (damagePerStep) が決める。
-    const tm = new TermMachine(world, new StubBrain({ damagePerStep: 4 }), { dailyTriggerAfter: 1 });
+    // 起承転結の一巡を検証する: 小騒動 (§v1.4-B) は無効化。
+    const tm = new TermMachine(world, new StubBrain({ damagePerStep: 4 }), { dailyTriggerAfter: 1, minorConfig: { minorChance: 0, minorResidueChance: 0 } });
 
     tm.startDay();
     expect(world.phase).toBe('kisho');

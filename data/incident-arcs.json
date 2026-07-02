@@ -1,0 +1,82 @@
+[
+  {
+    "when": {
+      "threadKind": "grudge",
+      "heatAbove": 0.35
+    },
+    "themes": [
+      {
+        "seed": "遺恨の復讐",
+        "weight": 3
+      },
+      {
+        "seed": "決闘の申し込み",
+        "weight": 1
+      }
+    ]
+  },
+  {
+    "when": {
+      "threadKind": "unresolved",
+      "heatAbove": 0.25
+    },
+    "themes": [
+      {
+        "seed": "連続犯の再犯",
+        "weight": 3
+      },
+      {
+        "seed": "真犯人の影がちらつく",
+        "weight": 2
+      }
+    ]
+  },
+  {
+    "when": {
+      "threadKind": "redemption",
+      "heatAbove": 0.35
+    },
+    "themes": [
+      {
+        "seed": "更生者の再犯疑惑",
+        "weight": 2
+      },
+      {
+        "seed": "模範者への嫉妬",
+        "weight": 2
+      }
+    ]
+  },
+  {
+    "when": {
+      "threadKind": "rumor",
+      "heatAbove": 0.45
+    },
+    "themes": [
+      {
+        "seed": "亡霊騒ぎ",
+        "weight": 2
+      },
+      {
+        "seed": "噂が現実になる騒動",
+        "weight": 2
+      }
+    ]
+  },
+  {
+    "when": {
+      "threadKind": "ruleViolation",
+      "heatAbove": 0.25,
+      "reputationAbove": {
+        "axis": "order",
+        "value": 0.4
+      }
+    },
+    "themes": [
+      {
+        "seed": "しきたり破りの告発",
+        "weight": 3
+      }
+    ]
+  }
+]

@@ -7,7 +7,7 @@
 // PAGUS_BRAIN (stub|llm の起動モード) / PAGUS_DATA_DIR (config 自体の置き場を解決するため)。
 
 import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem } from '@pagus/sim';
-import { loadConfig, loadSeed } from './load-data.js';
+import { loadConfig, loadSeed, loadIncidentArcs } from './load-data.js';
 import { loadPagusConfig, type PagusConfig } from './config/pagus-config.js';
 import { TermLoop } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
@@ -133,6 +133,9 @@ function main(): void {
   }
   const villagers = [...world.villagers.values()];
 
+  // 事件アークの派生表 (§v1.4-B)。data/incident-arcs.json があれば注入 (無ければ組込み既定)。
+  const incidentArcs = loadIncidentArcs();
+
   // LLM コストログ (§7)。llm モードのみ計上 (stub は costSink を呼ばない)。
   // コスト計上時に sysStatus を速やかに反映する (§2.3 イベント駆動)。実体は後で差し込む。
   const costLog = new CostLog();
@@ -163,6 +166,22 @@ function main(): void {
       spotAnger: cfg.intervene.spotAnger,
       spotJoy: cfg.intervene.spotJoy,
     },
+    // 事件アーク (§v1.4-B): 火種/小騒動/裁判バリエーションのチューニングと派生表。
+    plotConfig: {
+      threadsMax: cfg.arc.threadsMax,
+      heatDecay: cfg.arc.heatDecay,
+      heatOnIncident: cfg.arc.heatOnIncident,
+    },
+    minorConfig: {
+      minorChance: cfg.arc.minorChance,
+      minorResidueChance: cfg.arc.minorResidueChance,
+    },
+    trialComposeConfig: {
+      witnessMax: cfg.arc.witnessMax,
+      witnessWeight: cfg.arc.witnessWeight,
+      revealChance: cfg.arc.revealChance,
+    },
+    ...(incidentArcs ? { incidentArcs } : {}),
     bornCount: restored?.bornCount ?? 0, // 出生 id の通し番号を引き継ぐ
     incidentCount: restored?.incidentCount ?? 0, // 事件用キャラ id の通し番号を引き継ぐ
     ruleCount: restored?.ruleCount ?? 0, // ふるまいの法則 id の通し番号を引き継ぐ
@@ -421,7 +440,8 @@ function main(): void {
         pushState(uid);
       }
       scheduleLeaderboard();
-      // 弔い (legacy): 死を村のしきたりとして残す (上限内なら)。
+      // 弔い (legacy): 死を村のしきたりとして残す (上限内なら) + 遺恨の火種 (§v1.4-B)。
+      tm.addPlotThread({ kind: 'grudge', actors: [{ id, name }], heat: 0.5, note: `推されていた${name}の死を悼む声が消えない` });
       const rule = addVillageRule(w, `「${name}」の名をみだりに口にしてはならない`, VILLAGE_RULES_MAX);
       if (rule) {
         chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `🕯 弔い: ${name} を悼む掟が生まれた`, 'rule');
@@ -729,6 +749,8 @@ function main(): void {
       }
       // 上限は直前に確認済 → maxRules を渡さず必ず追加 (同期処理なので競合なし)。
       addVillageRule(tm.world, trimmed);
+      // 新しいしきたりは破られる火種 (§v1.4-B) になる。
+      tm.addPlotThread({ kind: 'ruleViolation', actors: [], heat: 0.4, note: `新しい掟「${trimmed}」を破る者が出るかもしれない` });
       ps.bumpStat(userId, 'rulesAdded'); // 実績 (§4.1)
       const cal = tm.world.calendar;
       chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `📜 しきたり: 「${trimmed}」が定められた`, 'rule');

@@ -87,6 +87,15 @@ Shadow replay ゲート: 過去の乖離ケースに新ルールを再適用し�
 
 ## 2. 論点② ゲーム進行 — 事件アーク (派生グラフ) と小騒動
 
+> **v1.4-B 実装済 (2026-07-02)**。実装マップ: PlotThread = `sim/plot-threads.ts` + `World.plotThreads`
+> (生成点: 判決 (冤罪/遺恨/更生/偽証) = `term-machine.spawnVerdictThreads` / 和解 / 偽予言 / 小騒動の遺恨 /
+> しきたり追加・推しの死 = server hook)、派生表 = `sim/incident-arc.ts` + `data/incident-arcs.json`
+> (月初 `scheduleMonthlyIncident` が arcHint として LLM/stub へ注入、決着で火種回収)、
+> 小騒動 = `sim/minor-incident.ts` (扇動由来はバイパスしフル事件へ直行)、
+> 裁判バリエーション = `sim/trial-composer.ts` (witness=目撃者票 / reveal=真犯人発覚の被告差し替え)。
+> 観測 = 右パネル「火種」一覧 + live feed (🧵/👁/🔦/〽)。
+> **連座 (被告2体) は見送り**: TrialState.defendant 単数の破壊的変更を伴うため、需要を観戦で確かめてから (§9)。
+
 ### 2.1 現状評価 — 単調さの根因
 
 1. **1 話完結**: designed 事件 (`scheduleMonthlyIncident` → `designIncident` → `fireScheduledIncident`) は裁判で必ず精算され、翌月の入力に渡るのは連続犯の生存だけ。「前の事件があの結末だったから今度はこうなる」という因果の見え方がない。

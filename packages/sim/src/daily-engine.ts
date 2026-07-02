@@ -111,7 +111,8 @@ export class DailyEngine {
     const threshold = Math.max(1, this.triggerAfter - exposure - ruleTriggerWeight - this.surgeBonus);
     // 対象指定扇動: この個体が指名されていれば即事件化を促す。
     const targeted = this.forcedTargetId === villager.id;
-    const trigger = hasNeighbor && (this.forced || targeted || this.actionCount >= threshold);
+    const forcedTrigger = hasNeighbor && (this.forced || targeted);
+    const trigger = forcedTrigger || (hasNeighbor && this.actionCount >= threshold);
     if (trigger) {
       this.forced = false;
       if (targeted) this.forcedTargetId = null;
@@ -129,6 +130,8 @@ export class DailyEngine {
             involved: env.nearby.map((n) => n.id),
           }
         : null,
+      // 扇動由来の事件化は小騒動 (§v1.4-B) に流さない。
+      ...(forcedTrigger ? { forcedTrigger: true } : {}),
     };
   }
 

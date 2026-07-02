@@ -146,7 +146,8 @@ export class StubWorldBrain implements WorldBrain {
 
   /** 月初: 発生日を月の半ば (15日 or 月末) に固定する (決定的, §12.3.1)。 */
   async scheduleMonthlyIncident(ctx: MonthlyScheduleContext): Promise<MonthlySchedule> {
-    return { dayOfMonth: Math.min(15, ctx.calendar.daysInMonth), themeSeed: 'いさかい' };
+    // 火種由来のテーマヒント (§v1.4-B) があればそれを採用 (決定的)。
+    return { dayOfMonth: Math.min(15, ctx.calendar.daysInMonth), themeSeed: ctx.arcHint?.themeSeed ?? 'いさかい' };
   }
 
   /** 前日: 余所者 (狐) を加害者に立て、先頭の既存住民 1 体を巻き込む (決定的, §12.3.2)。 */

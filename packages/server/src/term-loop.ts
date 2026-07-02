@@ -160,14 +160,23 @@ export class TermLoop {
           this.h.onLog('kisho', '🕊 和解した — 事件は裁判にならず収まった');
         } else if (this.tm.world.phase === 'ten') {
           this.h.onLog('ten', '—— 審判の時 ——');
+          // 目撃者 (§v1.4-B witness): 開廷時の証言をログに出す。
+          for (const wit of this.tm.world.trial?.witnesses ?? []) {
+            this.h.onLog('ten', `👁 目撃者 ${wit.name}「${wit.line}」`);
+          }
           this.h.onTrialOpen?.(this.tm.world);
         }
         break;
       }
-      case 'ten':
-        await this.tm.tenStep();
+      case 'ten': {
+        const r = await this.tm.tenStep();
+        // 真犯人の発覚 (§v1.4-B reveal): 冤罪被告が差し替わる逆転をログに出す。
+        if (r.reveal) {
+          this.h.onLog('ten', `🔦 逆転: 真犯人は ${r.reveal.toName} だった！ ${r.reveal.fromName} は解放された`);
+        }
         if (this.tm.world.phase === 'ketsu') this.h.onLog('ketsu', `判決: ${w.trial?.verdict ?? ''}`);
         break;
+      }
       case 'ketsu':
         await this.tm.ketsuStep();
         break;
@@ -202,6 +211,8 @@ export class TermLoop {
           const m = await this.tm.scheduleMonthlyIncident();
           if (m) {
             this.h.onLog('kisho', `📅 今月の事件予定: ${m.dayOfMonth}日`);
+            // 事件アーク (§v1.4-B): 火種由来のテーマが選ばれたら明示する。
+            if (m.arcNote) this.h.onLog('kisho', `🧵 火種が芽吹く: ${m.arcNote} → 「${m.themeSeed}」`);
             if (m.dayOfMonth <= 1) await this.designScheduled();
           }
         }
