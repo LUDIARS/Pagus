@@ -58,6 +58,23 @@ export class VillageStatus {
     }
   }
 
+  /** 火種 (§v1.4-B): くすぶる遺恨/未解決/噂を一覧して「次に何が起きそうか」を見せる。 */
+  private renderThreads(w: WireWorld): void {
+    const threads = w.plotThreads ?? [];
+    if (threads.length === 0) return;
+    this.root.appendChild(h('div', '火種 (くすぶる物語)', 'sub'));
+    const icon: Record<string, string> = {
+      grudge: '💢',
+      unresolved: '🕵',
+      redemption: '🕊',
+      rumor: '💬',
+      ruleViolation: '📜',
+    };
+    for (const t of [...threads].sort((a, b) => b.heat - a.heat).slice(0, 5)) {
+      this.root.appendChild(row(`${icon[t.kind] ?? '🧵'} ${t.note.slice(0, 18)}${t.note.length > 18 ? '…' : ''}`, `🔥${Math.round(t.heat * 100)}`));
+    }
+  }
+
   private render(): void {
     this.root.replaceChildren();
     this.root.appendChild(row('👥 接続プレイヤー', `${this.players} 人`));
@@ -74,6 +91,7 @@ export class VillageStatus {
     }
 
     this.renderEconomy(w);
+    this.renderThreads(w);
 
     this.root.appendChild(h('div', '裁判 / 投票結果', 'sub'));
     const t = w.trial;

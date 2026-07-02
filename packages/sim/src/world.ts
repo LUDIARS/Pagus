@@ -54,6 +54,7 @@ export function createWorld(
     behaviorRules,
     items: [],
     placeStates: [],
+    plotThreads: [],
     mayorId: null,
     mayorTermsLeft: 0,
     mayorPoll: null,

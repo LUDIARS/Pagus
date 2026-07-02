@@ -46,6 +46,11 @@ export interface ActionDecision {
   triggersIncident: boolean;
   /** 事件化する場合の種。 */
   incidentSeed: { description: string; involved: string[] } | null;
+  /**
+   * 事件化がプレイヤーの扇動 (forceNext/forceFor) 由来か (§v1.4-B)。
+   * 扇動はカルマを払った操作なので小騒動に流さずフル事件へ直行させる。
+   */
+  forcedTrigger?: boolean;
 }
 
 // --- 感情の初期化/更新 ---

@@ -1,4 +1,5 @@
 import type { Villager, VillagerId, ActivityPattern, GridPos } from './villager.js';
+import type { PlotThread } from './plot.js';
 import type { Incident } from './incident.js';
 import type { TrialState } from './trial.js';
 import type { VirtueVector } from '../virtue.js';
@@ -89,6 +90,8 @@ export interface ScheduledIncident {
   fired: boolean;
   /** designed=true 後に確定する詳細デザイン (未デザインなら null)。 */
   design: IncidentDesign | null;
+  /** このスケジュールが拾った火種 id (§v1.4-B)。裁判決着で回収する。無ければ自由テーマ。 */
+  arcThreadId?: string;
 }
 
 /** 村のしきたり (§12.8.1)。適当に用意され、事件の火種になる。 */
@@ -180,6 +183,8 @@ export interface World {
   items: FieldItem[];
   /** 場所の状態 (§v1.4-A' spot)。プレイヤーが場所を荒らす/清めると数日残り、日常行動に効く。 */
   placeStates: PlaceStateEntry[];
+  /** 火種 (§v1.4-B PlotThread)。事件の結末が残す持ち越し状態。日末に減衰。 */
+  plotThreads: PlotThread[];
   /** 現村長の villager id (§17)。選挙イベントで村人世論により決まる。空位は null。 */
   mayorId: VillagerId | null;
   /** 次の村長選挙までの残りターム数 (§17)。 */

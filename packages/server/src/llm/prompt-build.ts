@@ -284,6 +284,11 @@ export function buildSchedulePrompt(ctx: MonthlyScheduleContext): PromptParts {
     `村の評判: ${repLine}\n` +
     `住民 (${ctx.villagers.length}体): ${names || 'なし'}\n` +
     `村のしきたり:\n${rulesBlock(ctx.villageRules)}\n` +
+    // 事件アーク (§v1.4-B): 火種由来のヒントがあればテーマの種はそれを必ず採用させる。
+    (ctx.arcHint
+      ? `くすぶる火種: ${ctx.arcHint.threadNote} (関係者: ${ctx.arcHint.actorNames.join('・') || 'なし'})\n` +
+        `themeSeed は必ず「${ctx.arcHint.themeSeed}」を使い、この火種の続きとして設計せよ。\n`
+      : '') +
     'この月の事件の発生日とテーマの種を JSON で返せ。';
   return partsFromSegments('world', [
     { stability: 'fixed', role: 'system', text: sys },
@@ -323,6 +328,8 @@ export function buildDesignPrompt(ctx: IncidentDesignContext): PromptParts {
     `既存住民:\n${ctx.villagers.map(villagerLine).join('\n') || '(なし)'}\n` +
     `村のしきたり:\n${rulesBlock(ctx.villageRules)}\n` +
     `居座る過去の事件犯 (連続犯の継続入力):\n${culprits}\n` +
+    // 火種 (§v1.4-B): 事件デザインの文脈として渡す (どう拾うかは LLM の裁量)。
+    `くすぶる火種:\n${ctx.plotThreads.map((t) => `- [${t.kind}] ${t.note} (熱${t.heat.toFixed(2)})`).join('\n') || '(なし)'}\n` +
     '明日の事件の詳細デザインを JSON で返せ。';
   return partsFromSegments('world', [
     { stability: 'fixed', role: 'system', text: sys },

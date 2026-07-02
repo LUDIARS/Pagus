@@ -66,6 +66,16 @@
     "spotJoy": 0.15,
     "fanFlamesCost": 10
   },
+  "arc": {
+    "threadsMax": 8,
+    "heatDecay": 0.05,
+    "heatOnIncident": 0.2,
+    "minorChance": 0.25,
+    "minorResidueChance": 0.5,
+    "witnessMax": 2,
+    "witnessWeight": 2,
+    "revealChance": 0.25
+  },
   "politics": {
     "revoltThreshold": 0.7,
     "martialDays": 2,

@@ -128,6 +128,26 @@ export interface InterveneConfig {
   fanFlamesCost: number;
 }
 
+/** 事件アーク (§v1.4-B 火種/小騒動/裁判バリエーション). */
+export interface ArcConfig {
+  /** 火種の上限. */
+  threadsMax: number;
+  /** 火種の日末減衰量. */
+  heatDecay: number;
+  /** 関係者が事件に絡んだときの加熱量. */
+  heatOnIncident: number;
+  /** organic 事件化を小騒動に流す確率. */
+  minorChance: number;
+  /** 小騒動が火種を残す確率. */
+  minorResidueChance: number;
+  /** 開廷時の目撃者の最大数. */
+  witnessMax: number;
+  /** 目撃者 1 人の foolish 票の重み. */
+  witnessWeight: number;
+  /** 冤罪被告の fate 段階で真犯人が発覚する確率. */
+  revealChance: number;
+}
+
 /** 政治パック (§v1.3-C). */
 export interface PoliticsConfig {
   revoltThreshold: number; // PAGUS_REVOLT_THRESHOLD
@@ -198,6 +218,7 @@ export interface PagusConfig {
   cards: CardsConfig;
   economy: EconomyConfig;
   intervene: InterveneConfig;
+  arc: ArcConfig;
   politics: PoliticsConfig;
   spectacle: SpectacleConfig;
   llm: LlmConfig;
@@ -268,6 +289,16 @@ export const DEFAULT_CONFIG: PagusConfig = {
     spotAnger: 0.15,
     spotJoy: 0.15,
     fanFlamesCost: 10,
+  },
+  arc: {
+    threadsMax: 8,
+    heatDecay: 0.05,
+    heatOnIncident: 0.2,
+    minorChance: 0.25,
+    minorResidueChance: 0.5,
+    witnessMax: 2,
+    witnessWeight: 2,
+    revealChance: 0.25,
   },
   politics: {
     revoltThreshold: 0.7,

@@ -1,7 +1,7 @@
 // WS 配線契約。World は Map を持ち JSON 化できないので、villagers を配列にした
 // WireWorld を介して server→client へ送る。client もこの型だけ見れば描画できる。
 
-import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll, PlaceStateEntry } from './types/index.js';
+import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll, PlaceStateEntry, PlotThread } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 import { defaultBehaviorRules, type BehaviorRule } from './behavior-rules.js';
 
@@ -21,6 +21,8 @@ export interface WireWorld {
   items: FieldItem[];
   /** 場所の状態 (§v1.4-A' spot)。 */
   placeStates: PlaceStateEntry[];
+  /** 火種 (§v1.4-B)。 */
+  plotThreads: PlotThread[];
   /** 現村長の villager id (§17)。空位は null。 */
   mayorId: string | null;
   /** 次の村長選挙までの残りターム数 (§17)。 */
@@ -46,6 +48,7 @@ export function toWire(world: World): WireWorld {
     behaviorRules: world.behaviorRules,
     items: world.items,
     placeStates: world.placeStates,
+    plotThreads: world.plotThreads,
     mayorId: world.mayorId,
     mayorTermsLeft: world.mayorTermsLeft,
     mayorPoll: world.mayorPoll,
@@ -71,6 +74,7 @@ export function fromWire(wire: WireWorld): World {
     behaviorRules: wire.behaviorRules ?? defaultBehaviorRules(),
     items: wire.items ?? [],
     placeStates: wire.placeStates ?? [],
+    plotThreads: wire.plotThreads ?? [],
     mayorId: wire.mayorId ?? null,
     mayorTermsLeft: wire.mayorTermsLeft ?? 0,
     mayorPoll: wire.mayorPoll ?? null,

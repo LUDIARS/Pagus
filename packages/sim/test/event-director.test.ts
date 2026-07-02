@@ -42,7 +42,8 @@ describe('EventDirector', () => {
   it('director 駆動 kishoTick は嫌がらせで事件を発火する', async () => {
     const w = world();
     const dir = new EventDirector({ rng: () => 0, maxRepsPerSegment: 1 });
-    const tm = new TermMachine(w, new StubBrain(), { director: dir });
+    // 事件発火そのものを検証する: 小騒動 (§v1.4-B) は無効化。
+    const tm = new TermMachine(w, new StubBrain(), { director: dir, minorConfig: { minorChance: 0, minorResidueChance: 0 } });
     tm.startDay();
     const r = await tm.kishoTick();
     expect(r.incidentStarted).toBe(true);
