@@ -199,16 +199,37 @@ export function buildFoolishPrompt(ctx: FoolishVoteContext): PromptParts {
   ]);
 }
 
-export function buildFatePrompt(ctx: FateVoteContext): PromptParts {
+/** 判例化 (blackbox) 用の追加文脈。features は fate-blackbox.fateFeatures と同じ map。 */
+export interface FateRuleHint {
+  features: Record<string, string | number | boolean>;
+  retiredRules: Array<{ description: string; whenText: string }>;
+}
+
+export function buildFatePrompt(ctx: FateVoteContext, ruleHint?: FateRuleHint): PromptParts {
+  const ruleSys = ruleHint
+    ? '\nさらに、この量刑判断が特徴量の単純な条件で再現できるなら proposedRule に「判例」を書け:\n' +
+      '{"verdict": ..., "confidence": 0.0-1.0, "rationale": "一言",\n' +
+      ' "proposedRule": {"description":"判例の説明","when":{"op":"and","clauses":[{"op":"cmp","feature":"axis","cmp":"==","value":"aggression"},{"op":"cmp","feature":"damage","cmp":">=","value":30}]},"output":{"verdict":"kill"},"confidence":0.8}}\n' +
+      '使える feature: axis(グループ軸), damage(被害量), involvedCount, reformCount, madman, scummy, stress, dominantTrait(被告の最強気質), aggression, kindness。\n' +
+      'proposedRule は自信が無ければ省略可。'
+    : '';
   const sys =
     'あなたは裁判で 1 つの性格グループを代表して投票する。\n' +
     '被告を「殺す(kill)」か「活かす(spare→教育)」かを決める。\n' +
     '出力スキーマ: {"verdict": "kill" | "spare"}。' +
+    ruleSys +
     JSON_ONLY;
+  const hintUser = ruleHint
+    ? `特徴量: ${JSON.stringify(ruleHint.features)}\n` +
+      (ruleHint.retiredRules.length
+        ? `撤回済み判例 (同じ提案はしないこと): ${ruleHint.retiredRules.map((r) => `${r.description}[${r.whenText}]`).join(' / ')}\n`
+        : '')
+    : '';
   const user =
     `グループの軸: ${PERSONALITY_LABELS[ctx.axis]} (${ctx.axis})\n` +
     `事件: ${ctx.incident.description}\n` +
     `被告:\n${villagerBrief(ctx.defendant)}\n` +
+    hintUser +
     'このグループの価値観で kill / spare を JSON で返せ。';
   return partsFromSegments('fate', [
     { stability: 'fixed', role: 'system', text: sys },
