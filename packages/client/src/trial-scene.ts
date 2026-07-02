@@ -84,8 +84,18 @@ export class TrialScene {
   playerSay(side: 'guilty' | 'innocent'): void {
     const pool = side === 'guilty' ? TAUNTS : DEFENSES;
     const text = pool[Math.floor(Math.random() * pool.length)] ?? '…';
+    this.showPlayerBubble(`あなた「${text}」`, side);
+  }
+
+  /** プレイヤーの証言 (§v1.4-A) を画面下部中央に表示する。text 無しは定型文。 */
+  testifySay(stance: 'accuse' | 'defend', text?: string): void {
+    const fallback = stance === 'accuse' ? 'わたしは見た。あいつがやったんだ！' : 'あの子はそんなことをする子じゃない！';
+    this.showPlayerBubble(`証言「${text ?? fallback}」`, stance === 'accuse' ? 'guilty' : 'innocent');
+  }
+
+  private showPlayerBubble(line: string, side: 'guilty' | 'innocent'): void {
     if (this.playerBubble) this.playerBubble.destroy();
-    const b = new AnimatedBubble(`あなた「${text}」`, 'angry', 1700, PLAYER_COLORS[side]);
+    const b = new AnimatedBubble(line, 'angry', 1700, PLAYER_COLORS[side]);
     b.node.x = this.w / 2;
     b.node.y = this.h * 0.96;
     this.root.addChild(b.node);

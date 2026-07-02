@@ -96,6 +96,28 @@ export interface EconomyConfig {
   topupPacks: number[];
 }
 
+/** 即効介入 (§v1.4-A 野次/証言/差し入れ). */
+export interface InterveneConfig {
+  /** 野次のカルマコスト. */
+  heckleCost: number;
+  /** 野次の連打クールダウン ms. */
+  heckleCooldownMs: number;
+  /** 野次 (agitate) 1 回の被害加算. */
+  heckleDamage: number;
+  /** 野次 1 回が動かす和解バイアス量. */
+  heckleBias: number;
+  /** 証言のカルマコスト. */
+  testifyCost: number;
+  /** 差し入れ (treat) のカルマコスト. */
+  giftTreatCost: number;
+  /** 毒饅頭 (poison) のカルマコスト. */
+  giftPoisonCost: number;
+  /** 差し入れの所持金増. */
+  giftTreatWealth: number;
+  /** 差し入れの喜び増 (-1..1 クランプ). */
+  giftTreatJoy: number;
+}
+
 /** 政治パック (§v1.3-C). */
 export interface PoliticsConfig {
   revoltThreshold: number; // PAGUS_REVOLT_THRESHOLD
@@ -165,6 +187,7 @@ export interface PagusConfig {
   karma: KarmaConfig;
   cards: CardsConfig;
   economy: EconomyConfig;
+  intervene: InterveneConfig;
   politics: PoliticsConfig;
   spectacle: SpectacleConfig;
   llm: LlmConfig;
@@ -219,6 +242,17 @@ export const DEFAULT_CONFIG: PagusConfig = {
     ruleRemoveCost: 25,
     villageRulesMax: 12,
     topupPacks: [100, 500, 1000],
+  },
+  intervene: {
+    heckleCost: 3,
+    heckleCooldownMs: 10000,
+    heckleDamage: 1,
+    heckleBias: 0.08,
+    testifyCost: 8,
+    giftTreatCost: 5,
+    giftPoisonCost: 15,
+    giftTreatWealth: 25,
+    giftTreatJoy: 0.2,
   },
   politics: {
     revoltThreshold: 0.7,

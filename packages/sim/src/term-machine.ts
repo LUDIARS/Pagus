@@ -17,9 +17,22 @@ import {
   resolveItemKind,
   applyItemEffect,
   collectItems as collectFieldItems,
+  stepItemPickups,
   type ItemKindChoice,
   type ItemPickup,
 } from './items.js';
+import {
+  heckleIncident,
+  testifyInTrial,
+  giveGift as giveGiftFn,
+  DEFAULT_INTERVENTION,
+  type InterventionConfig,
+  type HeckleSide,
+  type HeckleResult,
+  type TestifyOutcome,
+  type GiftKind,
+  type GiftResult,
+} from './interventions.js';
 import type { FieldItem, FieldItemKind } from './types/index.js';
 import {
   tickMayor,
@@ -98,6 +111,8 @@ export interface TermMachineOptions {
   martialSurgeBonus?: number;
   /** 村長選挙 (§17) のチューニング。省略時は DEFAULT_MAYOR。 */
   mayorConfig?: MayorConfig;
+  /** 即効介入 (§v1.4-A 野次/証言/差し入れ) のチューニング。省略時は DEFAULT_INTERVENTION。 */
+  interveneConfig?: InterventionConfig;
 }
 
 /** 日末の生活イベント (結婚/出産)。server がログ表示する。 */
@@ -168,6 +183,8 @@ export class TermMachine {
   private readonly martialSurgeBonus: number;
   /** 村長選挙 (§17) のチューニング。 */
   private readonly mayorConfig: MayorConfig;
+  /** 即効介入 (§v1.4-A) のチューニング。 */
+  private readonly interveneConfig: InterventionConfig;
   /** その日の裁判結末。applyReform が incident/trial を null にする前に ketsuStep で捕捉する。 */
   private dayOutcome: { incident: Incident; verdict: Verdict; defendantId: VillagerId } | null = null;
 
@@ -197,6 +214,7 @@ export class TermMachine {
     this.rulesMax = opts.rulesMax ?? 40;
     this.martialSurgeBonus = opts.martialSurgeBonus ?? 4;
     this.mayorConfig = opts.mayorConfig ?? DEFAULT_MAYOR;
+    this.interveneConfig = opts.interveneConfig ?? DEFAULT_INTERVENTION;
     // 村長 (§17): 復元時は world.mayorId を尊重し、未設定なら初回選挙で人気の村人を据える。
     if (world.mayorId === null && aliveVillagers(world).length > 0) {
       electMayor(world, this.mayorConfig);
@@ -333,6 +351,37 @@ export class TermMachine {
       votes: [],
       verdict: null,
     };
+  }
+
+  // --- 即効介入 (§v1.4-A 野次/証言/差し入れ) --------------------------------------
+
+  /**
+   * 野次 (§v1.4-A)。進行中の事件 (承) 限定。agitate=被害を即加算し和解しにくく、
+   * soothe=和解しやすくする。当事者へ HECKLED_TAG が残る。事件中でなければ null。
+   */
+  heckle(side: HeckleSide): HeckleResult | null {
+    if (this.world.phase !== 'sho' || !this.world.incident) return null;
+    const r = heckleIncident(this.world, this.world.incident, side, this.interveneConfig);
+    this.reconcileBias = Math.min(0.5, Math.max(-0.5, this.reconcileBias + r.biasDelta));
+    return r;
+  }
+
+  /**
+   * 証言の投げ込み (§v1.4-A)。裁判の運命 (fate) 段階に 1 グループ分の重みで票を上乗せする。
+   * 1 ユーザ 1 裁判 1 回。裁判が無ければ不成立を返す。
+   */
+  testify(userId: string, stance: 'accuse' | 'defend', text?: string): TestifyOutcome {
+    const trial = this.world.trial;
+    if (!trial || this.world.phase !== 'ten') return { ok: false, reason: '証言できる裁判が開いていない' };
+    return testifyInTrial(this.world, trial, userId, stance, text);
+  }
+
+  /**
+   * 贈り物の手渡し (§v1.4-A)。treat=差し入れ (喜び+富) / poison=毒饅頭 (薬物と同じ荒れ方)。
+   * 対象が不在/退場なら null。
+   */
+  giveGift(targetId: VillagerId, kind: GiftKind): GiftResult | null {
+    return giveGiftFn(this.world, targetId, kind, this.interveneConfig);
   }
 
   // --- カードパック (§v1.3-A) ----------------------------------------------------
@@ -1153,9 +1202,17 @@ export class TermMachine {
     return { kind, name: v.name };
   }
 
-  /** 日末: フィールド上のアイテムを最寄りの住民が拾う (§16)。 */
+  /** 日末: フィールド上のアイテムを最寄りの住民が拾う (§16, 取り残しの掃除)。 */
   collectItems(): ItemPickup[] {
     return collectFieldItems(this.world);
+  }
+
+  /**
+   * セグメントごとのアイテム回収 (§v1.4-A 体感即時化)。最寄りの起きている住民が
+   * 1 歩ずつ取りに歩き、手が届いたら拾う。server が kisho の各 tick で呼ぶ。
+   */
+  tickItems(): ItemPickup[] {
+    return stepItemPickups(this.world);
   }
 
   /** 日末の生活イベント (結婚/出産)。確率は option 既定 0 (= テスト不変)。 */

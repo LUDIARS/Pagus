@@ -11,6 +11,8 @@ import { LlmPanel } from './llm-panel.js';
 import { ChronicleView } from './chronicle-view.js';
 import { StatusPanel } from './status-panel.js';
 import { PlayerControls, type ActionType } from './player-controls.js';
+import { HeckleButtons } from './heckle-buttons.js';
+import { TestifyPanel } from './testify-panel.js';
 import { CardPanel } from './card-panel.js';
 import { EconomyPanel } from './economy-panel.js';
 import { GovernancePanel } from './governance-panel.js';
@@ -90,6 +92,23 @@ async function main(): Promise<void> {
       conn.send({ t: 'champion', targetId, userId });
       stage.reactToAction(targetId, 'champion');
     },
+    // 贈り物 (§v1.4-A): 差し入れ/毒饅頭を手渡す。
+    onGift: (targetId, kind) => {
+      conn.send({ t: 'gift', targetId, kind, userId });
+      stage.reactToAction(targetId, kind === 'treat' ? 'gift-treat' : 'gift-poison');
+    },
+  });
+
+  // 野次 (§v1.4-A): 事件 (承) の進行中だけ中央に出る 煽る/なだめる ボタン。
+  const heckle = new HeckleButtons(el('heckle'), (side) => {
+    conn.send({ t: 'heckle', side, userId });
+    stage.reactToHeckle(side);
+  });
+
+  // 証言 (§v1.4-A): 裁判の運命段階に 1 グループ分の票を上乗せする。
+  const testify = new TestifyPanel(el('testify'), (stance, text) => {
+    conn.send(text !== undefined ? { t: 'testify', stance, text, userId } : { t: 'testify', stance, userId });
+    stage.playerTestify(stance, text);
   });
 
   // カードパネル (§v1.3-A): カルマで切る一発介入カード 5 種。
@@ -153,6 +172,8 @@ async function main(): Promise<void> {
       governance.setWorld(world); // 村長/世論調査 (§17) は snapshot から
       spectacle.setWorld(world);
       betPanel.update(world);
+      heckle.setWorld(world);
+      testify.setWorld(world);
       verdict.classList.toggle('show', showVerdict(world));
     },
     onLog: (phase, text) => log.add(phase, text),
@@ -168,6 +189,8 @@ async function main(): Promise<void> {
     onSysStatus: (s) => statusPanel.setStatus(s),
     onPlayerState: (state) => {
       controls.setState(state);
+      heckle.setState(state.heckleCost, state.canHeckleInMs);
+      testify.setState(state.testifyCost);
       cards.setKarma(state.karma);
       economy.setState(state.karma);
       account.setSpent(state.spent);

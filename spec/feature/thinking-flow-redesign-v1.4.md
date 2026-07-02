@@ -149,6 +149,12 @@ interface PlotThread {
 
 ## 3. 論点③ ユーザ介入 — 「即時に見える × 環境に爪痕」を埋める
 
+> **v1.4-A 実装済 (2026-07-02)**。実装マップ: 野次/証言/贈り物 = `packages/sim/src/interventions.ts` +
+> `term-machine.ts` (`heckle`/`testify`/`giveGift`)、アイテム即時回収 = `items.ts` (`stepItemPickups`) +
+> `server/term-loop.ts` (kisho tick)、コスト/クールダウン = `server/player-state.ts` + config `intervene.*`、
+> UI = `client/src/{heckle-buttons,testify-panel,player-controls}.ts` + `stage-view.ts` (リアクション)。
+> 証言記録 = `TrialState.testimonies` (v1.4-B の遺恨 thread 生成点)。spot / fanFlames は v1.4-A' へ持ち越し。
+
 ### 3.1 現状マトリクス (棚卸し)
 
 | | **残留効果 小** | **残留効果 大 (環境を荒らす)** |

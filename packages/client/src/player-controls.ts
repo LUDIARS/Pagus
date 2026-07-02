@@ -14,6 +14,16 @@ export interface PlayerStateView {
   /** 扇動の固定コスト (§4 消費カルマ表示用)。 */
   inciteCost: number;
   canCheerInMs: number;
+  /** 野次の固定コスト (§v1.4-A)。 */
+  heckleCost: number;
+  /** 次に野次できるまでの残りミリ秒 (§v1.4-A)。 */
+  canHeckleInMs: number;
+  /** 証言の固定コスト (§v1.4-A)。 */
+  testifyCost: number;
+  /** 差し入れの固定コスト (§v1.4-A)。 */
+  giftTreatCost: number;
+  /** 毒饅頭の固定コスト (§v1.4-A)。 */
+  giftPoisonCost: number;
   /** 推し (champion) の villager id。未指名は null (§1)。 */
   championId: string | null;
   /** 推しの名前 (server が world から補完)。 */
@@ -21,14 +31,16 @@ export interface PlayerStateView {
 }
 
 export type ActionType = 'incite' | 'sanction' | 'cheer';
-/** ドックで選べるコマンド (行動)。champion = 推し指名。 */
-type Command = ActionType | 'champion';
+/** ドックで選べるコマンド (行動)。champion = 推し指名 / gift-* = 贈り物 (§v1.4-A)。 */
+type Command = ActionType | 'champion' | 'gift-treat' | 'gift-poison';
 
 export interface ControlHandlers {
   /** 対象 id を伴って操作を送る。扇動は rumorAboutId (悪口の主) を任意で伴う (§4.2)。 */
   onAction(type: ActionType, targetId: string, rumorAboutId?: string): void;
   /** 選択中の対象を推しに指名する (§1)。 */
   onChampion(targetId: string): void;
+  /** 選択中の対象へ贈り物を手渡す (§v1.4-A)。 */
+  onGift(targetId: string, kind: 'treat' | 'poison'): void;
 }
 
 /** コマンドの表示メタ。 */
@@ -44,8 +56,10 @@ const COMMANDS: Record<Command, CommandMeta> = {
   sanction: { label: '⚖ 制裁', excludeChampion: false, needsRumor: false },
   cheer: { label: '🌸 応援', excludeChampion: false, needsRumor: false },
   champion: { label: '⭐ 推し指名', excludeChampion: false, needsRumor: false },
+  'gift-treat': { label: '🍬 差し入れ', excludeChampion: false, needsRumor: false },
+  'gift-poison': { label: '☠ 毒饅頭', excludeChampion: true, needsRumor: false },
 };
-const COMMAND_ORDER: Command[] = ['incite', 'sanction', 'cheer', 'champion'];
+const COMMAND_ORDER: Command[] = ['incite', 'sanction', 'cheer', 'champion', 'gift-treat', 'gift-poison'];
 
 export class PlayerControls {
   private world: WireWorld | null = null;
@@ -147,6 +161,8 @@ export class PlayerControls {
     if (!s) return 0;
     if (cmd === 'incite') return s.inciteCost;
     if (cmd === 'sanction') return Math.round(s.sanctionCost);
+    if (cmd === 'gift-treat') return s.giftTreatCost;
+    if (cmd === 'gift-poison') return s.giftPoisonCost;
     return 0;
   }
 
@@ -224,6 +240,10 @@ export class PlayerControls {
     if (!id) return;
     if (this.command === 'champion') {
       this.h.onChampion(id);
+      return;
+    }
+    if (this.command === 'gift-treat' || this.command === 'gift-poison') {
+      this.h.onGift(id, this.command === 'gift-treat' ? 'treat' : 'poison');
       return;
     }
     if (this.command === 'incite' && this.rumorAboutId) this.h.onAction('incite', id, this.rumorAboutId);

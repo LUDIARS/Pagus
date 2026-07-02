@@ -11,6 +11,7 @@ export * from './villager-factory.js';
 export * from './behavior-rules.js';
 export * from './economy.js';
 export * from './items.js';
+export * from './interventions.js';
 export * from './mayor.js';
 export * from './daily-engine.js';
 export * from './event-director.js';
