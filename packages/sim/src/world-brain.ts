@@ -3,6 +3,7 @@
 
 import type { Villager, VillagerId, Incident, Calendar, Verdict, VillageRule, IncidentDesign, PlotThread } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
+import type { DivergenceCase } from './rule-replay.js';
 import type { Personality } from './personality.js';
 import type { BehaviorRule } from './behavior-rules.js';
 
@@ -96,6 +97,15 @@ export interface RuleProposalContext {
   calendar: Calendar;
 }
 
+/** 蒸留 (§v1.4-C) の文脈: 教師 (LLM) と生徒 (DailyEngine) の乖離ケース束。 */
+export interface DistillContext {
+  reputation: VirtueVector;
+  calendar: Calendar;
+  existingRules: BehaviorRule[];
+  /** 直近の乖離ケース (最大 maxCases 件)。 */
+  cases: DivergenceCase[];
+}
+
 export interface WorldBrain {
   evaluateDay(ctx: WorldEvalContext): Promise<DayEvaluation>;
   /** 祝日にあたる日のイベントを生成する (§4.7)。 */
@@ -106,4 +116,6 @@ export interface WorldBrain {
   designIncident(ctx: IncidentDesignContext): Promise<IncidentDesign>;
   /** ふるまいの法則を 1 つ起案する (RuleSmith, §2.1)。source='haiku'。 */
   proposeRule(ctx: RuleProposalContext): Promise<BehaviorRule>;
+  /** 乖離ケースを説明するふるまいの法則を蒸留する (§v1.4-C)。source='distill'。 */
+  distillRule(ctx: DistillContext): Promise<BehaviorRule>;
 }

@@ -6,7 +6,7 @@
 // 例外で env 維持: PAGUS_CONFIG_KEY (マスター鍵) / PAGUS_FRESH (その起動だけ world.json 無視) /
 // PAGUS_BRAIN (stub|llm の起動モード) / PAGUS_DATA_DIR (config 自体の置き場を解決するため)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, shouldAdoptRule, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem } from '@pagus/sim';
 import { loadConfig, loadSeed, loadIncidentArcs } from './load-data.js';
 import { loadPagusConfig, type PagusConfig } from './config/pagus-config.js';
 import { TermLoop } from './term-loop.js';
@@ -27,6 +27,8 @@ import type { BlackBox } from '@ludiars/blackbox';
 import { makeTrialFateBlackBox } from './llm/fate-blackbox.js';
 import { createRequestListener } from './http-api.js';
 import { loadLexicon, validateMoral, fillName } from './theme/lexicon.js';
+import { DivergenceLog } from './distill/divergence-log.js';
+import { ShadowSampler } from './distill/shadow-sampler.js';
 
 /** 村の歴史に残す「節目」のログか判定する。verdictPrefix はテーマパックの判決接頭辞 (§v1.4-D)。 */
 function isMilestone(text: string, verdictPrefix = '判決'): boolean {
@@ -157,6 +159,11 @@ function main(): void {
     costLog.record(e);
     scheduleSysStatus();
   }, cfg, fateBlackbox);
+  // 蒸留ループ (§v1.4-C): shadow sampling → 乖離ログ → 日末蒸留。教師は個体 Brain と同じ実装
+  // (llm モードでは cheap tier の LLM、stub では決定的 StubBrain = パイプラインの動作確認用)。
+  const divergence = new DivergenceLog();
+  const shadow = cfg.distill.enabled ? new ShadowSampler(brain, divergence) : null;
+
   const llmInfo = buildLlmInfo(registry, villagers);
   const director = new EventDirector({ maxRepsPerSegment: cfg.sim.reps });
   const tm = new TermMachine(world, brain, {
@@ -196,6 +203,14 @@ function main(): void {
     },
     ...(incidentArcs ? { incidentArcs } : {}),
     moral: MORAL, // モラルダイヤル (§v1.4-D): wholesome は死刑無効
+    // shadow sampling (§v1.4-C): 日常決定の一部を教師に影として問う (fire-and-forget)。
+    ...(shadow
+      ? {
+          onDailyDecision: (v, env, d) => {
+            if (Math.random() < cfg.distill.sampleChance) shadow.sample(v, env, d, world.term);
+          },
+        }
+      : {}),
 
     bornCount: restored?.bornCount ?? 0, // 出生 id の通し番号を引き継ぐ
     incidentCount: restored?.incidentCount ?? 0, // 事件用キャラ id の通し番号を引き継ぐ
@@ -336,6 +351,10 @@ function main(): void {
   // 月替わり検知 (MVP集計 / シーズン進行 / 予測リセット) と事件発火検知 (予測判定) の基準。
   let lastMonthKey = tm.world.calendar.year * 12 + tm.world.calendar.month;
   let lastScheduledFired = tm.world.scheduledIncident?.fired ?? false;
+
+  // 蒸留 (§v1.4-C) の日末実行の基準と多重実行ガード。
+  let lastDistillTerm = tm.world.term;
+  let distillBusy = false;
 
   // 政治パック (§v1.3-C) の設定。
   const REVOLT_THRESHOLD = cfg.politics.revoltThreshold; // 蜂起の悪辣しきい値 (⑧)
@@ -1359,6 +1378,45 @@ function main(): void {
         lastEconomyTerm = w.term;
         ps.pruneExpiredInsurance(w.term);
         for (const uid of knownUsers) pushState(uid);
+      }
+      // 蒸留 (§v1.4-C): 日末に乖離ケースが溜まっていたら蒸留を試みる (fire-and-forget)。
+      if (cfg.distill.enabled && w.term > lastDistillTerm) {
+        lastDistillTerm = w.term;
+        if (!distillBusy && divergence.pendingCount >= cfg.distill.minCases) {
+          distillBusy = true;
+          const cases = divergence.takeCases(cfg.distill.maxCases);
+          void (async () => {
+            try {
+              const proposed = await worldBrain.distillRule({
+                reputation: w.reputation,
+                calendar: w.calendar,
+                existingRules: w.behaviorRules,
+                cases,
+              });
+              // replay ゲート: 教師一致率が改善するルールだけ村に刻む。
+              const gate = shouldAdoptRule(w.behaviorRules, proposed, cases, cfg.distill.acceptGain);
+              const pct = (n: number): string => (n * 100).toFixed(0);
+              if (gate.adopt) {
+                const rule = tm.addDistilledRule(proposed);
+                const text = `🧠 ふるまいの蒸留: 「${rule.description}」が村に刻まれた (教師一致 ${pct(gate.before)}%→${pct(gate.after)}%)`;
+                ws.broadcastLog('kisho', text);
+                sessionLog.line('kisho', text);
+                const cal = w.calendar;
+                chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, text, 'rule');
+                ws.updateChronicle(chronicle.recent());
+                ws.broadcastSnapshot(w);
+              } else {
+                const text = `🧠 蒸留見送り: 提案は教師一致を改善せず (${pct(gate.before)}%→${pct(gate.after)}%)`;
+                ws.broadcastLog('kisho', text);
+                sessionLog.line('kisho', text);
+              }
+            } catch (e) {
+              console.error('[pagus] 蒸留失敗', e);
+            } finally {
+              distillBusy = false;
+            }
+          })();
+        }
       }
       // 政治パック (§v1.3-C) の日末処理: 戒厳令の期限切れ解除 + 革命の蜂起判定。
       if (w.term > lastGovTerm) {

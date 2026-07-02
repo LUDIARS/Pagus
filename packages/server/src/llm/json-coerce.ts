@@ -339,6 +339,23 @@ function coerceRuleCondition(u: unknown): RuleCondition {
       if (!RULE_CATEGORY_SET.has(c as RuleCategory)) throw new Error(`when.category が未知です: ${c}`);
       return { kind, category: c as RuleCategory };
     }
+    case 'wealthBelow':
+    case 'wealthAbove':
+      return { kind, value: asNumber(o.value, 'when.value') };
+    case 'placeState': {
+      const st = asString(o.state, 'when.state');
+      if (st !== 'defiled' && st !== 'blessed') throw new Error(`when.state が未知です: ${st}`);
+      return { kind, state: st };
+    }
+    // --- DSL v2 (§v1.4-C) ---
+    case 'infoContains':
+      return { kind, substr: asString(o.substr, 'when.substr') };
+    case 'infoFromPlayer':
+      return { kind };
+    case 'stressAbove':
+      return { kind, value: asNumber(o.value, 'when.value') };
+    case 'emotionBelow':
+      return { kind, emotionAxis: asString(o.emotionAxis, 'when.emotionAxis'), value: clamp(asNumber(o.value, 'when.value'), -1, 1) };
     default:
       throw new Error(`未知のルール条件 kind です: ${String(kind)}`);
   }
@@ -356,6 +373,17 @@ function coerceRuleEffect(u: unknown): RuleEffect {
       return { kind, delta: clamp(asNumber(o.delta, 'then.delta'), -5, 5) };
     case 'actionFlavor':
       return { kind, text: asString(o.text, 'then.text') };
+    // --- DSL v2 (§v1.4-C) ---
+    case 'spreadInfo':
+      return { kind };
+    case 'moveBias': {
+      const t = asString(o.towards, 'then.towards');
+      if (t !== 'partner' && t !== 'admire' && t !== 'awayMadman') throw new Error(`then.towards が未知です: ${t}`);
+      return { kind, towards: t };
+    }
+    case 'wealthDelta':
+      // 暴走防止に所持金の増減幅を抑える。
+      return { kind, delta: clamp(asNumber(o.delta, 'then.delta'), -20, 20) };
     default:
       throw new Error(`未知のルール効果 kind です: ${String(kind)}`);
   }

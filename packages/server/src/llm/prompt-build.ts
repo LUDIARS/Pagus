@@ -31,6 +31,7 @@ import type {
   VillageRule,
   Personality,
   BehaviorRule,
+  DistillContext,
 } from '@pagus/sim';
 
 /** 組み上げたプロンプト。kind は tier ルーティングに使う。 */
@@ -394,6 +395,51 @@ export function buildRulePrompt(ctx: RuleProposalContext): PromptParts {
     `住民 (${ctx.villagers.length}体): ${names || 'なし'}\n` +
     `既存のふるまいの法則:\n${existing}\n` +
     '村の今の様子に映える新しいふるまいの法則を 1 つ JSON で返せ。';
+  return partsFromSegments('rule', [
+    { stability: 'fixed', role: 'system', text: sys },
+    { stability: 'volatile', role: 'user', text: user },
+  ]);
+}
+
+// --- 蒸留 (§v1.4-C): 乖離ケースを説明するルールを起案する --------------------
+
+export function buildDistillPrompt(ctx: DistillContext): PromptParts {
+  const axisList = PERSONALITY_AXES.map((a) => `${a}(${PERSONALITY_LABELS[a]})`).join(', ');
+  const sys =
+    'あなたは村の「ふるまいの法則」を蒸留する者。教師 (大きな知能) と生徒 (ルールエンジン) の判断が' +
+    '食い違ったケース群を観て、その食い違いを説明する安全なルールを 1 つだけ起案する。\n' +
+    '出力スキーマ: {"description": "ルールの説明(短い日本語)", "when": [<条件>...], "then": [<効果>...]}\n' +
+    '条件 (kind):\n' +
+    '  {"kind":"traitAbove"|"traitBelow","axis":<気質軸>,"value":0..1}\n' +
+    '  {"kind":"emotionAbove"|"emotionBelow","emotionAxis":"anger|joy など","value":-1..1}\n' +
+    '  {"kind":"eventParamAbove","tag":"...","value":数値} / {"kind":"stressAbove","value":数値}\n' +
+    '  {"kind":"wealthBelow"|"wealthAbove","value":数値}\n' +
+    '  {"kind":"place","place":"広場|住宅地|村はずれ"} / {"kind":"placeState","state":"defiled|blessed"}\n' +
+    '  {"kind":"timeOfDay","timeOfDay":"night|morning|noon|evening"} / {"kind":"hasNeighbor"}\n' +
+    '  {"kind":"infoContains","substr":"..."} / {"kind":"infoFromPlayer"} / {"kind":"actionCategory","category":"harass|good|chat|wander"}\n' +
+    '効果 (kind):\n' +
+    '  {"kind":"emotionDelta","emotionAxis":"...","delta":-1..1} / {"kind":"triggerWeight","delta":-5..5}\n' +
+    '  {"kind":"actionFlavor","text":"..."} / {"kind":"spreadInfo"} / {"kind":"moveBias","towards":"partner|admire|awayMadman"} / {"kind":"wealthDelta","delta":-20..20}\n' +
+    `気質軸: ${axisList}。ケース群に共通する条件を when に、教師の傾向 (感情の向き/事件化) を then に写せ。` +
+    JSON_ONLY;
+  const caseLines = ctx.cases
+    .map((c, i) => {
+      const teacherEmo = Object.entries(c.teacher.emotionDelta)
+        .filter(([, d]) => Math.abs(d) > 0.01)
+        .map(([k, d]) => `${k}${d > 0 ? '+' : ''}${d.toFixed(2)}`)
+        .join(' ') || '(変化なし)';
+      return (
+        `#${i + 1} 場所=${c.env.place}${c.env.placeState ? `(${c.env.placeState})` : ''} 時間=${c.env.timeOfDay} ` +
+        `隣人=${c.env.hasNeighbor ? 'あり' : 'なし'} ストレス=${c.villager.stress} 所持金=${Math.round(c.villager.wealth)}\n` +
+        `   教師: 感情 ${teacherEmo} / 事件化=${c.teacher.triggersIncident} — 生徒: 事件化=${c.student.triggersIncident}`
+      );
+    })
+    .join('\n');
+  const existing = ctx.existingRules.map(ruleLine).join('\n') || '(なし)';
+  const user =
+    `乖離ケース (${ctx.cases.length}件):\n${caseLines}\n` +
+    `既存のふるまいの法則:\n${existing}\n` +
+    'これらの乖離を最もよく説明するふるまいの法則を 1 つ JSON で返せ。';
   return partsFromSegments('rule', [
     { stability: 'fixed', role: 'system', text: sys },
     { stability: 'volatile', role: 'user', text: user },

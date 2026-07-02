@@ -17,6 +17,16 @@
 
 ## 1. 論点① 住民の思考 — LLM 教師 → ブラックボックス生徒の「蒸留ループ」
 
+> **v1.4-C 実装済 (2026-07-02)**。実装マップ: DSL v2 = `sim/behavior-rules.ts` (RULE_DSL_VERSION=2、
+> 条件 infoContains/infoFromPlayer/stressAbove/emotionBelow、効果 spreadInfo/moveBias/wealthDelta、
+> 副作用適用 = `term-machine.applySideEffects`)、shadow sampling = `server/distill/shadow-sampler.ts`
+> (TermMachine.onDailyDecision フック + config `distill.sampleChance`、fire-and-forget で sim 非ブロック)、
+> 乖離ログ = `server/distill/divergence-log.ts` (+ `data/runtime/divergence.jsonl` 観測素材)、
+> 蒸留起案 = `WorldBrain.distillRule` (Haiku 固定 / stub は決定的)、採否 = `sim/rule-replay.ts`
+> (教師一致率が `distill.acceptGain` 以上改善したら採用、source='distill'、間引きは haiku 優先)。
+> 採用は feed/chronicle に 🧠 で出る。**relationTo 条件は未実装**: 関係性 (VillagerRelationship) の
+> 型が別作業で確定したら DSL に足す (§8)。
+
 ### 1.1 現状評価
 
 - 日常の意思決定は `DailyEngine.decide` (`packages/sim/src/daily-engine.ts`) が LLM 非依存で行い、感情も `behavior-rules.ts` の `evaluateRules` の決定的評価。LLM が本当に思考するのは 承 (当事者応答) / 転 (裁判) / 結 (教育) / 世界評価のみ。**「最初 LLM → ブラックボックスへ」の乗せ換え自体は完了している。**
