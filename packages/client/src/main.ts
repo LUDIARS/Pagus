@@ -192,6 +192,23 @@ async function main(): Promise<void> {
     onTrialLines: (incidentId, lines) => stage.setTrialLines(incidentId, lines),
     onLlm: (info) => llmPanel.setInfo(info),
     onChronicle: (entries) => chronicle.setEntries(entries),
+    // テーマパック (§v1.4-D): 語彙を各所へ適用し、wholesome では死刑ボタンを隠す。
+    onTheme: (_pack, moral, lexicon) => {
+      stage.setTheme(lexicon);
+      vstatus.setTheme(lexicon);
+      controls.setPoisonLabel(lexicon.giftPoisonLabel);
+      const setBtn = (id: string, ja: string, en: string): void => {
+        const btn = el(id);
+        const jaEl = btn.querySelector('.vb-ja');
+        const enEl = btn.querySelector('.vb-en');
+        if (jaEl) jaEl.textContent = ja;
+        if (enEl) enEl.textContent = en;
+      };
+      setBtn('v-guilty', lexicon.verdictDeathJa, lexicon.verdictDeathEn);
+      setBtn('v-innocent', lexicon.verdictEducateJa, lexicon.verdictEducateEn);
+      // モラルダイヤル: wholesome では死刑 (kill 票) の口を塞ぐ (sim 側でも無効)。
+      (el('v-guilty') as HTMLButtonElement).style.display = moral === 'wholesome' ? 'none' : '';
+    },
     onSysStatus: (s) => statusPanel.setStatus(s),
     onPlayerState: (state) => {
       controls.setState(state);

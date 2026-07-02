@@ -18,6 +18,8 @@ import {
   type Faction,
   type CardName,
   type MarketItem,
+  type ThemeLexicon,
+  type MoralDial,
   type AuctionLotView,
   type LawView,
   type MartialMode,
@@ -88,6 +90,8 @@ export class GameWsServer {
   private readonly wss: WebSocketServer;
   private lastSnapshot: string | null = null;
   private llmInfo: LlmInfo | null = null;
+  /** テーマパック (§v1.4-D)。接続時に現値を送る。 */
+  private theme: Extract<ServerMessage, { t: 'theme' }> | null = null;
   private chronicle: ChronicleEntry[] = [];
   private playerActions: PlayerActionEntry[] = [];
   /** リーダーボード (§4.3) の最新値。接続時に現値を送る。 */
@@ -120,6 +124,13 @@ export class GameWsServer {
     this.llmInfo = info;
   }
 
+  /** テーマパック (§v1.4-D) を設定し、全クライアントへ配る。接続時にも現値を送る。 */
+  setTheme(pack: string, moral: MoralDial, lexicon: ThemeLexicon): void {
+    const msg: Extract<ServerMessage, { t: 'theme' }> = { t: 'theme', pack, moral, lexicon };
+    this.theme = msg;
+    this.fanout(JSON.stringify(msg));
+  }
+
   /** 村の歴史を更新し、全クライアントへ配る。 */
   updateChronicle(entries: ChronicleEntry[]): void {
     this.chronicle = entries;
@@ -130,6 +141,7 @@ export class GameWsServer {
     // 接続直後に最新スナップショット・接続人数・LLM 構成・村の歴史・人間の行動記録を送る。
     if (this.lastSnapshot) ws.send(this.lastSnapshot);
     if (this.llmInfo) ws.send(JSON.stringify({ t: 'llm', info: this.llmInfo } satisfies ServerMessage));
+    if (this.theme) ws.send(JSON.stringify(this.theme));
     if (this.chronicle.length > 0) {
       ws.send(JSON.stringify({ t: 'chronicle', entries: this.chronicle } satisfies ServerMessage));
     }

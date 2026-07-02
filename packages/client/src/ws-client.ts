@@ -1,6 +1,6 @@
 // WS 接続。server からの snapshot/log を受け、扇動/沈静化コマンドを送る。自動再接続。
 
-import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView, LawView, MartialMode, HighlightCard, SeasonWinner } from '@pagus/sim';
+import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView, LawView, MartialMode, HighlightCard, SeasonWinner, ThemeLexicon, MoralDial } from '@pagus/sim';
 
 /** 裁判ベットのプール状態 (§3 betState 受信ペイロード)。 */
 export interface BetStateView {
@@ -32,6 +32,8 @@ export interface WsHandlers {
   onTrialLines(incidentId: string, lines: TrialLine[]): void;
   onLlm(info: LlmInfo): void;
   onChronicle(entries: ChronicleEntry[]): void;
+  /** テーマパック (§v1.4-D)。接続時 + 起動時に届く。 */
+  onTheme?(pack: string, moral: MoralDial, lexicon: ThemeLexicon): void;
   /** その接続ユーザのカルマ/善性状態 (§4.4)。推し (§1)・課金額 (§v1.3-F)・即効介入コスト (§v1.4-A) を含む。 */
   onPlayerState?(state: {
     karma: number;
@@ -114,6 +116,7 @@ export function connect(url: string, h: WsHandlers): Conn {
       else if (msg.t === 'trialLines') h.onTrialLines(msg.incidentId, msg.lines);
       else if (msg.t === 'llm') h.onLlm(msg.info);
       else if (msg.t === 'chronicle') h.onChronicle(msg.entries);
+      else if (msg.t === 'theme') h.onTheme?.(msg.pack, msg.moral, msg.lexicon);
       else if (msg.t === 'playerState') {
         h.onPlayerState?.({
           karma: msg.karma,

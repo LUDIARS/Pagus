@@ -83,6 +83,8 @@ export class PlayerControls {
   private readonly rumorSelect = document.createElement('select');
   private readonly execBtn = document.createElement('button');
   private readonly cmdButtons = new Map<Command, HTMLButtonElement>();
+  /** 毒饅頭コマンドの表示名 (テーマパック §v1.4-D で差し替え)。 */
+  private poisonLabel: string | null = null;
 
   constructor(
     private readonly root: HTMLElement,
@@ -145,6 +147,12 @@ export class PlayerControls {
   setWorld(world: WireWorld): void {
     this.world = world;
     this.refreshTargets();
+  }
+
+  /** テーマパック (§v1.4-D): 毒饅頭コマンドの表示名を差し替える。 */
+  setPoisonLabel(label: string): void {
+    this.poisonLabel = label;
+    this.renderState();
   }
 
   setState(s: PlayerStateView): void {
@@ -227,7 +235,7 @@ export class PlayerControls {
       btn.replaceChildren();
       const lab = document.createElement('span');
       lab.className = 'dock-cmd-label';
-      lab.textContent = COMMANDS[cmd].label;
+      lab.textContent = cmd === 'gift-poison' && this.poisonLabel ? this.poisonLabel : COMMANDS[cmd].label;
       const cost = document.createElement('span');
       cost.className = 'dock-cmd-cost';
       cost.textContent = costLabel(cmd, this.costOf(cmd), cd);
@@ -238,7 +246,8 @@ export class PlayerControls {
     // 実行ボタン。
     const meta = COMMANDS[this.command];
     const c = this.costOf(this.command);
-    this.execBtn.textContent = `${meta.label} を実行${c > 0 ? ` (−${c})` : ''}`;
+    const label = this.command === 'gift-poison' && this.poisonLabel ? this.poisonLabel : meta.label;
+    this.execBtn.textContent = `${label} を実行${c > 0 ? ` (−${c})` : ''}`;
     this.execBtn.disabled = !this.selectedId || (this.command === 'cheer' && cd > 0);
   }
 

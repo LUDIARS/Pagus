@@ -24,13 +24,15 @@ import { Chronicle } from './chronicle.js';
 import { WorldStore } from './world-store.js';
 import { PushService } from './push-service.js';
 import { createRequestListener } from './http-api.js';
+import { loadLexicon, validateMoral, fillName } from './theme/lexicon.js';
 
-/** 村の歴史に残す「節目」のログか判定する。 */
-function isMilestone(text: string): boolean {
+/** 村の歴史に残す「節目」のログか判定する。verdictPrefix はテーマパックの判決接頭辞 (§v1.4-D)。 */
+function isMilestone(text: string, verdictPrefix = '判決'): boolean {
   return (
     /^[⚡✦💍👶📅📜]/.test(text) ||
-    text.startsWith('—— 審判') ||
+    text.startsWith('—— ') ||
     text.startsWith('判決') ||
+    text.startsWith(verdictPrefix) ||
     text.startsWith('🕊') ||
     text.startsWith('⚖') ||
     text.startsWith('──') ||
@@ -42,7 +44,7 @@ function isMilestone(text: string): boolean {
  * 節目ログの種別を 1 箇所で判定する (§2.2 履歴の構造化)。
  * クライアントの絵文字 startsWith 判定を server 側へ集約し、ChronicleEntry.kind を埋める。
  */
-function classifyKind(text: string): ChronicleKind {
+function classifyKind(text: string, verdictPrefix = '判決'): ChronicleKind {
   const t = text.trimStart();
   if (t.startsWith('⚡')) return 'incident';
   if (t.startsWith('🕊')) return 'reconcile';
@@ -52,8 +54,8 @@ function classifyKind(text: string): ChronicleKind {
   if (t.startsWith('👶')) return 'birth';
   if (t.startsWith('📜')) return 'rule';
   if (t.startsWith('📅')) return 'holiday';
-  if (t.startsWith('—— 審判')) return 'trial';
-  if (t.startsWith('判決')) return 'verdict';
+  if (t.startsWith('—— ')) return 'trial';
+  if (t.startsWith('判決') || t.startsWith(verdictPrefix)) return 'verdict';
   if (t.includes('月がかわった')) return 'month';
   if (t.startsWith('──')) return 'day';
   return 'other';
@@ -111,6 +113,11 @@ function main(): void {
   const startedAt = Date.now(); // 状態パネル (§7) の稼働開始時刻
   const cfg = loadPagusConfig(); // 暗号化 config (旧 PAGUS_* env の集約先) を 1 回ロード
   const config = loadConfig();
+
+  // テーマパック + モラルダイヤル (§v1.4-D)。不正値/キー欠落は即エラー。
+  const MORAL = validateMoral(cfg.theme.moral);
+  const lexicon = loadLexicon(cfg.theme.pack, MORAL);
+  console.log(`[pagus] theme=${cfg.theme.pack} (${lexicon.packName}) moral=${MORAL}`);
 
   // world スナップショット (data/runtime/world.json) があれば復元。PAGUS_FRESH=1 で無視して新規開始。
   const store = new WorldStore();
@@ -182,6 +189,8 @@ function main(): void {
       revealChance: cfg.arc.revealChance,
     },
     ...(incidentArcs ? { incidentArcs } : {}),
+    moral: MORAL, // モラルダイヤル (§v1.4-D): wholesome は死刑無効
+
     bornCount: restored?.bornCount ?? 0, // 出生 id の通し番号を引き継ぐ
     incidentCount: restored?.incidentCount ?? 0, // 事件用キャラ id の通し番号を引き継ぐ
     ruleCount: restored?.ruleCount ?? 0, // ふるまいの法則 id の通し番号を引き継ぐ
@@ -200,11 +209,15 @@ function main(): void {
 
   // 裁判の糾弾セリフ: llm モードでは Haiku 生成 (65%) + レパートリー蓄積。
   const llmMode = (process.env.PAGUS_BRAIN ?? 'stub') === 'llm';
-  const narrator = new TrialNarrator(
-    llmMode
+  // 糾弾のトーン/種/プールはテーマパックに従う (パック別ファイルでトーン混線を防ぐ, §v1.4-D)。
+  const repertoireFile = cfg.theme.pack === 'classic' ? 'denunciations.json' : `denunciations.${cfg.theme.pack}.json`;
+  const narrator = new TrialNarrator({
+    ...(llmMode
       ? { client: new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: cfg.llm.cliRetries }) }
-      : {},
-  );
+      : {}),
+    tone: lexicon.denounceTone,
+    repertoire: { file: repertoireFile, seeds: lexicon.denounceSeeds },
+  });
 
   // 村の歴史 (節目を記録・永続化)。
   const chronicle = new Chronicle();
@@ -523,7 +536,7 @@ function main(): void {
       if (loop.sanction(targetId)) {
         const cal = tm.world.calendar;
         const name = tm.world.villagers.get(targetId)?.name ?? targetId;
-        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `⚖ 制裁: ${name} がつるし上げられた`, 'sanction');
+        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, fillName(lexicon.sanctionFeed, name), 'sanction');
         ws.updateChronicle(chronicle.recent());
       }
       ps.bumpStat(userId, 'sanctions'); // 実績 (§4.1)
@@ -1141,6 +1154,7 @@ function main(): void {
     },
   });
   ws.setLlmInfo(llmInfo);
+  ws.setTheme(cfg.theme.pack, MORAL, lexicon); // テーマパック (§v1.4-D) を初期配信対象に
   ws.updateChronicle(chronicle.recent()); // 既存の歴史を初期配信対象に。
 
   // オークション (§v1.3-B ②): 固定ロット3種ローテ。落札時のみカルマ徴収し効果付与する。
@@ -1387,9 +1401,9 @@ function main(): void {
     onLog: (phase, text) => {
       ws.broadcastLog(phase, text);
       sessionLog.line(phase, text);
-      if (isMilestone(text)) {
+      if (isMilestone(text, lexicon.verdictFeedPrefix)) {
         const cal = tm.world.calendar;
-        const kind = classifyKind(text);
+        const kind = classifyKind(text, lexicon.verdictFeedPrefix);
         chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, text, kind);
         ws.updateChronicle(chronicle.recent());
         // ハイライト (§v1.3-D ㉑): 処刑 (判決) / 和解 を節目カードとして積む。
@@ -1420,6 +1434,10 @@ function main(): void {
     // ふるまいの法則の Haiku 増殖 (§2.1)。config sim.rulegenEnabled で切替 (既定有効)。
     enabled: cfg.sim.rulegenEnabled,
     chance: cfg.sim.rulegenChance,
+  }, {
+    // テーマパック (§v1.4-D) の feed 文言。
+    trialOpen: `—— ${lexicon.trialOpen} ——`,
+    verdictLine: (v) => `${lexicon.verdictFeedPrefix}: ${v === 'death' ? lexicon.verdictDeathResult : lexicon.verdictEducateResult}`,
   });
   loop.start();
 
