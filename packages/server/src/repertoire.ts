@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { dataDir } from './load-data.js';
 
-/** 空プールを避けるための種セリフ。 */
+/** 空プールを避けるための種セリフ (テーマパック §v1.4-D から差し替え可)。 */
 const SEED: string[] = [
   '恥を知れ！',
   '許せない！',
@@ -18,13 +18,22 @@ const SEED: string[] = [
   '二度と顔を見せるな！',
 ];
 
+export interface RepertoireOptions {
+  /** 永続ファイル名 (data/runtime/ 配下)。テーマパックごとに分けてトーン混線を防ぐ。 */
+  file?: string;
+  /** 種セリフ (テーマパックの denounceSeeds)。 */
+  seeds?: string[];
+}
+
 export class Repertoire {
   private readonly path: string;
   private pool: string[];
   private readonly seen: Set<string>;
+  private readonly seeds: string[];
 
-  constructor() {
-    this.path = resolve(dataDir(), 'runtime', 'denunciations.json');
+  constructor(opts: RepertoireOptions = {}) {
+    this.path = resolve(dataDir(), 'runtime', opts.file ?? 'denunciations.json');
+    this.seeds = opts.seeds && opts.seeds.length > 0 ? opts.seeds : SEED;
     this.pool = this.load();
     this.seen = new Set(this.pool);
   }
@@ -37,7 +46,7 @@ export class Repertoire {
   /** プールから 1 つ無作為に返す。 */
   pick(): string {
     const i = Math.floor(Math.random() * this.pool.length);
-    return this.pool[i] ?? SEED[0]!;
+    return this.pool[i] ?? this.seeds[0] ?? SEED[0]!;
   }
 
   /** 新セリフを追加して永続化 (重複は弾く)。 */
@@ -59,7 +68,7 @@ export class Repertoire {
     } catch {
       /* 無ければ種で始める */
     }
-    return [...SEED];
+    return [...this.seeds];
   }
 
   private save(): void {

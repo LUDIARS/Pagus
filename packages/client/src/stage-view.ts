@@ -4,7 +4,7 @@
 // - 暇な間は雑談ディレクタがにぎやかにする。
 
 import { Application } from 'pixi.js';
-import type { WireWorld, Phase, TrialLine } from '@pagus/sim';
+import type { WireWorld, Phase, TrialLine, ThemeLexicon } from '@pagus/sim';
 import { loadAnimalTextures } from './assets.js';
 import { VillageScene } from './village-scene.js';
 import { TrialScene } from './trial-scene.js';
@@ -71,6 +71,22 @@ export class StageView {
   /** server 生成の糾弾セリフを裁判シーンへ渡す。 */
   setTrialLines(incidentId: string, lines: TrialLine[]): void {
     this.trial.setLines(incidentId, lines);
+  }
+
+  /** テーマパック (§v1.4-D) の語彙を裁判シーンへ適用する。 */
+  setTheme(lex: ThemeLexicon): void {
+    this.trial.setTheme({
+      trialOpen: lex.trialOpen,
+      stageFoolish: lex.stageFoolish,
+      stageFate: lex.stageFate,
+      stageDecided: lex.stageDecided,
+      taunts: lex.taunts,
+      defenses: lex.defenses,
+      denounces: lex.denounces,
+      retorts: lex.retorts,
+      screams: lex.screams,
+      reliefs: lex.reliefs,
+    });
   }
 
   /**

@@ -4,6 +4,19 @@
 import type { TermMachine, World, HeckleSide, HeckleResult, TestifyOutcome, GiftKind, GiftResult, SpotResult, FanFlamesResult } from '@pagus/sim';
 import { pacedSegmentMs, type PaceOptions } from './clock.js';
 
+/** テーマパック (§v1.4-D) 由来の feed 文言。省略時は classic 相当。 */
+export interface LoopStrings {
+  /** 開廷の行 (例: —— 審判の時 ——)。 */
+  trialOpen: string;
+  /** 判決の行 (verdict → 表示文)。 */
+  verdictLine: (verdict: 'death' | 'spared') => string;
+}
+
+const DEFAULT_STRINGS: LoopStrings = {
+  trialOpen: '—— 審判の時 ——',
+  verdictLine: (v) => `判決: ${v}`,
+};
+
 export interface LoopHandlers {
   onSnapshot(world: World): void;
   onLog(phase: World['phase'], text: string): void;
@@ -33,10 +46,14 @@ export class TermLoop {
     private readonly incidentStepMs: number,
     private readonly h: LoopHandlers,
     ruleGen: RuleGenOptions = { enabled: false, chance: 0 },
+    strings: LoopStrings = DEFAULT_STRINGS,
   ) {
     this.ruleGen = ruleGen;
     this.ruleRng = ruleGen.rng ?? Math.random;
+    this.strings = strings;
   }
+
+  private readonly strings: LoopStrings;
 
   start(): void {
     if (this.running) return;
@@ -159,7 +176,7 @@ export class TermLoop {
         if (r.outcome === 'reconciled') {
           this.h.onLog('kisho', '🕊 和解した — 事件は裁判にならず収まった');
         } else if (this.tm.world.phase === 'ten') {
-          this.h.onLog('ten', '—— 審判の時 ——');
+          this.h.onLog('ten', this.strings.trialOpen);
           // 目撃者 (§v1.4-B witness): 開廷時の証言をログに出す。
           for (const wit of this.tm.world.trial?.witnesses ?? []) {
             this.h.onLog('ten', `👁 目撃者 ${wit.name}「${wit.line}」`);
@@ -174,7 +191,9 @@ export class TermLoop {
         if (r.reveal) {
           this.h.onLog('ten', `🔦 逆転: 真犯人は ${r.reveal.toName} だった！ ${r.reveal.fromName} は解放された`);
         }
-        if (this.tm.world.phase === 'ketsu') this.h.onLog('ketsu', `判決: ${w.trial?.verdict ?? ''}`);
+        if (this.tm.world.phase === 'ketsu' && w.trial?.verdict) {
+          this.h.onLog('ketsu', this.strings.verdictLine(w.trial.verdict));
+        }
         break;
       }
       case 'ketsu':

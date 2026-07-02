@@ -1,0 +1,32 @@
+{
+  "_comment": "テーマパック (§v1.4-D LexiconPack)。語彙/演出テキストの正本。sim は不変で、server/client がここを参照する。wholesome はモラルダイヤル=wholesome 時の上書き。",
+  "packName": "クラシック",
+  "trialOpen": "審判の時",
+  "stageFoolish": "最も愚かな行動を裁く",
+  "stageFate": "殺すか、活かすか",
+  "stageDecided": "判決",
+  "verdictDeathJa": "死刑",
+  "verdictDeathEn": "DEATH",
+  "verdictEducateJa": "教育",
+  "verdictEducateEn": "EDUCATE",
+  "verdictDeathResult": "死刑（追放）",
+  "verdictEducateResult": "教育（改変）",
+  "verdictFeedPrefix": "判決",
+  "sanctionFeed": "⚖ 制裁: {name} がつるし上げられた",
+  "taunts": ["有罪だ！", "吊るしてしまえ！", "言い逃れするな！", "お前がやった！", "万死に値する！"],
+  "defenses": ["無罪だ！", "その子は悪くない！", "証拠がない！", "やめてやれ！", "冤罪だ！"],
+  "denounces": ["{d}は最も愚かだ！", "恥を知れ、{d}！", "許せない！", "{d}を追放しろ！", "よくもやったな！", "弁明は無用だ！", "罪を数えろ！", "これが村の総意だ！"],
+  "retorts": ["{t}こそ悪い！", "お前らだって！", "濡れ衣だ！", "ふざけるな！", "{t}が先に手を出した！", "知るか！"],
+  "screams": ["ぎゃあああ！", "ぐ…ぅ…", "うわあああ…", "た…たすけ…", "…ぁ"],
+  "reliefs": ["た、助かった…", "もう二度としない", "ひっく…ぐすっ", "こわかった…"],
+  "madmanLabel": "狂人",
+  "giftPoisonLabel": "☠ 毒饅頭",
+  "denounceTone": "",
+  "denounceSeeds": ["恥を知れ！", "許せない！", "万死に値する！", "よくもやったな！", "弁明は無用だ！", "村の面汚しめ！", "お前の罪を数えろ！", "二度と顔を見せるな！"],
+  "wholesome": {
+    "verdictDeathResult": "旅立ち（村を去る）",
+    "madmanLabel": "いたずら者",
+    "giftPoisonLabel": "🍭 イタズラ菓子",
+    "screams": ["行ってきます…", "みんな、元気で…", "また会う日まで…"]
+  }
+}

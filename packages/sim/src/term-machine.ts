@@ -2,7 +2,7 @@
 // 1 日 = 1 ターム = 12 セグメント。時間制御 (segmentRealMs のペース) は server が所有し、
 // 本クラスは純粋な遷移ロジックを提供する。
 
-import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign, InfoItem, MartialMode } from './types/index.js';
+import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign, InfoItem, MartialMode, MoralDial } from './types/index.js';
 import type { Brain, ActionDecision } from './brain.js';
 import { aliveVillagers, awakeVillagers, environmentView, clampPos, bumpEventParam } from './world.js';
 import { DailyEngine, REACTION_EXPOSURE, type DailyEngineOptions } from './daily-engine.js';
@@ -158,6 +158,8 @@ export interface TermMachineOptions {
   trialComposeConfig?: TrialComposeConfig;
   /** スナップショット復元時の火種通し番号 (thread_N 衝突回避)。既定 = 既存 id の最大から続ける。 */
   threadCount?: number;
+  /** モラルダイヤル (§v1.4-D)。wholesome では死刑が無効になる。既定 'balanced'。 */
+  moral?: MoralDial;
 }
 
 /** 日末の生活イベント (結婚/出産)。server がログ表示する。 */
@@ -242,6 +244,8 @@ export class TermMachine {
   private readonly trialComposeConfig: TrialComposeConfig;
   /** 火種の通し番号 (thread_N)。復元 world の既存 id 最大から続ける。 */
   private threadCount: number;
+  /** モラルダイヤル (§v1.4-D)。 */
+  private readonly moral: MoralDial;
   /** その日の裁判結末。applyReform が incident/trial を null にする前に ketsuStep で捕捉する。 */
   private dayOutcome: { incident: Incident; verdict: Verdict; defendantId: VillagerId } | null = null;
 
@@ -277,6 +281,7 @@ export class TermMachine {
     this.minorConfig = opts.minorConfig ?? DEFAULT_MINOR;
     this.trialComposeConfig = opts.trialComposeConfig ?? DEFAULT_TRIAL_COMPOSE;
     this.threadCount = opts.threadCount ?? maxThreadIndex(world.plotThreads);
+    this.moral = opts.moral ?? 'balanced';
     // 村長 (§17): 復元時は world.mayorId を尊重し、未設定なら初回選挙で人気の村人を据える。
     if (world.mayorId === null && aliveVillagers(world).length > 0) {
       electMayor(world, this.mayorConfig);
@@ -1224,7 +1229,9 @@ export class TermMachine {
           trial.fateVotes.kill += w;
           trial.votes.push({ voter: 'madman', weight: w, pick: 'kill' });
         }
-        trial.verdict = trial.fateVotes.kill > trial.fateVotes.spare ? 'death' : 'spared';
+        // モラルダイヤル (§v1.4-D): wholesome では死刑が無効 (票は記録されるが常に教育)。
+        trial.verdict =
+          this.moral === 'wholesome' ? 'spared' : trial.fateVotes.kill > trial.fateVotes.spare ? 'death' : 'spared';
         trial.stage = 'decided';
         this.world.phase = 'ketsu';
       }

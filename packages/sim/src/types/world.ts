@@ -8,6 +8,12 @@ import type { BehaviorRule } from '../behavior-rules.js';
 
 export type MartialMode = 'freeze' | 'surge';
 
+/**
+ * モラルダイヤル (§v1.4-D)。sim のメカニクス (票・改変・火種) は全モードで同一で、
+ * 判定分岐は verdict 適用点と UI のみ: wholesome では死刑が無効 (fate は常に教育)。
+ */
+export type MoralDial = 'dark' | 'balanced' | 'wholesome';
+
 /** ターム内の進行フェーズ (起承転結 + 後処理)。 */
 export type Phase =
   | 'idle'

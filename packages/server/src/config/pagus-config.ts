@@ -177,6 +177,14 @@ export interface SpectacleConfig {
   raidReward: number; // PAGUS_RAID_REWARD
 }
 
+/** テーマパック + モラルダイヤル (§v1.4-D). */
+export interface ThemeConfig {
+  /** テーマパック名 (data/theme/<pack>/lexicon.json). */
+  pack: string;
+  /** モラルダイヤル: dark | balanced | wholesome (wholesome=死刑無効). */
+  moral: string;
+}
+
 /** LLM 駆動の運用設定. */
 export interface LlmConfig {
   /** CLI の一過性失敗リトライ回数 (PAGUS_CLI_RETRIES). */
@@ -219,6 +227,7 @@ export interface PagusConfig {
   economy: EconomyConfig;
   intervene: InterveneConfig;
   arc: ArcConfig;
+  theme: ThemeConfig;
   politics: PoliticsConfig;
   spectacle: SpectacleConfig;
   llm: LlmConfig;
@@ -299,6 +308,10 @@ export const DEFAULT_CONFIG: PagusConfig = {
     witnessMax: 2,
     witnessWeight: 2,
     revealChance: 0.25,
+  },
+  theme: {
+    pack: 'classic',
+    moral: 'balanced',
   },
   politics: {
     revoltThreshold: 0.7,

@@ -76,6 +76,10 @@
     "witnessWeight": 2,
     "revealChance": 0.25
   },
+  "theme": {
+    "pack": "classic",
+    "moral": "balanced"
+  },
   "politics": {
     "revoltThreshold": 0.7,
     "martialDays": 2,

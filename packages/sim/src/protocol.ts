@@ -1,7 +1,7 @@
 // WS 配線契約。World は Map を持ち JSON 化できないので、villagers を配列にした
 // WireWorld を介して server→client へ送る。client もこの型だけ見れば描画できる。
 
-import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll, PlaceStateEntry, PlotThread } from './types/index.js';
+import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll, PlaceStateEntry, PlotThread, MoralDial } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 import { defaultBehaviorRules, type BehaviorRule } from './behavior-rules.js';
 
@@ -107,6 +107,45 @@ export interface WorldSnapshot {
   incidentCount: number;
   /** TermMachine.ruleCount (ふるまいの法則の通し番号, §2.1)。 */
   ruleCount: number;
+}
+
+/**
+ * テーマパック (§v1.4-D LexiconPack) の語彙。server が data/theme/<pack>/lexicon.json から
+ * ロードし (キー欠落は fail-fast)、theme メッセージで client へ配る。sim は不変。
+ */
+export interface ThemeLexicon {
+  /** パックの表示名 (例: クラシック / 精霊の森)。 */
+  packName: string;
+  /** 開廷の見出し (例: 審判の時 / 禊の儀)。 */
+  trialOpen: string;
+  stageFoolish: string;
+  stageFate: string;
+  stageDecided: string;
+  verdictDeathJa: string;
+  verdictDeathEn: string;
+  verdictEducateJa: string;
+  verdictEducateEn: string;
+  verdictDeathResult: string;
+  verdictEducateResult: string;
+  /** feed の判決行の接頭辞 (例: 判決 / 御宣託)。chronicle の分類にも使う。 */
+  verdictFeedPrefix: string;
+  /** 制裁の feed 行 ({name} を差し込む)。 */
+  sanctionFeed: string;
+  /** プレイヤーの罵倒/擁護、法廷の定型糾弾 ({d}=被告)/やり返し ({t}=相手)、断末魔/安堵。 */
+  taunts: string[];
+  defenses: string[];
+  denounces: string[];
+  retorts: string[];
+  screams: string[];
+  reliefs: string[];
+  /** 狂人の表示名 (例: 狂人 / いたずら妖精)。 */
+  madmanLabel: string;
+  /** 毒饅頭コマンドの表示名。 */
+  giftPoisonLabel: string;
+  /** Haiku 糾弾生成に足すトーン指示。 */
+  denounceTone: string;
+  /** 糾弾レパートリーの種セリフ。 */
+  denounceSeeds: string[];
 }
 
 /** 裁判の糾弾セリフ (server が生成/再利用して配る)。 */
@@ -291,6 +330,7 @@ export type ServerMessage =
   | { t: 'trialLines'; incidentId: string; lines: TrialLine[] } // 裁判の糾弾セリフ
   | { t: 'llm'; info: LlmInfo } // 稼働中の LLM 構成
   | { t: 'chronicle'; entries: ChronicleEntry[] } // 村の歴史
+  | { t: 'theme'; pack: string; moral: MoralDial; lexicon: ThemeLexicon } // テーマパック (§v1.4-D, 接続時+起動時)
   | {
       t: 'playerState'; // その接続ユーザの状態
       karma: number;

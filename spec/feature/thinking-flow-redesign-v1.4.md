@@ -205,6 +205,14 @@ interface PlotThread {
 
 ## 4. 論点④ カルトオブラム層ターゲット × 善良ゲーム — テーマパックとモラルダイヤル
 
+> **v1.4-D 実装済 (2026-07-02)**。実装マップ: LexiconPack = `data/theme/<pack>/lexicon.json`
+> (classic / **spirit-forest** を同梱) + `server/theme/lexicon.ts` (必須キー検証 fail-fast、wholesome 上書きマージ)、
+> 配信 = ServerMessage `theme` (接続時 + 起動時)、モラルダイヤル = config `theme.moral`
+> (wholesome では sim の verdict が常に educate + client の死刑ボタン非表示)。
+> 差し替え対象: 開廷/判決/制裁の feed 行・裁判シーンの全セリフプール (罵倒/擁護/糾弾/やり返し/断末魔/安堵)・
+> 判決ボタン・狂人表示名・毒饅頭ラベル・Haiku 糾弾のトーン/種 (レパートリーはパック別ファイル)。
+> 経済/政治系の feed 文言は据え置き (裁判が演出の本丸のため。必要になったらキー追加)。切替は config + 再起動。
+
 ### 4.1 分析 — CotL の魅力の分解と Pagus の対応物
 
 | CotL の魅力 | 本質 | Pagus の対応物 | 状態 |
