@@ -24,6 +24,8 @@ const ACTION_JA: Record<PlayerActionEntry['type'], string> = {
   heckle: '野次',
   testify: '証言',
   gift: '贈り物',
+  spot: '場所介入',
+  fanFlames: '言いふらし',
 };
 
 /** しきたり改定 (§2) のコスト表示。既定 env (PAGUS_RULE_ADD_COST/REMOVE_COST) に合わせる。 */

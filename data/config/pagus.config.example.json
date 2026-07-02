@@ -59,7 +59,12 @@
     "giftTreatCost": 5,
     "giftPoisonCost": 15,
     "giftTreatWealth": 25,
-    "giftTreatJoy": 0.2
+    "giftTreatJoy": 0.2,
+    "spotCost": 20,
+    "spotDays": 2,
+    "spotAnger": 0.15,
+    "spotJoy": 0.15,
+    "fanFlamesCost": 10
   },
   "politics": {
     "revoltThreshold": 0.7,

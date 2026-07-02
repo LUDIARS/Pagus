@@ -44,6 +44,8 @@ export interface WsHandlers {
     testifyCost: number;
     giftTreatCost: number;
     giftPoisonCost: number;
+    spotCost: number;
+    fanFlamesCost: number;
     championId: string | null;
     championName?: string;
     spent: number;
@@ -124,6 +126,8 @@ export function connect(url: string, h: WsHandlers): Conn {
           testifyCost: msg.testifyCost,
           giftTreatCost: msg.giftTreatCost,
           giftPoisonCost: msg.giftPoisonCost,
+          spotCost: msg.spotCost,
+          fanFlamesCost: msg.fanFlamesCost,
           championId: msg.championId ?? null,
           ...(msg.championName !== undefined ? { championName: msg.championName } : {}),
           spent: msg.spent,

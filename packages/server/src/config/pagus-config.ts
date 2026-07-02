@@ -116,6 +116,16 @@ export interface InterveneConfig {
   giftTreatWealth: number;
   /** 差し入れの喜び増 (-1..1 クランプ). */
   giftTreatJoy: number;
+  /** 場所を荒らす/清める (spot) のカルマコスト. */
+  spotCost: number;
+  /** spot の効果日数. */
+  spotDays: number;
+  /** 荒らした瞬間の怒り増. */
+  spotAnger: number;
+  /** 清めた瞬間の喜び増. */
+  spotJoy: number;
+  /** 噂の増幅 (fanFlames) のカルマコスト. */
+  fanFlamesCost: number;
 }
 
 /** 政治パック (§v1.3-C). */
@@ -253,6 +263,11 @@ export const DEFAULT_CONFIG: PagusConfig = {
     giftPoisonCost: 15,
     giftTreatWealth: 25,
     giftTreatJoy: 0.2,
+    spotCost: 20,
+    spotDays: 2,
+    spotAnger: 0.15,
+    spotJoy: 0.15,
+    fanFlamesCost: 10,
   },
   politics: {
     revoltThreshold: 0.7,

@@ -135,6 +135,17 @@ export interface MartialState {
   untilTerm: number;
 }
 
+/** 場所の状態 (§v1.4-A' spot)。defiled=穢れ (荒れやすい) / blessed=清め (和む)。 */
+export type SpotMode = 'defiled' | 'blessed';
+
+/** 場所の状態 1 件 (§v1.4-A')。place は placeAt のラベル (広場/住宅地/村はずれ)。 */
+export interface PlaceStateEntry {
+  place: string;
+  state: SpotMode;
+  /** この term を超えたら失効 (日末に掃除)。term < untilTerm の間だけ有効。 */
+  untilTerm: number;
+}
+
 export interface WorldConfig {
   gridWidth: number;
   gridHeight: number;
@@ -167,6 +178,8 @@ export interface World {
   behaviorRules: BehaviorRule[];
   /** フィールドに落ちているアイテム (§16)。人手で配置し、日末に住民が拾う。 */
   items: FieldItem[];
+  /** 場所の状態 (§v1.4-A' spot)。プレイヤーが場所を荒らす/清めると数日残り、日常行動に効く。 */
+  placeStates: PlaceStateEntry[];
   /** 現村長の villager id (§17)。選挙イベントで村人世論により決まる。空位は null。 */
   mayorId: VillagerId | null;
   /** 次の村長選挙までの残りターム数 (§17)。 */

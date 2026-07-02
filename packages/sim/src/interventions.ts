@@ -3,10 +3,11 @@
 // 2 点セットを必須とする (§3.2): ここは即時効果と残留タグ (eventParams / testimonies) を担い、
 // 見えるリアクション (吹き出し/live feed) は server/client が返す。
 
-import type { World, Villager, VillagerId, Incident, TrialState, TestimonyRecord, FieldItemKind } from './types/index.js';
-import { bumpEventParam, aliveVillagers } from './world.js';
+import type { World, Villager, VillagerId, Incident, TrialState, TestimonyRecord, FieldItemKind, SpotMode, InfoItem } from './types/index.js';
+import { bumpEventParam, aliveVillagers, placeAt, PLACES, NEARBY_RADIUS } from './world.js';
 import { groupByDominant } from './personality.js';
 import { applyItemEffect, type ItemConfig, DEFAULT_ITEMS } from './items.js';
+import { REACTION_EXPOSURE } from './daily-engine.js';
 
 /** 即効介入のチューニング値 (§3.3)。数値は当て推量で観戦調整前提 (config intervene.*)。 */
 export interface InterventionConfig {
@@ -18,6 +19,10 @@ export interface InterventionConfig {
   giftTreatWealth: number;
   /** 差し入れ (treat) の喜び増 (-1..1 クランプ)。 */
   giftTreatJoy: number;
+  /** 場所を荒らした瞬間、その場の住民に走る怒り (§v1.4-A' spot)。 */
+  spotAnger: number;
+  /** 場所を清めた瞬間、その場の住民に広がる喜び (§v1.4-A' spot)。 */
+  spotJoy: number;
 }
 
 export const DEFAULT_INTERVENTION: InterventionConfig = {
@@ -25,6 +30,8 @@ export const DEFAULT_INTERVENTION: InterventionConfig = {
   heckleBias: 0.08,
   giftTreatWealth: 25,
   giftTreatJoy: 0.2,
+  spotAnger: 0.15,
+  spotJoy: 0.15,
 };
 
 /** 野次られた当事者に残る残留タグ (§3.2 の 2 点セット)。behavior-rules の発火条件素材。 */
@@ -118,6 +125,100 @@ export function testifyInTrial(
     bumpEventParam(defendant, TESTIFIED_TAG, 1);
   }
   return { ok: true, record, defendantName: defendant.name };
+}
+
+/** 感情軸を -1..1 にクランプして加算する。 */
+function nudgeEmotion(v: Villager, axis: string, delta: number): void {
+  const next = (v.emotion.axes[axis] ?? 0) + delta;
+  v.emotion.axes[axis] = Math.min(1, Math.max(-1, next));
+}
+
+export interface SpotResult {
+  place: string;
+  state: SpotMode;
+  /** 即時に感情が動いた (その場にいた) 住民の数。 */
+  affected: number;
+  untilTerm: number;
+}
+
+/**
+ * 場所を荒らす/清める (§v1.4-A' spot)。その場にいる住民全員の感情が即時に動き、
+ * PlaceStateEntry が days ターム残って behavior-rule (base_defiled_place 等) に効く =
+ * 環境そのものへの介入 (三分の「環境=プログラム」に整合)。place が不正なら null。
+ */
+export function setPlaceState(
+  world: World,
+  place: string,
+  mode: 'defile' | 'bless',
+  days: number,
+  cfg: InterventionConfig = DEFAULT_INTERVENTION,
+): SpotResult | null {
+  if (!(PLACES as readonly string[]).includes(place)) return null;
+  const state: SpotMode = mode === 'defile' ? 'defiled' : 'blessed';
+  const untilTerm = world.term + Math.max(1, Math.floor(days));
+  // 同じ場所の既存 entry は上書き (荒らし⇄清めの塗り替え可)。
+  world.placeStates = world.placeStates.filter((e) => e.place !== place);
+  world.placeStates.push({ place, state, untilTerm });
+  let affected = 0;
+  for (const v of aliveVillagers(world)) {
+    if (placeAt(world, v.position) !== place) continue;
+    if (state === 'defiled') nudgeEmotion(v, 'anger', cfg.spotAnger);
+    else nudgeEmotion(v, 'joy', cfg.spotJoy);
+    affected += 1;
+  }
+  return { place, state, affected, untilTerm };
+}
+
+/** 失効した場所の状態 (untilTerm <= term) を除去して返す (日末の掃除)。 */
+export function pruneExpiredPlaceStates(world: World): SpotResult[] {
+  const removed: SpotResult[] = [];
+  world.placeStates = world.placeStates.filter((e) => {
+    if (e.untilTerm > world.term) return true;
+    removed.push({ place: e.place, state: e.state, affected: 0, untilTerm: e.untilTerm });
+    return false;
+  });
+  return removed;
+}
+
+export interface FanFlamesResult {
+  targetName: string;
+  /** 広めた噂の本文。 */
+  rumorText: string;
+  /** 噂が届いた近傍住民の数。 */
+  spreadCount: number;
+}
+
+/**
+ * 噂の増幅 (§v1.4-A' fanFlames)。対象が抱えるプレイヤー由来の噂 (扇動 §4.2 / 偽予言で注入した
+ * source:'player' の InfoItem) のうち最新の 1 件を、対象の近傍住民へ複製して撒く。
+ * 受け取った住民は REACTION_EXPOSURE が積まれ翌日以降のアルゴリズムイベントが増える。
+ * 対象が不在/退場、または広める噂を持っていなければ null。
+ */
+export function fanFlames(world: World, targetId: VillagerId): FanFlamesResult | null {
+  const target = world.villagers.get(targetId);
+  if (!target || !target.alive) return null;
+  const rumor = [...target.information].reverse().find((i) => i.source === 'player');
+  if (!rumor) return null;
+  const neighbors = aliveVillagers(world).filter(
+    (v) =>
+      v.id !== targetId &&
+      Math.max(Math.abs(v.position.x - target.position.x), Math.abs(v.position.y - target.position.y)) <= NEARBY_RADIUS,
+  );
+  let n = 0;
+  for (const v of neighbors) {
+    // 同じ噂の重複配布はしない (id 接頭辞で判定)。
+    if (v.information.some((i) => i.id.startsWith(`${rumor.id}_spread_`))) continue;
+    const copy: InfoItem = {
+      id: `${rumor.id}_spread_${v.id}`,
+      text: `噂で聞いた: ${rumor.text}`,
+      source: 'player',
+      termAcquired: world.term,
+    };
+    v.information.push(copy);
+    bumpEventParam(v, REACTION_EXPOSURE, 1);
+    n += 1;
+  }
+  return { targetName: target.name, rumorText: rumor.text, spreadCount: n };
 }
 
 /** 贈り物の種別。treat=差し入れ (喜び+富) / poison=毒饅頭 (薬物と同じ荒れ方)。 */

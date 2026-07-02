@@ -57,6 +57,8 @@ export interface WsHandlers {
   onHeckle(side: 'agitate' | 'soothe', userId: string): void;
   onTestify(stance: 'accuse' | 'defend', text: string | undefined, userId: string): void;
   onGift(targetId: string, kind: 'treat' | 'poison', userId: string): void;
+  onSpot(place: string, mode: 'defile' | 'bless', userId: string): void;
+  onFanFlames(targetId: string, userId: string): void;
   onVote(pick: string, userId?: string): void;
   onChampion(targetId: string, userId: string): void;
   /** フィールドアイテム配置 (§16)。toChampion=true で推しに直接送る。 */
@@ -215,6 +217,12 @@ export class GameWsServer {
     } else if (msg.t === 'gift') {
       this.bind(ws, msg.userId);
       this.h.onGift(msg.targetId, msg.kind, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'spot') {
+      this.bind(ws, msg.userId);
+      this.h.onSpot(msg.place, msg.mode, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'fanFlames') {
+      this.bind(ws, msg.userId);
+      this.h.onFanFlames(msg.targetId, this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'vote') {
       this.bind(ws, msg.userId);
       this.h.onVote(msg.pick, msg.userId);
@@ -313,6 +321,8 @@ export class GameWsServer {
       testifyCost: state.testifyCost,
       giftTreatCost: state.giftTreatCost,
       giftPoisonCost: state.giftPoisonCost,
+      spotCost: state.spotCost,
+      fanFlamesCost: state.fanFlamesCost,
       championId: state.championId,
       spent: state.spent,
       ...(championName !== undefined ? { championName } : {}),

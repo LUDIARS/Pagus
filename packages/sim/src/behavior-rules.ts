@@ -27,7 +27,8 @@ export type RuleCondition =
   | { kind: 'species'; species: string }
   | { kind: 'actionCategory'; category: RuleCategory }
   | { kind: 'wealthBelow'; value: number } // 所持金 < value (§15 貧困=非行傾向)
-  | { kind: 'wealthAbove'; value: number }; // 所持金 >= value (§15 富裕=クズ化)
+  | { kind: 'wealthAbove'; value: number } // 所持金 >= value (§15 富裕=クズ化)
+  | { kind: 'placeState'; state: 'defiled' | 'blessed' }; // いる場所の状態 (§v1.4-A' spot)
 
 /** ルール効果 (閉じた enum)。match した全ルールの効果を集約する。 */
 export type RuleEffect =
@@ -92,6 +93,8 @@ function matchCondition(cond: RuleCondition, ctx: RuleEvalContext): boolean {
       return villager.wealth < cond.value;
     case 'wealthAbove':
       return villager.wealth >= cond.value;
+    case 'placeState':
+      return env.placeState === cond.state;
   }
 }
 
@@ -206,6 +209,30 @@ export const BASE_BEHAVIOR_RULES: BehaviorRule[] = [
       { kind: 'triggerWeight', delta: 1 },
       { kind: 'emotionDelta', emotionAxis: 'joy', delta: 0.05 },
     ],
+  },
+  // §v1.4-A' spot: 荒らされた場所は気が立ち事件が起きやすく、清められた場所は和む。
+  {
+    id: 'base_defiled_place',
+    source: 'base',
+    description: '穢れた場所では気が立ち、諍いが起きやすい',
+    when: [
+      { kind: 'actionCategory', category: 'wander' },
+      { kind: 'placeState', state: 'defiled' },
+    ],
+    then: [
+      { kind: 'triggerWeight', delta: 1 },
+      { kind: 'emotionDelta', emotionAxis: 'anger', delta: 0.06 },
+    ],
+  },
+  {
+    id: 'base_blessed_place',
+    source: 'base',
+    description: '清められた場所では心が和む',
+    when: [
+      { kind: 'actionCategory', category: 'wander' },
+      { kind: 'placeState', state: 'blessed' },
+    ],
+    then: [{ kind: 'emotionDelta', emotionAxis: 'joy', delta: 0.04 }],
   },
   // §16 アイテム: 薬物を拾った個体 (eventParam 'drug' > 0、items.ts の DRUG_TAG と一致) は非行に走りやすい。
   {

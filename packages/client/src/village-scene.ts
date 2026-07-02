@@ -57,6 +57,8 @@ export class VillageScene {
   private readonly units = new Map<string, Unit>();
   /** フィールドアイテム (§16) の表示ノード。id → 絵文字 Text。 */
   private readonly itemNodes = new Map<string, Text>();
+  /** 場所の状態 (§v1.4-A' spot) のマーカー。place → 絵文字 Text。 */
+  private readonly placeNodes = new Map<string, Text>();
   private w = 1;
   private h = 1;
   private cell = 24;
@@ -173,6 +175,7 @@ export class VillageScene {
     if (focusing) this.vignette.rect(0, 0, w, h).fill({ color: 0x000000, alpha: 0.45 });
 
     this.renderItems(world, cellX, cellY);
+    this.renderPlaceStates(world, cellX, cellY);
 
     const victims = focusing ? [...this.focusSet].filter((id) => id !== this.focusPerp) : [];
 
@@ -269,6 +272,43 @@ export class VillageScene {
       if (!seen.has(id)) {
         node.destroy();
         this.itemNodes.delete(id);
+      }
+    }
+  }
+
+  /**
+   * 場所の状態 (§v1.4-A' spot) を場所の代表マスに絵文字で描く (💀=穢れ / ✨=清め)。
+   * 代表マスは placeAt の同心リングに合わせた見立て: 広場=中央 / 住宅地=中間 / 村はずれ=隅。
+   */
+  private renderPlaceStates(world: WireWorld, cellX: number, cellY: number): void {
+    const cols = world.config.gridWidth;
+    const rows = world.config.gridHeight;
+    const anchor: Record<string, { x: number; y: number }> = {
+      広場: { x: cols / 2, y: rows / 2 },
+      住宅地: { x: cols * 0.25, y: rows * 0.25 },
+      村はずれ: { x: 1, y: 1 },
+    };
+    const seen = new Set<string>();
+    for (const e of world.placeStates ?? []) {
+      const pos = anchor[e.place];
+      if (!pos) continue;
+      seen.add(e.place);
+      let node = this.placeNodes.get(e.place);
+      const glyph = e.state === 'defiled' ? '💀' : '✨';
+      if (!node) {
+        node = new Text({ text: glyph, style: { fontSize: 22 } });
+        node.anchor.set(0.5);
+        this.itemLayer.addChild(node);
+        this.placeNodes.set(e.place, node);
+      }
+      node.text = glyph;
+      node.x = pos.x * cellX;
+      node.y = pos.y * cellY;
+    }
+    for (const [place, node] of this.placeNodes) {
+      if (!seen.has(place)) {
+        node.destroy();
+        this.placeNodes.delete(place);
       }
     }
   }

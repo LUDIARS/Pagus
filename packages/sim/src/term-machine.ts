@@ -25,6 +25,9 @@ import {
   heckleIncident,
   testifyInTrial,
   giveGift as giveGiftFn,
+  setPlaceState,
+  pruneExpiredPlaceStates,
+  fanFlames as fanFlamesFn,
   DEFAULT_INTERVENTION,
   type InterventionConfig,
   type HeckleSide,
@@ -32,7 +35,10 @@ import {
   type TestifyOutcome,
   type GiftKind,
   type GiftResult,
+  type SpotResult,
+  type FanFlamesResult,
 } from './interventions.js';
+import { defaultBehaviorRules } from './behavior-rules.js';
 import type { FieldItem, FieldItemKind } from './types/index.js';
 import {
   tickMayor,
@@ -219,6 +225,11 @@ export class TermMachine {
     if (world.mayorId === null && aliveVillagers(world).length > 0) {
       electMayor(world, this.mayorConfig);
     }
+    // base ルールの補完 (§v1.4-A'): 復元した world.behaviorRules に、後から追加された
+    // 組込み base ルール (例 base_defiled_place) が欠けていれば足す (id で冪等)。
+    for (const base of defaultBehaviorRules()) {
+      if (!world.behaviorRules.some((r) => r.id === base.id)) world.behaviorRules.push(base);
+    }
   }
 
   /** スナップショット保存用: 出生通し番号 (born_N が再起動後も衝突しないよう保持する)。 */
@@ -382,6 +393,27 @@ export class TermMachine {
    */
   giveGift(targetId: VillagerId, kind: GiftKind): GiftResult | null {
     return giveGiftFn(this.world, targetId, kind, this.interveneConfig);
+  }
+
+  /**
+   * 場所を荒らす/清める (§v1.4-A' spot)。その場の住民の感情が即時に動き、
+   * 場所の状態が days ターム残って behavior-rule に効く。place が不正なら null。
+   */
+  spot(place: string, mode: 'defile' | 'bless', days: number): SpotResult | null {
+    return setPlaceState(this.world, place, mode, days, this.interveneConfig);
+  }
+
+  /**
+   * 噂の増幅 (§v1.4-A' fanFlames)。対象のプレイヤー由来の噂を近傍住民へ撒く。
+   * 対象不在/噂なしなら null。
+   */
+  fanFlames(targetId: VillagerId): FanFlamesResult | null {
+    return fanFlamesFn(this.world, targetId);
+  }
+
+  /** 失効した場所の状態を除去して返す (§v1.4-A', 日末)。server が advanceDay 後に呼ぶ。 */
+  pruneExpiredPlaceStates(): SpotResult[] {
+    return pruneExpiredPlaceStates(this.world);
   }
 
   // --- カードパック (§v1.3-A) ----------------------------------------------------

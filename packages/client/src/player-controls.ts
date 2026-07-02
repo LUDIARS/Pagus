@@ -24,6 +24,10 @@ export interface PlayerStateView {
   giftTreatCost: number;
   /** 毒饅頭の固定コスト (§v1.4-A)。 */
   giftPoisonCost: number;
+  /** 場所介入の固定コスト (§v1.4-A')。 */
+  spotCost: number;
+  /** 噂の増幅の固定コスト (§v1.4-A')。 */
+  fanFlamesCost: number;
   /** 推し (champion) の villager id。未指名は null (§1)。 */
   championId: string | null;
   /** 推しの名前 (server が world から補完)。 */
@@ -32,7 +36,7 @@ export interface PlayerStateView {
 
 export type ActionType = 'incite' | 'sanction' | 'cheer';
 /** ドックで選べるコマンド (行動)。champion = 推し指名 / gift-* = 贈り物 (§v1.4-A)。 */
-type Command = ActionType | 'champion' | 'gift-treat' | 'gift-poison';
+type Command = ActionType | 'champion' | 'gift-treat' | 'gift-poison' | 'fanFlames';
 
 export interface ControlHandlers {
   /** 対象 id を伴って操作を送る。扇動は rumorAboutId (悪口の主) を任意で伴う (§4.2)。 */
@@ -41,6 +45,8 @@ export interface ControlHandlers {
   onChampion(targetId: string): void;
   /** 選択中の対象へ贈り物を手渡す (§v1.4-A)。 */
   onGift(targetId: string, kind: 'treat' | 'poison'): void;
+  /** 選択中の対象の噂を近傍へ言いふらす (§v1.4-A')。 */
+  onFanFlames(targetId: string): void;
 }
 
 /** コマンドの表示メタ。 */
@@ -58,8 +64,9 @@ const COMMANDS: Record<Command, CommandMeta> = {
   champion: { label: '⭐ 推し指名', excludeChampion: false, needsRumor: false },
   'gift-treat': { label: '🍬 差し入れ', excludeChampion: false, needsRumor: false },
   'gift-poison': { label: '☠ 毒饅頭', excludeChampion: true, needsRumor: false },
+  fanFlames: { label: '📢 言いふらす', excludeChampion: false, needsRumor: false },
 };
-const COMMAND_ORDER: Command[] = ['incite', 'sanction', 'cheer', 'champion', 'gift-treat', 'gift-poison'];
+const COMMAND_ORDER: Command[] = ['incite', 'sanction', 'cheer', 'champion', 'gift-treat', 'gift-poison', 'fanFlames'];
 
 export class PlayerControls {
   private world: WireWorld | null = null;
@@ -163,6 +170,7 @@ export class PlayerControls {
     if (cmd === 'sanction') return Math.round(s.sanctionCost);
     if (cmd === 'gift-treat') return s.giftTreatCost;
     if (cmd === 'gift-poison') return s.giftPoisonCost;
+    if (cmd === 'fanFlames') return s.fanFlamesCost;
     return 0;
   }
 
@@ -244,6 +252,10 @@ export class PlayerControls {
     }
     if (this.command === 'gift-treat' || this.command === 'gift-poison') {
       this.h.onGift(id, this.command === 'gift-treat' ? 'treat' : 'poison');
+      return;
+    }
+    if (this.command === 'fanFlames') {
+      this.h.onFanFlames(id);
       return;
     }
     if (this.command === 'incite' && this.rumorAboutId) this.h.onAction('incite', id, this.rumorAboutId);

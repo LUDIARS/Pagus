@@ -36,6 +36,8 @@ export interface PlayerStateConfig {
     testifyCost: number;
     giftTreatCost: number;
     giftPoisonCost: number;
+    spotCost: number;
+    fanFlamesCost: number;
   };
 }
 
@@ -57,6 +59,8 @@ export const DEFAULT_PLAYER_STATE_CONFIG: PlayerStateConfig = {
     testifyCost: 8,
     giftTreatCost: 5,
     giftPoisonCost: 15,
+    spotCost: 20,
+    fanFlamesCost: 10,
   },
 };
 
@@ -119,6 +123,8 @@ export interface PlayerStateSnapshot {
   testifyCost: number;
   giftTreatCost: number;
   giftPoisonCost: number;
+  spotCost: number;
+  fanFlamesCost: number;
 }
 
 export class PlayerState {
@@ -302,12 +308,14 @@ export class PlayerState {
   }
 
   /** 即効介入 (§v1.4-A) の各コスト (表示/徴収用)。 */
-  get interveneCosts(): { heckle: number; testify: number; giftTreat: number; giftPoison: number } {
+  get interveneCosts(): { heckle: number; testify: number; giftTreat: number; giftPoison: number; spot: number; fanFlames: number } {
     return {
       heckle: this.intervene.heckleCost,
       testify: this.intervene.testifyCost,
       giftTreat: this.intervene.giftTreatCost,
       giftPoison: this.intervene.giftPoisonCost,
+      spot: this.intervene.spotCost,
+      fanFlames: this.intervene.fanFlamesCost,
     };
   }
 
@@ -472,6 +480,8 @@ export class PlayerState {
       testifyCost: this.intervene.testifyCost,
       giftTreatCost: this.intervene.giftTreatCost,
       giftPoisonCost: this.intervene.giftPoisonCost,
+      spotCost: this.intervene.spotCost,
+      fanFlamesCost: this.intervene.fanFlamesCost,
     };
   }
 }

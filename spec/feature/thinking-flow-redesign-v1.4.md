@@ -153,7 +153,11 @@ interface PlotThread {
 > `term-machine.ts` (`heckle`/`testify`/`giveGift`)、アイテム即時回収 = `items.ts` (`stepItemPickups`) +
 > `server/term-loop.ts` (kisho tick)、コスト/クールダウン = `server/player-state.ts` + config `intervene.*`、
 > UI = `client/src/{heckle-buttons,testify-panel,player-controls}.ts` + `stage-view.ts` (リアクション)。
-> 証言記録 = `TrialState.testimonies` (v1.4-B の遺恨 thread 生成点)。spot / fanFlames は v1.4-A' へ持ち越し。
+> 証言記録 = `TrialState.testimonies` (v1.4-B の遺恨 thread 生成点)。
+> **v1.4-A' 実装済 (2026-07-02)**: spot (場所荒らし/清め) = `World.placeStates` + `interventions.setPlaceState` +
+> DSL `placeState` 条件 + base ルール (base_defiled_place / base_blessed_place、復元 world へは TermMachine が補完マージ)、
+> fanFlames (噂の増幅) = `interventions.fanFlames` (近傍へ InfoItem 複製 + REACTION_EXPOSURE)。
+> UI = アイテムパネルの「🗺 場所」+ 行動ドック「📢 言いふらす」、マップに 💀/✨ マーカー。
 
 ### 3.1 現状マトリクス (棚卸し)
 
