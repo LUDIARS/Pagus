@@ -77,7 +77,7 @@ export class StageView {
    * プレイヤーの行動 (§4/§v1.4-A) に対象どうぶつが即リアクションする吹き出し
    * (介入 2 点セットの「3 秒で見える」側)。村シーン表示中のみ。裁判中は何もしない。
    */
-  reactToAction(targetId: string, type: 'incite' | 'sanction' | 'cheer' | 'champion' | 'gift-treat' | 'gift-poison'): void {
+  reactToAction(targetId: string, type: 'incite' | 'sanction' | 'cheer' | 'champion' | 'gift-treat' | 'gift-poison' | 'fanFlames'): void {
     if (this.inTrial) return;
     const react: Record<typeof type, { text: string; tone: 'calm' | 'angry' }> = {
       incite: { text: 'なんだと…！？', tone: 'angry' },
@@ -86,6 +86,7 @@ export class StageView {
       champion: { text: '推されてる…！', tone: 'calm' },
       'gift-treat': { text: 'わぁ、ありがとう！🍬', tone: 'calm' },
       'gift-poison': { text: 'うっ…なんだこれ…', tone: 'angry' },
+      fanFlames: { text: '噂が広まっていく…', tone: 'angry' },
     };
     const r = react[type];
     this.village.say(targetId, r.text, r.tone);

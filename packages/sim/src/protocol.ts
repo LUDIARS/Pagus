@@ -1,7 +1,7 @@
 // WS 配線契約。World は Map を持ち JSON 化できないので、villagers を配列にした
 // WireWorld を介して server→client へ送る。client もこの型だけ見れば描画できる。
 
-import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll } from './types/index.js';
+import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll, PlaceStateEntry } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 import { defaultBehaviorRules, type BehaviorRule } from './behavior-rules.js';
 
@@ -19,6 +19,8 @@ export interface WireWorld {
   behaviorRules: BehaviorRule[];
   /** フィールドに落ちているアイテム (§16)。 */
   items: FieldItem[];
+  /** 場所の状態 (§v1.4-A' spot)。 */
+  placeStates: PlaceStateEntry[];
   /** 現村長の villager id (§17)。空位は null。 */
   mayorId: string | null;
   /** 次の村長選挙までの残りターム数 (§17)。 */
@@ -43,6 +45,7 @@ export function toWire(world: World): WireWorld {
     villageRules: world.villageRules,
     behaviorRules: world.behaviorRules,
     items: world.items,
+    placeStates: world.placeStates,
     mayorId: world.mayorId,
     mayorTermsLeft: world.mayorTermsLeft,
     mayorPoll: world.mayorPoll,
@@ -67,6 +70,7 @@ export function fromWire(wire: WireWorld): World {
     villageRules: wire.villageRules ?? [],
     behaviorRules: wire.behaviorRules ?? defaultBehaviorRules(),
     items: wire.items ?? [],
+    placeStates: wire.placeStates ?? [],
     mayorId: wire.mayorId ?? null,
     mayorTermsLeft: wire.mayorTermsLeft ?? 0,
     mayorPoll: wire.mayorPoll ?? null,
@@ -137,7 +141,7 @@ export interface PlayerActionEntry {
   /** ゲーム内日付 (例 "6月12日")。 */
   date: string;
   userId: string;
-  type: 'incite' | 'sanction' | 'cheer' | 'heckle' | 'testify' | 'gift';
+  type: 'incite' | 'sanction' | 'cheer' | 'heckle' | 'testify' | 'gift' | 'spot' | 'fanFlames';
   /** 操作対象のどうぶつ名。 */
   target: string;
 }
@@ -302,6 +306,10 @@ export type ServerMessage =
       giftTreatCost: number;
       /** 毒饅頭 (poison) の固定コスト。 */
       giftPoisonCost: number;
+      /** 場所を荒らす/清める (spot) の固定コスト。 */
+      spotCost: number;
+      /** 噂の増幅 (fanFlames) の固定コスト。 */
+      fanFlamesCost: number;
       /** 推し (champion) の villager id。未指名は null (§1)。 */
       championId?: string | null;
       /** 推しの名前 (index が world から補完)。未指名/不在なら省略。 */
@@ -370,6 +378,8 @@ export type ClientMessage =
   | { t: 'heckle'; side: 'agitate' | 'soothe'; userId?: string } // 進行中の事件へ野次を飛ばす
   | { t: 'testify'; stance: 'accuse' | 'defend'; text?: string; userId?: string } // 裁判の fate 段階へ証言を投げ込む
   | { t: 'gift'; targetId: string; kind: 'treat' | 'poison'; userId?: string } // 差し入れ/毒饅頭を手渡す
+  | { t: 'spot'; place: string; mode: 'defile' | 'bless'; userId?: string } // 場所を荒らす/清める (§v1.4-A')
+  | { t: 'fanFlames'; targetId: string; userId?: string } // 対象の噂を近傍へ言いふらす (§v1.4-A')
   | { t: 'vote'; pick: string; userId?: string } // 裁判への 1 票 (foolish=候補id / fate='kill'|'spare')。userId で接続ユーザを区別 (重み合算)
   | { t: 'champion'; targetId: string; userId?: string } // 推しを 1 体指名 (§1)。再送で差し替え
   // フィールドアイテム配置 (§16)。カルマ消費なし・ランダム配布。kind='random'|'precious'|'drug'。

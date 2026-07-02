@@ -97,6 +97,11 @@ async function main(): Promise<void> {
       conn.send({ t: 'gift', targetId, kind, userId });
       stage.reactToAction(targetId, kind === 'treat' ? 'gift-treat' : 'gift-poison');
     },
+    // 噂の増幅 (§v1.4-A'): 対象の噂を近傍へ言いふらす。
+    onFanFlames: (targetId) => {
+      conn.send({ t: 'fanFlames', targetId, userId });
+      stage.reactToAction(targetId, 'fanFlames');
+    },
   });
 
   // 野次 (§v1.4-A): 事件 (承) の進行中だけ中央に出る 煽る/なだめる ボタン。
@@ -119,8 +124,9 @@ async function main(): Promise<void> {
   // アイテムパネル (§16): 人手でフィールドにアイテム配置 (ランダム/貴金属/薬物)。推しに直送も可。
   const items = new ItemPanel(el('items'), {
     onPlace: (kind, toChampion) => conn.send({ t: 'placeItem', kind, toChampion, userId }),
+    // 場所介入 (§v1.4-A'): 荒らす/清める。
+    onSpot: (place, mode) => conn.send({ t: 'spot', place, mode, userId }),
   });
-  void items;
 
   // 経済パネル (§v1.3-B): 保険 / 闇市 / オークション (送金・銀行は廃止)。
   const economy = new EconomyPanel(el('economy'), {
@@ -191,6 +197,7 @@ async function main(): Promise<void> {
       controls.setState(state);
       heckle.setState(state.heckleCost, state.canHeckleInMs);
       testify.setState(state.testifyCost);
+      items.setCosts(state.spotCost);
       cards.setKarma(state.karma);
       economy.setState(state.karma);
       account.setSpent(state.spent);

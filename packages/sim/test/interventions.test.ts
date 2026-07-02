@@ -15,6 +15,12 @@ import {
   giveGift,
   testimonyWeight,
   stepItemPickups,
+  setPlaceState,
+  pruneExpiredPlaceStates,
+  placeStateOf,
+  environmentView,
+  evaluateRules,
+  defaultBehaviorRules,
   type World,
   type TrialState,
 } from '../src/index.js';
@@ -197,5 +203,91 @@ describe('アイテムのセグメント回収 (§v1.4-A stepItemPickups)', () =
     expect(stepItemPickups(world)).toHaveLength(0);
     expect(world.items).toHaveLength(1);
     expect(a.position).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe("場所介入 (§v1.4-A' spot)", () => {
+  it('defile はその場の住民の怒りを即時に上げ、placeStates に残る', () => {
+    const world = twoAnimalWorld(); // (12,12)/(13,12) = 広場
+    const r = setPlaceState(world, '広場', 'defile', 2);
+    expect(r?.state).toBe('defiled');
+    expect(r?.affected).toBe(2);
+    expect(world.villagers.get('a')?.emotion.axes['anger']).toBeCloseTo(DEFAULT_INTERVENTION.spotAnger, 6);
+    expect(placeStateOf(world, '広場')).toBe('defiled');
+    expect(placeStateOf(world, '村はずれ')).toBeNull();
+  });
+
+  it('bless は喜びを上げ、同じ場所の既存状態を塗り替える', () => {
+    const world = twoAnimalWorld();
+    setPlaceState(world, '広場', 'defile', 2);
+    const r = setPlaceState(world, '広場', 'bless', 2);
+    expect(r?.state).toBe('blessed');
+    expect(world.placeStates).toHaveLength(1);
+    expect(placeStateOf(world, '広場')).toBe('blessed');
+  });
+
+  it('不正な場所は null', () => {
+    const world = twoAnimalWorld();
+    expect(setPlaceState(world, '温泉', 'defile', 2)).toBeNull();
+  });
+
+  it('期限が切れると placeStateOf は null になり、prune で除去される', () => {
+    const world = twoAnimalWorld();
+    setPlaceState(world, '広場', 'defile', 1); // untilTerm = term+1
+    world.term += 1;
+    expect(placeStateOf(world, '広場')).toBeNull();
+    const removed = pruneExpiredPlaceStates(world);
+    expect(removed).toHaveLength(1);
+    expect(world.placeStates).toHaveLength(0);
+  });
+
+  it('荒らされた場所では behavior-rule (base_defiled_place) で事件化しやすくなる', () => {
+    const world = twoAnimalWorld();
+    const a = world.villagers.get('a');
+    if (!a) throw new Error('a がいない');
+    const rules = defaultBehaviorRules();
+    const before = evaluateRules(rules, { villager: a, env: environmentView(world, a), category: 'wander' }).triggerWeight;
+    setPlaceState(world, '広場', 'defile', 2);
+    const after = evaluateRules(rules, { villager: a, env: environmentView(world, a), category: 'wander' }).triggerWeight;
+    expect(after).toBeGreaterThan(before);
+  });
+
+  it('復元 world に新しい base ルールが無ければ TermMachine が補完する', () => {
+    const world = twoAnimalWorld();
+    world.behaviorRules = world.behaviorRules.filter((r) => r.id !== 'base_defiled_place');
+    new TermMachine(world, new StubBrain());
+    expect(world.behaviorRules.some((r) => r.id === 'base_defiled_place')).toBe(true);
+    // 冪等: 二重生成しない。
+    new TermMachine(world, new StubBrain());
+    expect(world.behaviorRules.filter((r) => r.id === 'base_defiled_place')).toHaveLength(1);
+  });
+});
+
+describe("噂の増幅 (§v1.4-A' fanFlames)", () => {
+  it('プレイヤー由来の噂を近傍住民へ複製し REACTION_EXPOSURE を積む', () => {
+    const world = twoAnimalWorld();
+    const tm = new TermMachine(world, new StubBrain(), { dailyTriggerAfter: 99 });
+    tm.inciteTarget('a', 'b'); // a に噂を注入
+    const r = tm.fanFlames('a');
+    expect(r).not.toBeNull();
+    expect(r?.spreadCount).toBe(1); // 近傍は b のみ
+    const b = world.villagers.get('b');
+    expect(b?.information.some((i) => i.text.includes('噂で聞いた'))).toBe(true);
+    expect(b?.eventParams['incidentExposure']).toBe(1);
+  });
+
+  it('同じ噂の重複配布はしない', () => {
+    const world = twoAnimalWorld();
+    const tm = new TermMachine(world, new StubBrain(), { dailyTriggerAfter: 99 });
+    tm.inciteTarget('a', 'b');
+    expect(tm.fanFlames('a')?.spreadCount).toBe(1);
+    expect(tm.fanFlames('a')?.spreadCount).toBe(0); // 2 回目は届かない
+  });
+
+  it('噂を持たない対象・不在の対象は null', () => {
+    const world = twoAnimalWorld();
+    const tm = new TermMachine(world, new StubBrain());
+    expect(tm.fanFlames('a')).toBeNull(); // 噂なし
+    expect(tm.fanFlames('ghost')).toBeNull();
   });
 });

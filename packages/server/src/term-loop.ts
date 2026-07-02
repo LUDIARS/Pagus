@@ -1,7 +1,7 @@
 // TermMachine をフェーズに応じて 1 ステップずつ駆動するループ。
 // 時間制御はここが所有する: 起のセグメントはカレンダー導出ペース、事件の局面は速めに刻む。
 
-import type { TermMachine, World, HeckleSide, HeckleResult, TestifyOutcome, GiftKind, GiftResult } from '@pagus/sim';
+import type { TermMachine, World, HeckleSide, HeckleResult, TestifyOutcome, GiftKind, GiftResult, SpotResult, FanFlamesResult } from '@pagus/sim';
 import { pacedSegmentMs, type PaceOptions } from './clock.js';
 
 export interface LoopHandlers {
@@ -90,6 +90,16 @@ export class TermLoop {
     return this.tm.giveGift(targetId, kind);
   }
 
+  /** プレイヤーの場所介入 (§v1.4-A'): 荒らす/清める。place 不正なら null。 */
+  spot(place: string, mode: 'defile' | 'bless', days: number): SpotResult | null {
+    return this.tm.spot(place, mode, days);
+  }
+
+  /** プレイヤーの噂の増幅 (§v1.4-A')。対象不在/噂なしなら null。 */
+  fanFlames(targetId: string): FanFlamesResult | null {
+    return this.tm.fanFlames(targetId);
+  }
+
   /** 事件前日の詳細デザイン + 事件用キャラ生成を実行し、予兆をログに出す (§12.3.2)。 */
   private async designScheduled(): Promise<void> {
     const result = await this.tm.designScheduledIncident();
@@ -175,6 +185,10 @@ export class TermLoop {
         // 天災カード等の TTL 切れ一時ルールを除去する (§v1.3-A)。hidden 退避の復帰は advanceDay 内で済む。
         const expired = this.tm.pruneExpiredRules();
         for (const rule of expired) this.h.onLog('kisho', `🃏 天災がおさまった: 「${rule.description}」`);
+        // 場所の状態 (§v1.4-A') の期限切れを掃除する。
+        for (const spot of this.tm.pruneExpiredPlaceStates()) {
+          this.h.onLog('kisho', spot.state === 'defiled' ? `💨 ${spot.place}の穢れが晴れた` : `💨 ${spot.place}の清めが薄れた`);
+        }
         const extra = `${r.monthRolled ? ' / 月がかわった' : ''}${r.holiday ? ` (${r.holiday})` : ''}`;
         this.h.onLog('kisho', `日が暮れた${extra}`);
         // 村長選挙 (§17): 通常選挙/補欠選挙が起きたらログに出す。

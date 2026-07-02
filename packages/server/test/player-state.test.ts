@@ -264,5 +264,7 @@ describe('即効介入 (§v1.4-A 野次クールダウン/コスト)', () => {
     expect(s.testifyCost).toBe(8);
     expect(s.giftTreatCost).toBe(5);
     expect(s.giftPoisonCost).toBe(15);
+    expect(s.spotCost).toBe(20);
+    expect(s.fanFlamesCost).toBe(10);
   });
 });

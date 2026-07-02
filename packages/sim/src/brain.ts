@@ -22,6 +22,8 @@ export interface EnvironmentView {
   place: string;
   timeOfDay: TimeOfDay;
   nearby: Array<{ id: string; name: string; pos: GridPos }>;
+  /** いる場所の状態 (§v1.4-A' spot)。荒らされ/清められた場所にいるときだけ値を持つ。 */
+  placeState?: 'defiled' | 'blessed';
 }
 
 // --- 起: 行動決定 ---

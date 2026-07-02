@@ -160,6 +160,8 @@ function main(): void {
       heckleBias: cfg.intervene.heckleBias,
       giftTreatWealth: cfg.intervene.giftTreatWealth,
       giftTreatJoy: cfg.intervene.giftTreatJoy,
+      spotAnger: cfg.intervene.spotAnger,
+      spotJoy: cfg.intervene.spotJoy,
     },
     bornCount: restored?.bornCount ?? 0, // 出生 id の通し番号を引き継ぐ
     incidentCount: restored?.incidentCount ?? 0, // 事件用キャラ id の通し番号を引き継ぐ
@@ -215,6 +217,8 @@ function main(): void {
       testifyCost: cfg.intervene.testifyCost,
       giftTreatCost: cfg.intervene.giftTreatCost,
       giftPoisonCost: cfg.intervene.giftPoisonCost,
+      spotCost: cfg.intervene.spotCost,
+      fanFlamesCost: cfg.intervene.fanFlamesCost,
     },
   });
   const knownUsers = new Set<string>();
@@ -248,6 +252,9 @@ function main(): void {
   const SPIRITAWAY_DAYS = cfg.cards.spiritAwayDays;
   // 天災カードルールの通し番号 (id 衝突回避)。
   let cardRuleCount = 0;
+
+  // 即効介入 (§v1.4-A') の設定。
+  const SPOT_DAYS = cfg.intervene.spotDays;
 
   // 経済パック (§v1.3-B) の設定。
   const INSURE_DAYS = cfg.economy.insureDays; // 推し保険の有効日数 (③)
@@ -615,6 +622,58 @@ function main(): void {
       chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, feed, 'other');
       ws.updateChronicle(chronicle.recent());
       recordAction(userId, 'gift', targetId);
+      pushState(userId);
+      ws.broadcastSnapshot(tm.world);
+    },
+    onSpot: (place, mode, userId) => {
+      knownUsers.add(userId);
+      if (mode !== 'defile' && mode !== 'bless') {
+        ws.sendRejected(userId, 'spot は defile / bless のいずれか');
+        return;
+      }
+      if (!ps.spend(userId, ps.interveneCosts.spot)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      const r = loop.spot(place, mode, SPOT_DAYS);
+      if (!r) {
+        ps.addKarma(userId, ps.interveneCosts.spot); // 不正な場所は返金 (握り潰さない)
+        ws.sendRejected(userId, '場所が不正 (広場/住宅地/村はずれ)');
+        return;
+      }
+      const feed = r.state === 'defiled'
+        ? `💀 荒らし: ${r.place}が穢された (${r.affected}体が気を立てた)`
+        : `✨ 清め: ${r.place}が清められた (${r.affected}体が和んだ)`;
+      ws.broadcastLog('kisho', feed);
+      sessionLog.line('kisho', feed);
+      const cal = tm.world.calendar;
+      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, feed, 'other');
+      ws.updateChronicle(chronicle.recent());
+      recordAction(userId, 'spot', r.place);
+      pushState(userId);
+      ws.broadcastSnapshot(tm.world);
+    },
+    onFanFlames: (targetId, userId) => {
+      knownUsers.add(userId);
+      const target = targetId ? tm.world.villagers.get(targetId) : undefined;
+      if (!targetId || !target || !target.alive) {
+        ws.sendRejected(userId, '言いふらす相手が不正 (生存どうぶつのみ)');
+        return;
+      }
+      if (!ps.spend(userId, ps.interveneCosts.fanFlames)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      const r = loop.fanFlames(targetId);
+      if (!r) {
+        ps.addKarma(userId, ps.interveneCosts.fanFlames); // 噂なしは返金 (握り潰さない)
+        ws.sendRejected(userId, '広める噂がない (先に扇動で吹き込む)');
+        return;
+      }
+      const feed = `📢 言いふらし: ${r.targetName} の噂「${r.rumorText}」が ${r.spreadCount}体に広まった`;
+      ws.broadcastLog('kisho', feed);
+      sessionLog.line('kisho', feed);
+      recordAction(userId, 'fanFlames', targetId);
       pushState(userId);
       ws.broadcastSnapshot(tm.world);
     },
