@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { DailyEngine, REACTION_EXPOSURE, createVillager } from '../src/index.js';
+import { DailyEngine, REACTION_EXPOSURE, createVillager, lifeProfileFor } from '../src/index.js';
 import type { EnvironmentView } from '../src/brain.js';
 
-function envWith(neighbor: boolean): EnvironmentView {
+function envWith(neighbor: boolean, timeOfDay: EnvironmentView['timeOfDay'] = 'noon'): EnvironmentView {
   return {
     position: { x: 12, y: 12 },
     place: '広場',
-    timeOfDay: 'noon',
+    timeOfDay,
     nearby: neighbor ? [{ id: 'b', name: 'ベル', pos: { x: 13, y: 12 } }] : [],
   };
 }
@@ -59,5 +59,22 @@ describe('DailyEngine (日常 = LLM 非依存)', () => {
     const v = createVillager({ id: 'a', name: 'アオ', position: { x: 12, y: 12 } });
     const good = eng.decide(v, envWith(false), { category: 'good', actor: 'a', target: null });
     expect(good.newEmotion.axes['joy']).toBeGreaterThan(0);
+  });
+
+  it('職能/日課から生活感ある行動と事件種を作る', () => {
+    const eng = new DailyEngine({ rng: () => 0.5, triggerAfter: 6 });
+    const v = createVillager({
+      id: 'music',
+      name: 'リラ',
+      position: { x: 12, y: 12 },
+      values: ['音楽で気持ちを伝える'],
+    });
+    v.wealth = 200;
+
+    expect(lifeProfileFor(v).specialty).toBe('musician');
+    const decision = eng.decide(v, envWith(true, 'night'), null);
+    expect(decision.action).toContain('音楽家');
+    expect(decision.triggersIncident).toBe(true);
+    expect(decision.incidentSeed?.description).toContain('騒音問題');
   });
 });

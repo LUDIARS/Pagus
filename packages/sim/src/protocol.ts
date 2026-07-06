@@ -1,7 +1,7 @@
 // WS 配線契約。World は Map を持ち JSON 化できないので、villagers を配列にした
 // WireWorld を介して server→client へ送る。client もこの型だけ見れば描画できる。
 
-import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, ScheduledParty, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll, ResidentHistoryEntry, VillagerRelationship, VillagerActionEntry, VillagerGachaKind } from './types/index.js';
+import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, ScheduledParty, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll, ResidentHistoryEntry, VillagerRelationship, UserFaithEntry, VillagerActionEntry, VillagerGachaKind } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 import { defaultBehaviorRules, type BehaviorRule } from './behavior-rules.js';
 
@@ -30,6 +30,7 @@ export interface WireWorld {
   martial?: MartialState;
   residentHistory: ResidentHistoryEntry[];
   relationships: VillagerRelationship[];
+  userFaith: UserFaithEntry[];
   villagerActionLog: VillagerActionEntry[];
 }
 
@@ -53,6 +54,7 @@ export function toWire(world: World): WireWorld {
     mayorPoll: world.mayorPoll,
     residentHistory: world.residentHistory,
     relationships: world.relationships,
+    userFaith: world.userFaith,
     villagerActionLog: world.villagerActionLog,
   };
   // exactOptionalPropertyTypes: 戒厳令は発動中のみキーを足す (§v1.3-C ⑨)。
@@ -81,6 +83,7 @@ export function fromWire(wire: WireWorld): World {
     mayorPoll: wire.mayorPoll ?? null,
     residentHistory: wire.residentHistory ?? [],
     relationships: wire.relationships ?? [],
+    userFaith: wire.userFaith ?? [],
     villagerActionLog: wire.villagerActionLog ?? [],
   };
   if (wire.martial !== undefined) world.martial = wire.martial;
@@ -93,6 +96,7 @@ export function fromWire(wire: WireWorld): World {
 // v7: Villager.wealth/hobby/admireId/scummy (§15 住民経済)。
 // v8: World.items (§16 フィールドアイテム)。
 // v9: World.mayorId/mayorTermsLeft/mayorPoll (§17 村人村長の選挙)。
+// userFaith は欠落時に [] で復元できる追加フィールドなので v11 のまま互換維持。
 export const WORLD_SNAPSHOT_VERSION = 11;
 
 /**
@@ -184,6 +188,8 @@ export interface PlayerState {
   canCheerInMs: number;
   /** 累計課金額 (§v1.3-F 課金モック)。topup でカルマと共に増える。 */
   spent: number;
+  /** 月次配布されるイベントカードの所持数。 */
+  eventCards: number;
 }
 
 /** オークション (§v1.3-B ②) の 1 ロットの配信形。 */
@@ -260,6 +266,8 @@ export interface LeaderboardEntry {
   stats: PlayerStats;
   /** 累計課金額 (§v1.3-F 課金モック)。状態一覧に ¥ 表記で出す。 */
   spent: number;
+  /** 推し (champion) の villager id。未指名は null。 */
+  championId: string | null;
 }
 
 /** ユーザー間チャットの 1 件。 */
@@ -269,6 +277,19 @@ export interface ChatMessage {
   userName: string | null;
   text: string;
   at: number;
+}
+
+/** 他ユーザーの裁判の声。住民が信仰しているユーザーには応答が付く。 */
+export interface TrialVoice {
+  id: string;
+  userId: string;
+  userName: string | null;
+  pick: 'kill' | 'spare';
+  text: string;
+  at: number;
+  respondentId?: string;
+  responseText?: string;
+  faith?: number;
 }
 
 /** LLM コストログの 1 件 (§7, 直近分を配信)。 */
@@ -322,6 +343,7 @@ export type ServerMessage =
   | { t: 'log'; phase: Phase; text: string }
   | { t: 'players'; count: number } // 同時接続プレイヤー数
   | { t: 'trialLines'; incidentId: string; lines: TrialLine[] } // 裁判の糾弾セリフ
+  | { t: 'trialVoices'; incidentId: string; voices: TrialVoice[] } // 他ユーザーの裁判の声と住民の応答
   | { t: 'llm'; info: LlmInfo } // 稼働中の LLM 構成
   | { t: 'chronicle'; entries: ChronicleEntry[] } // 村の歴史
   | {
@@ -340,6 +362,8 @@ export type ServerMessage =
       championName?: string;
       /** 累計課金額 (§v1.3-F 課金モック)。 */
       spent: number;
+      /** 月次配布されるイベントカードの所持数。 */
+      eventCards: number;
     }
   | { t: 'loggedOut'; reason: string } // 別端末ログインで現セッションが追い出された (§v1.3-F)
   | { t: 'auction'; lots: AuctionLotView[] } // オークションのロット状態 (§v1.3-B ②, broadcast)
@@ -414,6 +438,7 @@ export type ClientMessage =
   // カードパック (§v1.3-A): カルマで切る一発介入。card 別に必要な引数だけ伴う。
   // disaster=kind / spiritAway=targetId / swap=targetId(a)+targetId2(b) / awaken=targetId / falseProphecy=text?
   | { t: 'card'; card: CardName; targetId?: string; targetId2?: string; kind?: string; text?: string; userId?: string }
+  | { t: 'eventCard'; userId?: string } // 月次配布カードを 1 枚消費してガチャ効果を起こす
   // 経済パック (§v1.3-B): カルマ経済 (銀行/預金は廃止)。
   | { t: 'insure'; targetId: string; premium: number; userId?: string } // 推し保険を掛ける (§v1.3-B ③)
   | { t: 'buyMarket'; item: MarketItem; targetId?: string; targetId2?: string; kind?: string; userId?: string } // 闇市で購入 (§v1.3-B ⑤)

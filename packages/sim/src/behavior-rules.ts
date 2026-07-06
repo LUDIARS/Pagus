@@ -9,7 +9,7 @@
 
 import type { PersonalityAxis } from './personality.js';
 import type { TimeOfDay } from './types/world.js';
-import type { Villager, EmotionState } from './types/index.js';
+import type { Villager, EmotionState, Hobby, ActivityPattern } from './types/index.js';
 import type { EnvironmentView } from './brain.js';
 
 /** 行動カテゴリ (差配/自由行動から決まる)。ルール条件 actionCategory と評価コンテキストの両方で使う。 */
@@ -25,6 +25,9 @@ export type RuleCondition =
   | { kind: 'timeOfDay'; timeOfDay: TimeOfDay }
   | { kind: 'hasNeighbor' }
   | { kind: 'species'; species: string }
+  | { kind: 'activity'; activity: ActivityPattern }
+  | { kind: 'hobby'; hobby: Hobby }
+  | { kind: 'valueIncludes'; text: string }
   | { kind: 'actionCategory'; category: RuleCategory }
   | { kind: 'wealthBelow'; value: number } // 所持金 < value (§15 貧困=非行傾向)
   | { kind: 'wealthAbove'; value: number }; // 所持金 >= value (§15 富裕=クズ化)
@@ -86,6 +89,12 @@ function matchCondition(cond: RuleCondition, ctx: RuleEvalContext): boolean {
       return env.nearby.length > 0;
     case 'species':
       return villager.species === cond.species;
+    case 'activity':
+      return villager.activity === cond.activity;
+    case 'hobby':
+      return villager.hobby === cond.hobby;
+    case 'valueIncludes':
+      return villager.persona.values.some((v) => v.includes(cond.text));
     case 'actionCategory':
       return category === cond.category;
     case 'wealthBelow':
@@ -219,6 +228,36 @@ export const BASE_BEHAVIOR_RULES: BehaviorRule[] = [
     then: [
       { kind: 'triggerWeight', delta: 2 },
       { kind: 'emotionDelta', emotionAxis: 'anger', delta: 0.1 },
+    ],
+  },
+  {
+    id: 'base_musician_noise',
+    source: 'base',
+    description: '音楽を大事にする者は夜の近所迷惑を起こしやすい',
+    when: [
+      { kind: 'actionCategory', category: 'wander' },
+      { kind: 'timeOfDay', timeOfDay: 'night' },
+      { kind: 'hasNeighbor' },
+      { kind: 'valueIncludes', text: '音楽' },
+    ],
+    then: [
+      { kind: 'triggerWeight', delta: 4 },
+      { kind: 'emotionDelta', emotionAxis: 'joy', delta: 0.08 },
+      { kind: 'actionFlavor', text: '夜更けの演奏で近所の眠りを揺らした' },
+    ],
+  },
+  {
+    id: 'base_collector_suspicion',
+    source: 'base',
+    description: '収集家は落とし物と盗品の境目で疑われやすい',
+    when: [
+      { kind: 'actionCategory', category: 'wander' },
+      { kind: 'hobby', hobby: 'collector' },
+      { kind: 'hasNeighbor' },
+    ],
+    then: [
+      { kind: 'triggerWeight', delta: 2 },
+      { kind: 'emotionDelta', emotionAxis: 'fear', delta: 0.08 },
     ],
   },
 ];

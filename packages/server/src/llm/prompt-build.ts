@@ -14,6 +14,7 @@ import {
   PERSONALITY_LABELS,
   VIRTUES,
   VIRTUE_LABELS,
+  lifeProfileFor,
 } from '@pagus/sim';
 import type {
   EmotionContext,
@@ -61,7 +62,8 @@ function traitsLine(p: Personality): string {
 
 /** 住民を 1 行で (id 付き)。スケジュール/デザインの一覧で使う。 */
 function villagerLine(v: Villager): string {
-  return `- ${v.id}: ${v.name} (${v.species}) | ${traitsLine(v.persona.traits)}`;
+  const profile = lifeProfileFor(v);
+  return `- ${v.id}: ${v.name} (${v.species}) | 職能=${profile.label} hobby=${v.hobby} values=${v.persona.values.join(' / ') || 'なし'} | ${traitsLine(v.persona.traits)}`;
 }
 
 /** 村のしきたり一覧 (事件の火種)。 */
@@ -78,6 +80,7 @@ function villagerBrief(v: Villager): string {
     `${v.name} (${v.species}, id=${v.id})`,
     `性格: ${traitsLine(v.persona.traits)}`,
     `信条: ${v.persona.values.join(' / ') || 'なし'}`,
+    `生活: ${lifeProfileFor(v).label} / 趣味=${v.hobby}`,
     `口調: ${v.persona.speechStyle}`,
     `姿: ${v.appearance.body} [${v.appearance.descriptors.join(',')}]`,
     `感情: ${v.emotion.label}${e ? ` (${e})` : ''}`,
@@ -274,7 +277,8 @@ export function buildSchedulePrompt(ctx: MonthlyScheduleContext): PromptParts {
   const sys =
     'あなたは村全体を見る「世界エンジン」。その月に起きる大事件の発生日と大まかなテーマの種を 1 つ決める。\n' +
     '出力スキーマ: {"dayOfMonth": その月の何日に起こすか(整数), "themeSeed": "事件の大まかな種(短い日本語)"}\n' +
-    `徳目: ${virtueList}。村の評判・住民・しきたりを踏まえ、波乱が映える発生日を選べ。` +
+    `徳目: ${virtueList}。村の評判・住民・しきたり・職能を踏まえ、波乱が映える発生日を選べ。\n` +
+    '当面のサンプル方針: マーダーミステリー / 人狼風の「隠れた犯人・疑心暗鬼・密告・足跡・アリバイ」を優先する。' +
     JSON_ONLY;
   const cal = ctx.calendar;
   const repLine = VIRTUES.map((v) => `${VIRTUE_LABELS[v]}=${ctx.reputation[v].toFixed(2)}`).join(' ');
@@ -298,7 +302,7 @@ export function buildDesignPrompt(ctx: IncidentDesignContext): PromptParts {
   const axisList = PERSONALITY_AXES.map((a) => `${a}(${PERSONALITY_LABELS[a]})`).join(', ');
   const sys =
     'あなたは村全体を見る「世界エンジン」。前日の村の様子から、明日起きる事件を詳細にデザインする。\n' +
-    '必要なら事件用の新規キャラ (露出狂・殺人犯など) を生成して村に投入できる。\n' +
+    '必要なら事件用の新規キャラ (犯人役・探偵役・密告者など) を生成して村に投入できる。\n' +
     '出力スキーマ: {"description": "事件の筋書き(日本語)", ' +
     '"newCharacters": [{"name": "名", "species": "種", "role": "役回り(加害者/被害者など)", ' +
     '"perpetrator": true|false, "activity": "diurnal|nocturnal|crepuscular|always"(任意), ' +
@@ -308,7 +312,8 @@ export function buildDesignPrompt(ctx: IncidentDesignContext): PromptParts {
     '"scapegoat": true|false(賢い犯人が罪を擦り付けて居座るか), ' +
     '"framedTargetId": "陥れる既存住民id / 無ければ null"}\n' +
     `徳目: ${virtueList}。性格軸: ${axisList}。traits は 0..1。\n` +
-    'perpetratorId と framedTargetId は既存住民の id か null。involvedIds は既存住民の id のみ。' +
+    'perpetratorId と framedTargetId は既存住民の id か null。involvedIds は既存住民の id のみ。\n' +
+    '当面のサンプル方針: マーダーミステリー / 人狼風。住民の職能・趣味・信条を証拠や疑惑に使い、音楽家なら騒音、収集家なら盗難疑惑、料理人なら食卓の事故のように生活由来の火種を強める。' +
     JSON_ONLY;
   const cal = ctx.calendar;
   const repLine = VIRTUES.map((v) => `${VIRTUE_LABELS[v]}=${ctx.reputation[v].toFixed(2)}`).join(' ');
@@ -350,20 +355,31 @@ export function buildRulePrompt(ctx: RuleProposalContext): PromptParts {
     '  {"kind":"emotionAbove","emotionAxis":"anger|joy|fear など","value":-1..1}\n' +
     '  {"kind":"eventParamAbove","tag":"incidentExposure など","value":数値}\n' +
     '  {"kind":"place","place":"広場|住宅地|村はずれ"} / {"kind":"timeOfDay","timeOfDay":"night|morning|noon|evening"}\n' +
-    '  {"kind":"hasNeighbor"} / {"kind":"species","species":"猫 など"} / {"kind":"actionCategory","category":"harass|good|chat|wander"}\n' +
+    '  {"kind":"hasNeighbor"} / {"kind":"species","species":"猫 など"} / {"kind":"activity","activity":"diurnal|nocturnal|crepuscular|always"}\n' +
+    '  {"kind":"hobby","hobby":"ascetic|collector|social|fashion|gourmet|gamble"} / {"kind":"valueIncludes","text":"音楽 など"}\n' +
+    '  {"kind":"wealthBelow","value":数値} / {"kind":"wealthAbove","value":数値} / {"kind":"actionCategory","category":"harass|good|chat|wander"}\n' +
     '効果 (kind と付随フィールド):\n' +
     '  {"kind":"emotionDelta","emotionAxis":"anger|joy など","delta":-1..1}\n' +
     '  {"kind":"triggerWeight","delta":-5..5(事件化しやすさ)} / {"kind":"actionFlavor","text":"行動文の差し替え"}\n' +
-    `気質軸: ${axisList}。徳目: ${virtueList}。when と then は最低 1 件。既存と重複しない新味のあるルールを。` +
+    `気質軸: ${axisList}。徳目: ${virtueList}。when と then は最低 1 件。既存と重複しない新味のあるルールを。\n` +
+    '事件提案がある場合は、そのテーマを日常に滲ませるルールへ落とし込む。例: 音楽家の夜演奏→騒音事件化、収集家→盗難疑惑、人狼風テーマ→夜・噂・密談で疑心暗鬼が増える。' +
     JSON_ONLY;
   const cal = ctx.calendar;
   const repLine = VIRTUES.map((v) => `${VIRTUE_LABELS[v]}=${ctx.reputation[v].toFixed(2)}`).join(' ');
   const existing = ctx.existingRules.map(ruleLine).join('\n') || '(なし)';
-  const names = ctx.villagers.slice(0, 12).map((v) => `${v.name}(${v.species})`).join(', ');
+  const names = ctx.villagers.slice(0, 12).map((v) => {
+    const p = lifeProfileFor(v);
+    return `${v.name}(${v.species}/${p.label}/${v.hobby})`;
+  }).join(', ');
+  const scheduled = ctx.scheduledIncident
+    ? `${ctx.scheduledIncident.dayOfMonth}日: ${ctx.scheduledIncident.themeSeed}` +
+      (ctx.scheduledIncident.design ? ` / ${ctx.scheduledIncident.design.description}` : '')
+    : '(なし)';
   const user =
     `暦: ${cal.year}年${cal.month}月${cal.dayOfMonth}日 (${cal.season})\n` +
     `村の評判: ${repLine}\n` +
     `住民 (${ctx.villagers.length}体): ${names || 'なし'}\n` +
+    `予定・提案済みの事件:\n${scheduled}\n` +
     `既存のふるまいの法則:\n${existing}\n` +
     '村の今の様子に映える新しいふるまいの法則を 1 つ JSON で返せ。';
   return partsFromSegments('rule', [

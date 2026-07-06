@@ -55,6 +55,32 @@ describe('evaluateRules (ふるまいの法則の決定的評価, §2.1)', () =>
     expect(r.triggerWeight).toBe(3);
     expect(r.flavor).toBe('最後の彩り');
   });
+
+  it('趣味・信条条件で職能由来のルールを評価できる', () => {
+    const rule: BehaviorRule = {
+      id: 'music_noise',
+      source: 'haiku',
+      description: '音楽家の騒音',
+      when: [
+        { kind: 'valueIncludes', text: '音楽' },
+        { kind: 'timeOfDay', timeOfDay: 'night' },
+        { kind: 'hasNeighbor' },
+      ],
+      then: [
+        { kind: 'triggerWeight', delta: 4 },
+        { kind: 'actionFlavor', text: '夜更けの演奏が響いた' },
+      ],
+    };
+    const v = createVillager({
+      id: 'music',
+      name: 'リラ',
+      position: { x: 12, y: 12 },
+      values: ['音楽で気持ちを伝える'],
+    });
+    const r = evaluateRules([rule], { villager: v, env: { ...env(true), timeOfDay: 'night' }, category: 'wander' });
+    expect(r.triggerWeight).toBe(4);
+    expect(r.flavor).toBe('夜更けの演奏が響いた');
+  });
 });
 
 describe('BASE ルールで旧 nudgeEmotion を再現する (退行ゼロ)', () => {

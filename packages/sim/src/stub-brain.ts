@@ -146,21 +146,31 @@ export class StubWorldBrain implements WorldBrain {
 
   /** 月初: 発生日を月の半ば (15日 or 月末) に固定する (決定的, §12.3.1)。 */
   async scheduleMonthlyIncident(ctx: MonthlyScheduleContext): Promise<MonthlySchedule> {
-    return { dayOfMonth: Math.min(15, ctx.calendar.daysInMonth), themeSeed: 'いさかい' };
+    return { dayOfMonth: Math.min(15, ctx.calendar.daysInMonth), themeSeed: '人狼風の密告劇' };
   }
 
-  /** 前日: 余所者 (狐) を加害者に立て、先頭の既存住民 1 体を巻き込む (決定的, §12.3.2)。 */
+  /** 前日: 仮面の訪問者を加害者に立て、既存住民へ罪を擦り付ける (決定的, §12.3.2)。 */
   async designIncident(ctx: IncidentDesignContext): Promise<IncidentDesign> {
     const existing = ctx.villagers.find((v) => v.origin !== 'incident') ?? ctx.villagers[0];
+    const framed = ctx.villagers.find((v) => v.origin !== 'incident' && v.id !== existing?.id) ?? existing;
     return {
-      description: `${ctx.themeSeed}が持ち上がった`,
+      description: `${ctx.themeSeed}: 夜の集会後、足跡と密告だけが残り、誰が「狼」なのか分からなくなった`,
       newCharacters: [
-        { name: '余所者', species: '狐', role: '加害者', perpetrator: true },
+        {
+          name: '仮面の訪問者',
+          species: '狐',
+          role: '隠れた犯人',
+          perpetrator: true,
+          activity: 'nocturnal',
+          traits: { aggression: 0.8, ambition: 0.9, sociability: 0.7 },
+          values: ['正体を隠す', '疑いを操る'],
+          speechStyle: '芝居がかった囁き',
+        },
       ],
       involvedIds: existing ? [existing.id] : [],
       perpetratorId: null,
-      scapegoat: false,
-      framedTargetId: null,
+      scapegoat: framed !== undefined,
+      framedTargetId: framed?.id ?? null,
     };
   }
 
@@ -194,5 +204,30 @@ const STUB_RULE_TEMPLATES: ReadonlyArray<Omit<BehaviorRule, 'id' | 'source'>> = 
       { kind: 'traitAbove', axis: 'kindness', value: 0.5 },
     ],
     then: [{ kind: 'emotionDelta', emotionAxis: 'joy', delta: 0.1 }],
+  },
+  {
+    description: '夜に音楽を大事にする者は騒音問題を起こしやすい',
+    when: [
+      { kind: 'actionCategory', category: 'wander' },
+      { kind: 'timeOfDay', timeOfDay: 'night' },
+      { kind: 'valueIncludes', text: '音楽' },
+      { kind: 'hasNeighbor' },
+    ],
+    then: [
+      { kind: 'triggerWeight', delta: 4 },
+      { kind: 'actionFlavor', text: '夜更けの演奏が近所の眠りを乱した' },
+    ],
+  },
+  {
+    description: '収集家は盗難疑惑で疑心暗鬼を広げる',
+    when: [
+      { kind: 'actionCategory', category: 'wander' },
+      { kind: 'hobby', hobby: 'collector' },
+      { kind: 'hasNeighbor' },
+    ],
+    then: [
+      { kind: 'triggerWeight', delta: 2 },
+      { kind: 'emotionDelta', emotionAxis: 'fear', delta: 0.1 },
+    ],
   },
 ];

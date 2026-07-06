@@ -53,4 +53,38 @@ describe('投票裁判', () => {
     expect(w.trial?.foolishVotes.y).toBe(1);
     expect(w.trial?.votes.some((v) => v.voter === 'user')).toBe(true);
   });
+
+  it('recovers a foolish trial whose pending groups were exhausted', async () => {
+    const w = harshWorld();
+    w.phase = 'ten';
+    w.incident = {
+      id: 'inc_stuck',
+      perpetrator: 'x',
+      involved: ['y'],
+      description: 'stuck trial',
+      damage: 10,
+      steps: [],
+      resolved: true,
+    };
+    w.trial = {
+      incidentId: 'inc_stuck',
+      judge: { kind: 'nekomori' },
+      candidates: ['x', 'y'],
+      stage: 'foolish',
+      pendingGroups: [],
+      foolishVotes: { x: 3 },
+      defendant: null,
+      fateVotes: { kill: 0, spare: 0 },
+      votes: [],
+      verdict: null,
+    };
+
+    const tm = new TermMachine(w, new StubBrain());
+    await tm.tenStep();
+
+    expect(w.phase).toBe('ten');
+    expect(w.trial?.stage).toBe('fate');
+    expect(w.trial?.defendant).toBe('x');
+    expect(w.trial?.pendingGroups.length).toBeGreaterThan(0);
+  });
 });

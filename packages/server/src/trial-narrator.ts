@@ -3,7 +3,7 @@
 //   35% → 既存レパートリーから再利用。
 // 生成は並行 (Promise.all)。LLM 不在 (stub) のときは全て再利用。
 
-import type { World, Villager, TrialLine } from '@pagus/sim';
+import { pickTrialAttendees, type World, type Villager, type TrialLine } from '@pagus/sim';
 import type { LlmClient } from './llm/llm-client.js';
 import { extractJson } from './llm/json-coerce.js';
 import { Repertoire } from './repertoire.js';
@@ -38,7 +38,7 @@ export class TrialNarrator {
     if (!incident) return [];
     const target = world.villagers.get(incident.perpetrator);
     if (!target) return [];
-    const accusers = [...world.villagers.values()].filter((v) => v.alive && v.id !== target.id);
+    const accusers = pickTrialAttendees([...world.villagers.values()], target.id, incident.id);
 
     return Promise.all(
       accusers.map(async (accuser) => ({

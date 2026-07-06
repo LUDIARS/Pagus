@@ -26,9 +26,11 @@ import type {
   RuleEffect,
   RuleCategory,
   TimeOfDay,
+  Hobby,
 } from '@pagus/sim';
 
 const ACTIVITY_SET = new Set<ActivityPattern>(['diurnal', 'nocturnal', 'crepuscular', 'always']);
+const HOBBY_SET = new Set<Hobby>(['ascetic', 'collector', 'social', 'fashion', 'gourmet', 'gamble']);
 
 const AXIS_SET = new Set<string>(PERSONALITY_AXES);
 const VIRTUE_SET = new Set<string>(VIRTUES);
@@ -314,11 +316,26 @@ function coerceRuleCondition(u: unknown): RuleCondition {
       return { kind };
     case 'species':
       return { kind, species: asString(o.species, 'when.species') };
+    case 'activity': {
+      const activity = asString(o.activity, 'when.activity');
+      if (!ACTIVITY_SET.has(activity as ActivityPattern)) throw new Error(`when.activity が未知です: ${activity}`);
+      return { kind, activity: activity as ActivityPattern };
+    }
+    case 'hobby': {
+      const hobby = asString(o.hobby, 'when.hobby');
+      if (!HOBBY_SET.has(hobby as Hobby)) throw new Error(`when.hobby が未知です: ${hobby}`);
+      return { kind, hobby: hobby as Hobby };
+    }
+    case 'valueIncludes':
+      return { kind, text: asString(o.text, 'when.text') };
     case 'actionCategory': {
       const c = asString(o.category, 'when.category');
       if (!RULE_CATEGORY_SET.has(c as RuleCategory)) throw new Error(`when.category が未知です: ${c}`);
       return { kind, category: c as RuleCategory };
     }
+    case 'wealthBelow':
+    case 'wealthAbove':
+      return { kind, value: Math.max(0, asNumber(o.value, 'when.value')) };
     default:
       throw new Error(`未知のルール条件 kind です: ${String(kind)}`);
   }

@@ -243,9 +243,8 @@ export class PlayerControls {
   private renderState(): void {
     const verdictActive = this.world?.phase === 'ten' && this.world.trial?.stage === 'fate';
     const verdictCooling = Date.now() < this.verdictCooldownUntil;
-    this.commandRow.style.display = verdictActive ? 'none' : 'flex';
+    this.commandRow.style.display = 'flex';
     this.verdictBox.style.display = this.showVerdict && verdictActive ? 'flex' : 'none';
-    if (verdictActive) this.closeDialog();
 
     for (const btn of this.verdictBox.querySelectorAll('button')) {
       (btn as HTMLButtonElement).disabled = !this.showVerdict || !verdictActive || verdictCooling;

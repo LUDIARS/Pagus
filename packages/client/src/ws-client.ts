@@ -1,6 +1,6 @@
 // WS 接続。server からの snapshot/log を受け、扇動/沈静化コマンドを送る。自動再接続。
 
-import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView, LawView, MartialMode, HighlightCard, SeasonWinner, ChatMessage } from '@pagus/sim';
+import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, TrialVoice, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView, LawView, MartialMode, HighlightCard, SeasonWinner, ChatMessage } from '@pagus/sim';
 
 /** 裁判ベットのプール状態 (§3 betState 受信ペイロード)。 */
 export interface BetStateView {
@@ -30,10 +30,11 @@ export interface WsHandlers {
   onStatus(status: string): void;
   onPlayers(count: number): void;
   onTrialLines(incidentId: string, lines: TrialLine[]): void;
+  onTrialVoices?(incidentId: string, voices: TrialVoice[]): void;
   onLlm(info: LlmInfo): void;
   onChronicle(entries: ChronicleEntry[]): void;
   /** その接続ユーザのカルマ/善性状態 (§4.4)。推し (§1)・預金 (§v1.3-B ④)・課金額 (§v1.3-F) を含む。 */
-  onPlayerState?(state: { karma: number; virtue: number; userName: string | null; sanctionCost: number; inciteCost: number; canCheerInMs: number; championId: string | null; championName?: string; spent: number }): void;
+  onPlayerState?(state: { karma: number; virtue: number; userName: string | null; sanctionCost: number; inciteCost: number; canCheerInMs: number; championId: string | null; championName?: string; spent: number; eventCards: number }): void;
   /** 別端末ログインで現セッションが追い出された (§v1.3-F)。 */
   onLoggedOut?(reason: string): void;
   /** コマンド却下 (カルマ不足/インターバル中など)。 */
@@ -107,6 +108,7 @@ export function connect(url: string, h: WsHandlers): Conn {
       else if (msg.t === 'log') h.onLog(msg.phase, msg.text);
       else if (msg.t === 'players') h.onPlayers(msg.count);
       else if (msg.t === 'trialLines') h.onTrialLines(msg.incidentId, msg.lines);
+      else if (msg.t === 'trialVoices') h.onTrialVoices?.(msg.incidentId, msg.voices);
       else if (msg.t === 'llm') h.onLlm(msg.info);
       else if (msg.t === 'chronicle') h.onChronicle(msg.entries);
       else if (msg.t === 'playerState') {
@@ -120,6 +122,7 @@ export function connect(url: string, h: WsHandlers): Conn {
           championId: msg.championId ?? null,
           ...(msg.championName !== undefined ? { championName: msg.championName } : {}),
           spent: msg.spent,
+          eventCards: msg.eventCards,
         });
       } else if (msg.t === 'loggedOut') h.onLoggedOut?.(msg.reason);
       else if (msg.t === 'auction') h.onAuction?.(msg.lots);

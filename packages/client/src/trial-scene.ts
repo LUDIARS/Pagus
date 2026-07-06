@@ -4,7 +4,7 @@
 // キャラは永続ノード、配置は update()、セリフ送り/シェイク/断末魔は tick()。
 
 import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
-import type { WireWorld, Villager, TrialLine } from '@pagus/sim';
+import { pickTrialAttendees, type WireWorld, type Villager, type TrialLine, type TrialVoice } from '@pagus/sim';
 import { animalFor, type AnimalName } from './assets.js';
 import { AnimatedBubble, type BubbleColors } from './animated-bubble.js';
 import { villagerDisplayName } from './villager-display.js';
@@ -50,6 +50,7 @@ export class TrialScene {
   readonly root = new Container();
   private readonly bg = new Graphics();
   private readonly layer = new Container();
+  private readonly voiceLayer = new Container();
   private readonly title = new Text({ text: '', style: { fontSize: 22, fill: 0xf2c94c, fontWeight: 'bold' } });
   private readonly chars = new Map<string, TChar>();
 
@@ -67,11 +68,13 @@ export class TrialScene {
   private incidentId: string | null = null;
   /** server から来た糾弾セリフ (speaker id → text)。無ければ定型文。 */
   private serverLines: { incidentId: string; byId: Map<string, string> } | null = null;
+  private sharedVoices: { incidentId: string; voices: TrialVoice[] } | null = null;
+  private voiceKey = '';
 
   constructor(private readonly tex: Map<AnimalName, Texture>) {
     this.title.anchor.set(0.5, 0);
     this.layer.sortableChildren = true;
-    this.root.addChild(this.bg, this.layer, this.title);
+    this.root.addChild(this.bg, this.layer, this.voiceLayer, this.title);
   }
 
   /** server 生成の糾弾セリフを受け取る (次の update で台本へ反映)。 */
@@ -79,6 +82,12 @@ export class TrialScene {
     const byId = new Map(lines.map((l) => [l.speaker, l.text]));
     this.serverLines = { incidentId, byId };
     this.scriptKey = ''; // 台本を組み直させる。
+  }
+
+  /** 他ユーザーの裁判の声と、信仰している住民の応答を受け取る。 */
+  setVoices(incidentId: string, voices: TrialVoice[]): void {
+    this.sharedVoices = { incidentId, voices };
+    this.voiceKey = '';
   }
 
   /** プレイヤーの罵倒(有罪)/擁護(無罪)を画面下部中央に表示する。 */
@@ -104,6 +113,7 @@ export class TrialScene {
 
     if (!trial) {
       this.clearChars(new Set());
+      this.clearVoices();
       return;
     }
     this.incidentId = trial.incidentId;
@@ -111,7 +121,7 @@ export class TrialScene {
     const targetId = trial.defendant ?? world.incident?.perpetrator ?? trial.candidates[0] ?? null;
     this.defendantId = targetId;
     const target = targetId ? byId.get(targetId) ?? null : null;
-    const accusers = world.villagers.filter((v) => v.alive && v.id !== targetId);
+    const accusers = pickTrialAttendees(world.villagers, targetId, trial.incidentId);
     const victims = world.incident?.involved ?? [];
 
     const stageLabel =
@@ -144,6 +154,7 @@ export class TrialScene {
       this.scriptKey = key;
       this.buildScript(world, trial.verdict, target, accusers, victims, byId);
     }
+    this.renderVoices(target, accusers);
   }
 
   tick(dtMs: number): void {
@@ -288,6 +299,39 @@ export class TrialScene {
       }
     }
   }
+
+  private renderVoices(target: Villager | null, accusers: Villager[]): void {
+    if (!this.incidentId || this.sharedVoices?.incidentId !== this.incidentId) {
+      this.clearVoices();
+      return;
+    }
+    const voices = this.sharedVoices.voices.slice(-6);
+    const key = `${this.incidentId}:${voices.map((v) => v.id).join(',')}:${Math.round(this.w)}:${Math.round(this.h)}`;
+    if (key === this.voiceKey) return;
+    this.voiceKey = key;
+    this.clearVoices();
+    voices.forEach((v, i) => {
+      const anchorId = accusers[i % Math.max(1, accusers.length)]?.id ?? target?.id ?? '';
+      const c = this.chars.get(anchorId);
+      if (c) {
+        const user = v.userName ?? v.userId.slice(0, 6);
+        const verdict = v.pick === 'kill' ? '死刑' : '教育';
+        const x = c.baseX + ((i % 3) - 1) * c.size * 0.55;
+        const y = c.baseY - c.size * (1.05 + Math.floor(i / 3) * 0.28);
+        this.voiceLayer.addChild(smallBubble(`${user}: ${verdict}`, x, y, v.pick === 'kill' ? 0x6b2a7d : 0x1f5d7a));
+      }
+      if (v.respondentId && v.responseText) {
+        const r = this.chars.get(v.respondentId);
+        if (!r) return;
+        this.voiceLayer.addChild(smallBubble(v.responseText, r.baseX + r.size * 0.5, r.baseY - r.size * 1.2, 0xb77d1d));
+      }
+    });
+  }
+
+  private clearVoices(): void {
+    this.voiceKey = '';
+    this.voiceLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
+  }
 }
 
 function pick(pool: string[], seed: string): string {
@@ -297,4 +341,23 @@ function pick(pool: string[], seed: string): string {
     h = Math.imul(h, 0x01000193);
   }
   return pool[(h >>> 0) % pool.length] ?? pool[0] ?? '…';
+}
+
+function smallBubble(text: string, x: number, y: number, fill: number): Container {
+  const node = new Container();
+  const label = new Text({
+    text: text.length > 18 ? `${text.slice(0, 18)}…` : text,
+    style: { fontSize: 11, fill: 0xffffff, fontWeight: 'bold' },
+  });
+  label.anchor.set(0.5);
+  const padX = 7;
+  const padY = 4;
+  const bg = new Graphics();
+  const bw = Math.max(42, label.width + padX * 2);
+  const bh = label.height + padY * 2;
+  bg.roundRect(-bw / 2, -bh / 2, bw, bh, 6).fill({ color: fill, alpha: 0.88 }).stroke({ width: 1, color: 0xffffff, alpha: 0.35 });
+  node.addChild(bg, label);
+  node.x = x;
+  node.y = y;
+  return node;
 }

@@ -2,8 +2,8 @@
 // 1 日 = 1 ターム = 12 セグメント。時間制御 (segmentRealMs のペース) は server が所有し、
 // 本クラスは純粋な遷移ロジックを提供する。
 
-import type { World, Villager, VillagerId, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign, InfoItem, MartialMode, ScheduledParty, ScheduledPartyKind } from './types/index.js';
-import type { Brain, ActionDecision } from './brain.js';
+import type { World, Villager, VillagerId, GridPos, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign, InfoItem, MartialMode, ScheduledParty, ScheduledPartyKind } from './types/index.js';
+import type { Brain, ActionDecision, EnvironmentView } from './brain.js';
 import { aliveVillagers, awakeVillagers, environmentView, clampPos, bumpEventParam } from './world.js';
 import { DailyEngine, REACTION_EXPOSURE, type DailyEngineOptions } from './daily-engine.js';
 import { season, daysInMonth, holidayName } from './calendar.js';
@@ -32,6 +32,7 @@ import {
 } from './mayor.js';
 import type { EventDirector } from './event-director.js';
 import { addResidentHistory, connectNewVillager, generateUniqueVillagerName } from './villager-gacha.js';
+import { relationshipRoutineFor, type LifeRelationshipKind } from './life-profile.js';
 
 export type IdGen = () => string;
 
@@ -61,6 +62,8 @@ const SPAWN_SPECIES = ['猫', '兎', '梟', '熊', '栗鼠'] as const;
 const SPAWN_ACTIVITIES: readonly ActivityPattern[] = ['diurnal', 'nocturnal', 'crepuscular', 'always'];
 const REL_HATE_THRESHOLD = -35;
 const REL_LIKE_THRESHOLD = 45;
+/** 夫婦が日課で家族の時間を過ごした痕跡。日末の出生判定を少し押し上げる。 */
+export const FAMILY_TIME = 'familyTime';
 
 export interface TermMachineOptions {
   /** 起のイベント差配 (省略時は全 awake どうぶつの自由行動)。 */
@@ -211,6 +214,7 @@ export class TermMachine {
     if (world.mayorId === null && aliveVillagers(world).length > 0) {
       electMayor(world, this.mayorConfig);
     }
+    this.ensureSocialBonds();
   }
 
   /** スナップショット保存用: 出生通し番号 (born_N が再起動後も衝突しないよう保持する)。 */
@@ -237,9 +241,10 @@ export class TermMachine {
     if (!this.worldBrain) return null;
     const proposed = await this.worldBrain.proposeRule({
       reputation: this.world.reputation,
-      villagers: aliveVillagers(this.world),
+      villagers: this.llmFocusVillagers(12),
       existingRules: this.world.behaviorRules,
       calendar: this.world.calendar,
+      scheduledIncident: this.world.scheduledIncident,
     });
     this.ruleCount += 1;
     // id/source は呼び出し側で確定 (通し番号で衝突回避、source は haiku 固定)。
@@ -594,7 +599,7 @@ export class TermMachine {
     const m = await this.worldBrain.scheduleMonthlyIncident({
       calendar: cal,
       reputation: this.world.reputation,
-      villagers: aliveVillagers(this.world),
+      villagers: this.llmFocusVillagers(12),
       villageRules: this.world.villageRules,
     });
     const dayOfMonth = Math.min(cal.daysInMonth, Math.max(1, Math.round(m.dayOfMonth)));
@@ -622,7 +627,7 @@ export class TermMachine {
     const design = await this.worldBrain.designIncident({
       calendar: this.world.calendar,
       reputation: this.world.reputation,
-      villagers: aliveVillagers(this.world),
+      villagers: this.llmFocusVillagers(12, survivingCulprits.map((v) => v.id)),
       villageRules: this.world.villageRules,
       themeSeed: sched.themeSeed,
       survivingCulprits,
@@ -747,6 +752,7 @@ export class TermMachine {
         a.partnerId = b.id;
         b.partnerId = a.id;
       }
+      this.bindPair(a, b, 'spouse');
     }
 
     for (let i = 0; i < participants.length; i += 1) {
@@ -813,6 +819,97 @@ export class TermMachine {
     return { dayOfMonth, kind, title, participantIds, fired: false, incidentPlanted: false };
   }
 
+  private ensureSocialBonds(): void {
+    const alive = aliveVillagers(this.world).filter((v) => !v.madman);
+    const aliveIds = new Set(alive.map((v) => v.id));
+    for (const v of alive) {
+      if (!v.partnerId || v.id > v.partnerId) continue;
+      const partner = this.world.villagers.get(v.partnerId);
+      if (partner && partner.alive && aliveIds.has(partner.id)) this.bindPair(v, partner, 'spouse');
+    }
+
+    const hasSpouse = this.world.relationships.some((r) => r.kind === 'spouse' && aliveIds.has(r.from) && aliveIds.has(r.to));
+    if (!hasSpouse && alive.length >= 4) {
+      const pair = this.bestBondPair(alive.filter((v) => v.partnerId === null));
+      if (pair) {
+        const [a, b] = pair;
+        a.partnerId = b.id;
+        b.partnerId = a.id;
+        this.bindPair(a, b, 'spouse');
+      }
+    }
+
+    const hasRomance = this.world.relationships.some((r) => r.kind === 'romance' && aliveIds.has(r.from) && aliveIds.has(r.to));
+    if (!hasRomance && alive.length >= 4) {
+      const singles = alive.filter((v) => v.partnerId === null);
+      const pair = this.bestBondPair(singles.length >= 2 ? singles : alive.filter((v) => v.partnerId === null));
+      if (pair) this.bindPair(pair[0], pair[1], 'romance');
+    }
+  }
+
+  private bestBondPair(candidates: Villager[]): [Villager, Villager] | null {
+    const pool = [...candidates].sort((a, b) => a.id.localeCompare(b.id));
+    let best: { pair: [Villager, Villager]; score: number; key: string } | null = null;
+    for (let i = 0; i < pool.length; i += 1) {
+      for (let j = i + 1; j < pool.length; j += 1) {
+        const a = pool[i]!;
+        const b = pool[j]!;
+        const score = this.bondScore(a, b);
+        const key = `${a.id}:${b.id}`;
+        if (!best || score > best.score || (score === best.score && key < best.key)) {
+          best = { pair: [a, b], score, key };
+        }
+      }
+    }
+    return best?.pair ?? null;
+  }
+
+  private bondScore(a: Villager, b: Villager): number {
+    const traits = a.persona.traits;
+    const other = b.persona.traits;
+    const closeness =
+      (1 - Math.abs(traits.sociability - other.sociability)) * 14
+      + (1 - Math.abs(traits.discipline - other.discipline)) * 10
+      + (1 - Math.abs(traits.curiosity - other.curiosity)) * 8
+      - Math.abs(traits.aggression - other.aggression) * 10;
+    return closeness + this.averageAffinity(a.id, b.id);
+  }
+
+  private averageAffinity(a: VillagerId, b: VillagerId): number {
+    const ab = this.world.relationships.find((r) => r.from === a && r.to === b)?.affinity;
+    const ba = this.world.relationships.find((r) => r.from === b && r.to === a)?.affinity;
+    const values = [ab, ba].filter((v): v is number => v !== undefined);
+    if (values.length === 0) return 0;
+    return values.reduce((sum, v) => sum + v, 0) / values.length;
+  }
+
+  private bindPair(a: Villager, b: Villager, kind: LifeRelationshipKind): void {
+    const affinity = kind === 'spouse' ? 82 : 68;
+    this.bindRelationship(a, b, kind, affinity);
+    this.bindRelationship(b, a, kind, affinity);
+  }
+
+  private bindRelationship(from: Villager, to: Villager, kind: LifeRelationshipKind, affinity: number): void {
+    let rel = this.world.relationships.find((r) => r.from === from.id && r.to === to.id);
+    const note = this.relationshipNote(from, to, kind);
+    if (!rel) {
+      rel = { from: from.id, to: to.id, affinity, hates: false, note, kind, sinceTerm: this.world.term };
+      this.world.relationships.push(rel);
+      return;
+    }
+    rel.affinity = Math.max(rel.affinity, affinity);
+    rel.hates = false;
+    rel.note = note;
+    rel.kind = kind;
+    rel.sinceTerm ??= this.world.term;
+  }
+
+  private relationshipNote(from: Villager, to: Villager, kind: LifeRelationshipKind): string {
+    return kind === 'spouse'
+      ? `夫婦: ${from.name} と ${to.name} は生活を共にしている`
+      : `恋愛: ${from.name} は ${to.name} を大切に思っている`;
+  }
+
   private adjustRelationship(from: Villager, to: Villager, delta: number, note: string): void {
     let rel = this.world.relationships.find((r) => r.from === from.id && r.to === to.id);
     if (!rel) {
@@ -820,6 +917,11 @@ export class TermMachine {
       this.world.relationships.push(rel);
     }
     rel.affinity = Math.max(-100, Math.min(100, rel.affinity + delta));
+    if (rel.kind === 'spouse' || rel.kind === 'romance') {
+      rel.hates = false;
+      if (!rel.note.startsWith('夫婦:') && !rel.note.startsWith('恋愛:')) rel.note = this.relationshipNote(from, to, rel.kind);
+      return;
+    }
     rel.hates = rel.affinity <= REL_HATE_THRESHOLD;
     rel.note = rel.hates
       ? `${from.name}は${to.name}を警戒している`
@@ -871,17 +973,68 @@ export class TermMachine {
         const actor = this.world.villagers.get(directive.actor);
         if (!actor || !actor.alive) continue;
         // 日常エンジン (LLM 非依存) が行動を決める (§12.2)。
-        const decision = this.daily.decide(actor, environmentView(this.world, actor), directive);
+        const env = environmentView(this.world, actor);
+        const decision = this.withRelationshipRoutine(actor, env, this.daily.decide(actor, env, directive));
         if (this.applyDecision(actor, decision, actions)) return { actions, incidentStarted: true };
       }
       return { actions, incidentStarted: false };
     }
 
     for (const villager of awakeVillagers(this.world)) {
-      const decision = this.daily.decide(villager, environmentView(this.world, villager), null);
+      const env = environmentView(this.world, villager);
+      const decision = this.withRelationshipRoutine(villager, env, this.daily.decide(villager, env, null));
       if (this.applyDecision(villager, decision, actions)) return { actions, incidentStarted: true };
     }
     return { actions, incidentStarted: false };
+  }
+
+  private withRelationshipRoutine(actor: Villager, env: EnvironmentView, decision: ActionDecision): ActionDecision {
+    if (decision.triggersIncident) return decision;
+    const related = this.activeRelationshipFor(actor);
+    if (!related) return decision;
+    const chance = this.relationshipRoutineChance(env.timeOfDay, related.kind);
+    if (this.rng() >= chance) return decision;
+
+    if (related.kind === 'spouse' && (env.timeOfDay === 'evening' || env.timeOfDay === 'night')) {
+      bumpEventParam(actor, FAMILY_TIME, 1);
+      bumpEventParam(related.partner, FAMILY_TIME, 1);
+    }
+
+    return {
+      ...decision,
+      move: this.stepToward(actor.position, related.partner.position),
+      action: relationshipRoutineFor(actor, related.partner, env, related.kind),
+      triggersIncident: false,
+      incidentSeed: null,
+      relationshipEffects: [
+        ...(decision.relationshipEffects ?? []),
+        { kind: related.kind === 'spouse' ? 'good' : 'chat', targetIds: [related.partner.id] },
+      ],
+    };
+  }
+
+  private relationshipRoutineChance(timeOfDay: EnvironmentView['timeOfDay'], kind: LifeRelationshipKind): number {
+    const eveningOrNight = timeOfDay === 'evening' || timeOfDay === 'night';
+    if (kind === 'spouse') return eveningOrNight ? 0.42 : 0.14;
+    return eveningOrNight ? 0.3 : 0.1;
+  }
+
+  private activeRelationshipFor(actor: Villager): { partner: Villager; kind: LifeRelationshipKind } | null {
+    if (actor.partnerId) {
+      const spouse = this.world.villagers.get(actor.partnerId);
+      if (spouse?.alive) return { partner: spouse, kind: 'spouse' };
+    }
+    const rel = this.world.relationships.find((r) => r.from === actor.id && r.kind === 'romance');
+    const partner = rel ? this.world.villagers.get(rel.to) : undefined;
+    if (partner?.alive) return { partner, kind: 'romance' };
+    return null;
+  }
+
+  private stepToward(from: GridPos, to: GridPos): GridPos {
+    return clampPos(this.world, {
+      x: from.x + Math.sign(to.x - from.x),
+      y: from.y + Math.sign(to.y - from.y),
+    });
   }
 
   /** 行動を適用。事件が発火したら true を返し phase を sho にする。 */
@@ -1062,6 +1215,58 @@ export class TermMachine {
     return aliveVillagers(this.world).filter((v) => dominantAxis(v.persona.traits) === axis);
   }
 
+  private relatedVotersOf(axis: PersonalityAxis, incident: Incident): Villager[] {
+    return this.votersOf(axis).filter((v) => this.isIncidentRelated(v, incident));
+  }
+
+  private isIncidentRelated(villager: Villager, incident: Incident): boolean {
+    const relatedIds = this.incidentRelatedIds(incident);
+    if (relatedIds.has(villager.id)) return true;
+    return this.hasStrongRelationshipWithAny(villager.id, relatedIds);
+  }
+
+  private incidentRelatedIds(incident: Incident): Set<VillagerId> {
+    const ids = new Set<VillagerId>([incident.perpetrator, ...incident.involved]);
+    if (incident.framedTargetId) ids.add(incident.framedTargetId);
+    return ids;
+  }
+
+  private hasStrongRelationshipWithAny(villagerId: VillagerId, targetIds: ReadonlySet<VillagerId>): boolean {
+    for (const rel of this.world.relationships) {
+      if (rel.affinity > REL_HATE_THRESHOLD && rel.affinity < REL_LIKE_THRESHOLD) continue;
+      const direct = rel.from === villagerId && targetIds.has(rel.to);
+      const reverse = rel.to === villagerId && targetIds.has(rel.from);
+      if (direct || reverse) return true;
+    }
+    return false;
+  }
+
+  private llmFocusVillagers(limit: number, seedIds: VillagerId[] = []): Villager[] {
+    const alive = aliveVillagers(this.world);
+    const seeds = new Set<VillagerId>(seedIds);
+    const ranked = alive
+      .map((v) => ({ v, score: this.llmFocusScore(v, seeds) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || a.v.id.localeCompare(b.v.id));
+    const focused = ranked.slice(0, limit).map(({ v }) => v);
+    return focused.length > 0 ? focused : alive.slice(0, limit);
+  }
+
+  private llmFocusScore(villager: Villager, seedIds: ReadonlySet<VillagerId>): number {
+    let score = 0;
+    if (seedIds.has(villager.id)) score += 100;
+    if (villager.madman) score += 25;
+    if (this.world.mayorId === villager.id) score += 10;
+    score += villager.reformCount * 8;
+    score += Math.min(30, villager.stress * 3);
+    score += Math.min(30, (villager.eventParams[REACTION_EXPOSURE] ?? 0) * 10);
+    score += Math.min(18, (villager.eventParams['drug'] ?? 0) * 6);
+    score += villager.persona.traits.aggression * 8;
+    score += villager.persona.traits.ambition * 4;
+    if (seedIds.size > 0 && this.hasStrongRelationshipWithAny(villager.id, seedIds)) score += 30;
+    return score;
+  }
+
   private openTrial(incident: Incident): TrialState {
     this.userVotes.clear();
     return {
@@ -1138,6 +1343,62 @@ export class TermMachine {
     return best;
   }
 
+  private hasStageVote(trial: TrialState, voter: 'madman' | 'culprit', stage: 'foolish' | 'fate'): boolean {
+    return trial.votes.some((v) => {
+      if (v.voter !== voter) return false;
+      return stage === 'foolish'
+        ? trial.candidates.includes(v.pick)
+        : v.pick === 'kill' || v.pick === 'spare';
+    });
+  }
+
+  private finishFoolishStage(trial: TrialState, incident: Incident): void {
+    if (!trial.defendant) {
+      // 狂人の扇動: 全グループ投票後、最も善良な候補へ重い票を投げて陥れる。
+      const madman = this.aliveMadman();
+      if (madman && !this.hasStageVote(trial, 'madman', 'foolish')) {
+        const target = this.scapegoat(trial.candidates);
+        if (target) {
+          const w = this.madmanWeight();
+          trial.foolishVotes[target] = (trial.foolishVotes[target] ?? 0) + w;
+          trial.votes.push({ voter: 'madman', weight: w, pick: target });
+        }
+      }
+      // 連続犯: 真犯人 (事件用キャラ) が陥れる対象が候補にいれば重い擦り付け票を加える (§12.3.3)。
+      // 無実の既存住民が被告に選ばれやすくなり、真犯人は alive のまま居座る。
+      const framed = incident.framedTargetId;
+      if (framed && trial.candidates.includes(framed) && !this.hasStageVote(trial, 'culprit', 'foolish')) {
+        const w = Math.round(3 + this.world.reputation.malice * 4);
+        trial.foolishVotes[framed] = (trial.foolishVotes[framed] ?? 0) + w;
+        trial.votes.push({ voter: 'culprit', weight: w, pick: framed });
+      }
+      trial.defendant = this.argmaxCandidate(trial);
+    }
+    trial.stage = 'fate';
+    trial.pendingGroups = this.groupAxes();
+  }
+
+  private finishFateStage(trial: TrialState): void {
+    if (trial.verdict === null) {
+      // 狂人の扇動: 処刑へ重い票を上乗せする。
+      const madman = this.aliveMadman();
+      if (madman && !this.hasStageVote(trial, 'madman', 'fate')) {
+        const w = this.madmanWeight();
+        trial.fateVotes.kill += w;
+        trial.votes.push({ voter: 'madman', weight: w, pick: 'kill' });
+      }
+      trial.verdict = trial.fateVotes.kill > trial.fateVotes.spare ? 'death' : 'spared';
+    }
+    trial.stage = 'decided';
+    this.world.phase = 'ketsu';
+  }
+
+  private finishPendingTrialStage(trial: TrialState, incident: Incident): void {
+    if (trial.stage === 'foolish') this.finishFoolishStage(trial, incident);
+    else if (trial.stage === 'fate') this.finishFateStage(trial);
+    else this.world.phase = 'ketsu';
+  }
+
   // --- 転: グループ bloc 投票 (1 グループ/ステップ) ---
   async tenStep(): Promise<void> {
     if (this.world.phase !== 'ten' || !this.world.trial || !this.world.incident) {
@@ -1145,55 +1406,36 @@ export class TermMachine {
     }
     const trial = this.world.trial;
     const incident = this.world.incident;
-    const axis = trial.pendingGroups.shift();
-    if (!axis) return; // 念のため (グループ無し)
-    const voters = this.votersOf(axis);
+    const axis = trial.pendingGroups[0];
+    if (!axis) {
+      this.finishPendingTrialStage(trial, incident);
+      return;
+    }
+    const voters = this.relatedVotersOf(axis, incident);
+    if (voters.length === 0) {
+      trial.pendingGroups.shift();
+      if (trial.pendingGroups.length === 0) this.finishPendingTrialStage(trial, incident);
+      return;
+    }
 
     if (trial.stage === 'foolish') {
       const candidates = trial.candidates.map((id) => this.get(id));
       const pick = await this.brain.groupVoteFoolish({ axis, voters, candidates, incident });
+      trial.pendingGroups.shift();
       trial.foolishVotes[pick] = (trial.foolishVotes[pick] ?? 0) + voters.length;
       trial.votes.push({ voter: axis, weight: voters.length, pick });
       if (trial.pendingGroups.length === 0) {
-        // 狂人の扇動: 全グループ投票後、最も善良な候補へ重い票を投げて陥れる。
-        const madman = this.aliveMadman();
-        if (madman) {
-          const target = this.scapegoat(trial.candidates);
-          if (target) {
-            const w = this.madmanWeight();
-            trial.foolishVotes[target] = (trial.foolishVotes[target] ?? 0) + w;
-            trial.votes.push({ voter: 'madman', weight: w, pick: target });
-          }
-        }
-        // 連続犯: 真犯人 (事件用キャラ) が陥れる対象が候補にいれば重い擦り付け票を加える (§12.3.3)。
-        // 無実の既存住民が被告に選ばれやすくなり、真犯人は alive のまま居座る。
-        const framed = incident.framedTargetId;
-        if (framed && trial.candidates.includes(framed)) {
-          const w = Math.round(3 + this.world.reputation.malice * 4);
-          trial.foolishVotes[framed] = (trial.foolishVotes[framed] ?? 0) + w;
-          trial.votes.push({ voter: 'culprit', weight: w, pick: framed });
-        }
-        trial.defendant = this.argmaxCandidate(trial);
-        trial.stage = 'fate';
-        trial.pendingGroups = this.groupAxes();
+        this.finishFoolishStage(trial, incident);
       }
     } else if (trial.stage === 'fate') {
       const defendant = this.get(trial.defendant as VillagerId);
       const vote = await this.brain.groupVoteFate({ axis, voters, defendant, incident });
+      trial.pendingGroups.shift();
       if (vote === 'kill') trial.fateVotes.kill += voters.length;
       else trial.fateVotes.spare += voters.length;
       trial.votes.push({ voter: axis, weight: voters.length, pick: vote });
       if (trial.pendingGroups.length === 0) {
-        // 狂人の扇動: 処刑へ重い票を上乗せする。
-        const madman = this.aliveMadman();
-        if (madman) {
-          const w = this.madmanWeight();
-          trial.fateVotes.kill += w;
-          trial.votes.push({ voter: 'madman', weight: w, pick: 'kill' });
-        }
-        trial.verdict = trial.fateVotes.kill > trial.fateVotes.spare ? 'death' : 'spared';
-        trial.stage = 'decided';
-        this.world.phase = 'ketsu';
+        this.finishFateStage(trial);
       }
     }
   }
@@ -1351,23 +1593,48 @@ export class TermMachine {
         if (a && b) {
           a.partnerId = b.id;
           b.partnerId = a.id;
+          this.bindPair(a, b, 'spouse');
           out.marriages.push({ a: a.id, b: b.id, aName: a.name, bName: b.name });
         }
       }
     }
 
-    if (this.rng() < this.birthChance && alive.length < this.maxPopulation) {
-      const reps = alive.filter(
-        (v) => v.partnerId !== null && (this.world.villagers.get(v.partnerId)?.alive ?? false) && v.id < v.partnerId,
-      );
-      const p1 = reps[Math.floor(this.rng() * reps.length)];
-      const p2 = p1?.partnerId ? this.world.villagers.get(p1.partnerId) : undefined;
-      if (p1 && p2) {
+    if (alive.length < this.maxPopulation) {
+      const pairs = this.birthPairs(alive);
+      for (const [p1, p2] of pairs) {
+        if (this.rng() >= this.birthChanceFor(p1, p2)) continue;
         const child = this.spawnChild(p1, p2);
         out.births.push({ childId: child.id, childName: child.name, parents: `${p1.name}と${p2.name}` });
+        break;
       }
     }
+    this.decayFamilyTime(alive);
     return out;
+  }
+
+  private birthPairs(alive: Villager[]): Array<[Villager, Villager]> {
+    const pairs: Array<[Villager, Villager]> = [];
+    for (const v of alive) {
+      if (!v.partnerId || v.id >= v.partnerId) continue;
+      const partner = this.world.villagers.get(v.partnerId);
+      if (partner?.alive) pairs.push([v, partner]);
+    }
+    return pairs.sort((a, b) => `${a[0].id}:${a[1].id}`.localeCompare(`${b[0].id}:${b[1].id}`));
+  }
+
+  private birthChanceFor(p1: Villager, p2: Villager): number {
+    const familyTime = (p1.eventParams[FAMILY_TIME] ?? 0) + (p2.eventParams[FAMILY_TIME] ?? 0);
+    return Math.min(1, this.birthChance + Math.min(0.36, familyTime * 0.08));
+  }
+
+  private decayFamilyTime(villagers: Villager[]): void {
+    for (const v of villagers) {
+      const current = v.eventParams[FAMILY_TIME] ?? 0;
+      if (current <= 0) continue;
+      const next = current - 1;
+      if (next <= 0) delete v.eventParams[FAMILY_TIME];
+      else v.eventParams[FAMILY_TIME] = next;
+    }
   }
 
   /** 夫婦から子を 1 体出生 (気質はブレンド)。 */
@@ -1441,7 +1708,7 @@ export class TermMachine {
       holiday,
       calendar: this.world.calendar,
       reputation: this.world.reputation,
-      villagers: aliveVillagers(this.world),
+      villagers: this.llmFocusVillagers(8),
     });
     for (const virtue of VIRTUES) {
       const delta = event.reputationDelta[virtue];

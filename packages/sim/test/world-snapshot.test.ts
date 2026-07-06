@@ -68,6 +68,7 @@ describe('world snapshot (toWire ↔ fromWire)', () => {
       incidentPlanted: false,
     };
     world.relationships.push({ from: 'a', to: 'b', affinity: -40, hates: true, note: 'test' });
+    world.userFaith.push({ villagerId: 'a', userId: 'u1', faith: 72, title: '崇拝', note: 'test faith' });
     world.villagerActionLog.push({ date: '6月1日', term: 12, villagerId: 'a', villagerName: '繝上リ', text: 'test action' });
 
     const wire = JSON.parse(JSON.stringify(toWire(world)));
@@ -76,6 +77,7 @@ describe('world snapshot (toWire ↔ fromWire)', () => {
     expect(restored.scheduledParty?.title).toBe('収穫祭');
     expect(restored.scheduledParty?.participantIds).toEqual(['a', 'b']);
     expect(restored.relationships[0]?.hates).toBe(true);
+    expect(restored.userFaith[0]?.faith).toBe(72);
     expect(restored.villagerActionLog[0]?.text).toBe('test action');
     expect(restored.residentHistory.length).toBeGreaterThan(0);
   });

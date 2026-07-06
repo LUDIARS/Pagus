@@ -6,7 +6,7 @@
 // 例外で env 維持: PAGUS_CONFIG_KEY (マスター鍵) / PAGUS_FRESH (その起動だけ world.json 無視) /
 // PAGUS_BRAIN (stub|llm の起動モード) / PAGUS_DATA_DIR (config 自体の置き場を解決するため)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, rollVillagerGacha, ensureResidentHistory, addVillagerActionLog, KARMA_GACHA_COST, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem, type VillagerGachaKind, type ChatMessage } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, rollVillagerGacha, ensureResidentHistory, addVillagerActionLog, KARMA_GACHA_COST, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem, type VillagerGachaKind, type ChatMessage, type TrialState, type TrialVoice } from '@pagus/sim';
 import { loadConfig, loadSeed } from './load-data.js';
 import { loadPagusConfig, type PagusConfig } from './config/pagus-config.js';
 import { TermLoop } from './term-loop.js';
@@ -62,7 +62,7 @@ function classifyKind(text: string): ChronicleKind {
 /**
  * PAGUS_BRAIN で 個体 Brain と 世界側 WorldBrain を一括で選ぶ (既定 'stub')。
  * 'llm' は claude/codex CLI 駆動。両者で同一 BackendRegistry を共有する。
- * チューニング (triggerAfter / disableCodex / cliRetries) は config から受ける。
+ * チューニング (triggerAfter / disableCodex) は config から受ける。
  * 不正値は無言フォールバックせず即エラー (RULE_CODE §7.1)。
  */
 function selectBrains(costSink: CostSink, cfg: PagusConfig): {
@@ -80,13 +80,15 @@ function selectBrains(costSink: CostSink, cfg: PagusConfig): {
     };
   }
   if (mode === 'llm') {
-    // codex(gpt-5.5) は既定キャストに合流済 (一過性 exit 1 は CLI レベルのリトライで吸収、
-    // config.llm.cliRetries で調整)。config.llm.disableCodex=true で外せる。
+    // codex(gpt-5.5) は既定キャストに合流済。config.llm.disableCodex=true で外せる。
     const disableCodex = cfg.llm.disableCodex;
-    const retries = cfg.llm.cliRetries;
-    const cast = disableCodex ? DEFAULT_CAST : [...DEFAULT_CAST, GPT_BACKEND];
-    const strong = disableCodex ? DEFAULT_STRONG : [...DEFAULT_STRONG, GPT_BACKEND];
-    const registry = new BackendRegistry({ cast, strong });
+    // 村の進行はLLM停止時に詰まらせない。失敗後はLlmBrain側の短期オフライン扱いで再試行を抑制する。
+    const retries = 0;
+    const cast = disableCodex ? DEFAULT_CAST : [...DEFAULT_CAST.filter((b) => b.id !== 'opus'), GPT_BACKEND];
+    const strong = disableCodex ? DEFAULT_STRONG : [GPT_BACKEND];
+    const registry = disableCodex
+      ? new BackendRegistry({ cast, strong })
+      : new BackendRegistry({ cast, strong, assignmentWeights: { gpt: 8, sonnet: 1, haiku: 1 } });
     return {
       brain: new LlmBrain(registry, { costSink, retries }),
       worldBrain: new LlmWorldBrain(registry, { costSink, retries }),
@@ -346,6 +348,141 @@ function main(): void {
     for (const uid of knownUsers) pushBetState(uid);
   };
 
+  const monthKeyOf = (w: World): string => `${w.calendar.year}-${w.calendar.month}`;
+
+  const faithTitle = (faith: number): '認識' | '信仰' | '崇拝' => {
+    if (faith >= 70) return '崇拝';
+    if (faith >= 45) return '信仰';
+    return '認識';
+  };
+
+  const addUserFaith = (villagerId: string, userId: string, amount: number, note: string): boolean => {
+    const v = tm.world.villagers.get(villagerId);
+    if (!v || !v.alive) return false;
+    let entry = tm.world.userFaith.find((x) => x.villagerId === villagerId && x.userId === userId);
+    if (!entry) {
+      entry = { villagerId, userId, faith: 0, title: '認識', note };
+      tm.world.userFaith.push(entry);
+    }
+    const before = entry.faith;
+    entry.faith = Math.max(0, Math.min(100, Math.round(entry.faith + amount)));
+    entry.title = faithTitle(entry.faith);
+    entry.note = note;
+    return entry.faith !== before;
+  };
+
+  const grantMonthlyEventCard = (userId: string): boolean => ps.grantMonthlyEventCard(userId, monthKeyOf(tm.world));
+
+  const grantMonthlyEventCardsForKnownUsers = (): number => {
+    let count = 0;
+    for (const uid of knownUsers) {
+      if (!grantMonthlyEventCard(uid)) continue;
+      count += 1;
+      pushState(uid);
+    }
+    return count;
+  };
+
+  const aliveRandom = (): ReturnType<typeof aliveVillagers>[number] | null => {
+    const alive = aliveVillagers(tm.world);
+    if (alive.length === 0) return null;
+    return alive[Math.floor(Math.random() * alive.length)] ?? null;
+  };
+
+  let trialVoiceIncident: string | null = null;
+  let trialVoiceSeq = 0;
+  const trialVoices: TrialVoice[] = [];
+
+  const faithfulResponder = (userId: string): { villagerId: string; faith: number } | null => {
+    const candidates = tm.world.userFaith
+      .filter((x) => x.userId === userId && x.faith >= 45 && (tm.world.villagers.get(x.villagerId)?.alive ?? false))
+      .sort((a, b) => b.faith - a.faith);
+    const best = candidates[0];
+    return best ? { villagerId: best.villagerId, faith: best.faith } : null;
+  };
+
+  const recordTrialVoice = (trial: TrialState | null, pick: string, userId: string): void => {
+    if (!trial || trial.stage !== 'fate') return;
+    if (pick !== 'kill' && pick !== 'spare') return;
+    if (trialVoiceIncident !== trial.incidentId) {
+      trialVoiceIncident = trial.incidentId;
+      trialVoices.length = 0;
+    }
+    trialVoiceSeq += 1;
+    const responder = faithfulResponder(userId);
+    const voice: TrialVoice = {
+      id: `${trial.incidentId}-${trialVoiceSeq}`,
+      userId,
+      userName: ps.getUserName(userId),
+      pick,
+      text: pick === 'kill' ? '死刑を求める声' : '教育を求める声',
+      at: Date.now(),
+    };
+    if (responder) {
+      voice.respondentId = responder.villagerId;
+      voice.responseText = pick === 'kill' ? '神の裁きに従う' : '神の慈悲を信じる';
+      voice.faith = responder.faith;
+      addUserFaith(responder.villagerId, userId, 2, '裁判の声に応えた');
+      ws.broadcastSnapshot(tm.world);
+    }
+    trialVoices.push(voice);
+    if (trialVoices.length > 16) trialVoices.shift();
+    ws.broadcastTrialVoices(trial.incidentId, trialVoices);
+  };
+
+  const handleVote = (pick: string, userId: string): void => {
+    knownUsers.add(userId);
+    const trial = tm.world.trial ? { ...tm.world.trial } : null;
+    loop.vote(pick, userId);
+    recordTrialVoice(trial, pick, userId);
+  };
+
+  const resolveEventCard = (userId: string): string => {
+    const w = tm.world;
+    if (Math.random() < 0.4) {
+      const roll = Math.floor(Math.random() * 4);
+      if (roll === 0) {
+        const kinds: DisasterKind[] = ['drought', 'storm', 'plague'];
+        const kind = kinds[Math.floor(Math.random() * kinds.length)] ?? 'storm';
+        cardRuleCount += 1;
+        tm.addCardRule(makeDisasterRule(kind, w.term + DISASTER_DAYS, `event_card_disaster_${cardRuleCount}`));
+        if (kind === 'plague') for (const v of aliveVillagers(w)) v.stress += 1;
+        const label = kind === 'drought' ? '干ばつ' : kind === 'storm' ? '嵐' : '疫病';
+        return `🃏 イベントカード: ${label}の兆しが村に走った`;
+      }
+      if (roll === 1) {
+        const n = tm.falseProphecy(undefined);
+        return `🃏 イベントカード: 偽予言が ${n}体に広がった`;
+      }
+      const target = aliveRandom();
+      if (!target) {
+        ps.addKarma(userId, 40);
+        return '🃏 イベントカード: 静かな祝福で 40 カルマを得た';
+      }
+      if (roll === 2) {
+        const res = tm.awaken(target.id);
+        const axisLabel = res ? (PERSONALITY_LABELS[res.axis] ?? res.axis) : '気質';
+        addUserFaith(target.id, userId, 8, 'イベントカードで変化を受けた');
+        return `🃏 イベントカード: ${target.name} の${axisLabel}が目覚めた`;
+      }
+      tm.spiritAway(target.id, SPIRITAWAY_DAYS);
+      return `🃏 イベントカード: ${target.name} がしばらく姿を消した`;
+    }
+
+    if (Math.random() < 0.5) {
+      const rolled = rollVillagerGacha(w, 'free', { llmBrain: null });
+      rolled.history.llmBrain = brainFor(rolled.villager.id);
+      rolled.history.archetype = `イベントカード/${rolled.history.archetype ?? '新入り'}`;
+      if (aliveInitialized) prevAliveIds.add(rolled.villager.id);
+      addUserFaith(rolled.villager.id, userId, 18, 'イベントカードで村へ招かれた');
+      return `🃏 イベントカード: ${rolled.villager.name} (${rolled.history.archetype}) が村に来た`;
+    }
+
+    const amount = 30 + Math.floor(Math.random() * 41);
+    ps.addKarma(userId, amount);
+    return `🃏 イベントカード: ${amount} カルマを得た`;
+  };
+
   /** リーダーボード (§4.3) を組む。徳目綱引きは world.reputation から。 */
   const buildLeaderboard = (): { players: ReturnType<typeof ps.leaderboard>; factions: { guide: number; incite: number } } => {
     const rep = tm.world.reputation;
@@ -506,12 +643,13 @@ function main(): void {
 
   // HTTP API (push 購読 / 通知経由の投票) と WS を同一ポートに相乗りさせる。
   const httpServer = createServer(
-    createRequestListener({ push, onVote: (pick, userId) => loop.vote(pick, userId) }),
+    createRequestListener({ push, onVote: (pick, userId) => handleVote(pick, userId) }),
   );
   ws = new GameWsServer(httpServer, {
     onHello: (userId, userName) => {
       knownUsers.add(userId);
       if (userName !== undefined) ps.setUserName(userId, userName);
+      grantMonthlyEventCard(userId);
       pushState(userId);
       pushBetState(userId); // 進行中の裁判があればベット状態も
       scheduleSysStatus(); // 接続時に最新の状態を反映 (§2.3 イベント駆動)
@@ -534,6 +672,7 @@ function main(): void {
     // 別端末ログイン (§v1.3-F): ws-server が code を userId に束ね直し旧接続を蹴った後の配線。
     onLogin: (userId) => {
       knownUsers.add(userId);
+      grantMonthlyEventCard(userId);
       pushState(userId);
       pushBetState(userId);
       scheduleSysStatus();
@@ -637,12 +776,14 @@ function main(): void {
         ws.sendRejected(userId, '応援対象が不正です');
         return;
       }
+      const faithChanged = addUserFaith(targetId, userId, 18, '応援された');
       ps.bumpStat(userId, 'cheers'); // 実績 (§4.1)
       recordAction(userId, 'cheer', targetId);
+      if (faithChanged) ws.broadcastSnapshot(tm.world);
       pushState(userId);
       scheduleLeaderboard();
     },
-    onVote: (pick, userId) => loop.vote(pick, userId),
+    onVote: (pick, userId) => handleVote(pick, userId),
     onChampion: (targetId, userId) => {
       knownUsers.add(userId);
       const v = tm.world.villagers.get(targetId);
@@ -654,6 +795,7 @@ function main(): void {
       ps.setChampion(userId, targetId);
       recordAction(userId, 'champion', targetId);
       pushState(userId);
+      scheduleLeaderboard();
     },
     onVillagerGacha: (kind: VillagerGachaKind, userId) => {
       knownUsers.add(userId);
@@ -694,6 +836,7 @@ function main(): void {
           ws.sendRejected(userId, 'その推しは不在 (生存どうぶつのみ)');
           return;
         }
+        if (res.kind === 'precious') addUserFaith(championId, userId, 22, `${ITEM_LABELS[res.kind]}を受け取った`);
         chronicle.add(date, `🎁 ${ITEM_LABELS[res.kind]}を推しの ${res.name} に渡した`, 'other');
         recordAction(userId, 'placeItem', `${ITEM_LABELS[res.kind]} → ${res.name}`, false);
       } else {
@@ -901,6 +1044,21 @@ function main(): void {
       recordAction(userId, 'card', chronicleText, false);
       pushState(userId);
     },
+    onEventCard: (userId) => {
+      knownUsers.add(userId);
+      if (!tryIntervention(userId)) return;
+      if (!ps.consumeEventCard(userId)) {
+        ws.sendRejected(userId, 'イベントカードがありません');
+        return;
+      }
+      const text = resolveEventCard(userId);
+      chronicle.add(dateLabel(tm.world), text, 'other');
+      ws.updateChronicle(chronicle.recent());
+      ws.broadcastSnapshot(tm.world);
+      recordAction(userId, 'card', text, false);
+      pushState(userId);
+      scheduleLeaderboard();
+    },
     // --- 経済パック (§v1.3-B) ---------------------------------------------------
     onInsure: (targetId, premium, userId) => {
       knownUsers.add(userId);
@@ -969,6 +1127,7 @@ function main(): void {
         if (di >= 0) recentDeadIds.splice(di, 1);
         // 復活で次回の死亡検知が誤発火しないよう生存集合に戻す。
         prevAliveIds.add(reviveId);
+        addUserFaith(reviveId, userId, 45, '闇市復活で蘇った');
         chronicle.add(date, `🛒 闇市: ${name} が闇の力で蘇った`, 'other');
         ws.updateChronicle(chronicle.recent());
         ws.broadcastSnapshot(w);
@@ -1121,6 +1280,7 @@ function main(): void {
       if (!res.fired) return;
       // 閾値到達 → 村バフ発火 (善良/活気 +0.05・全生存 stress-1)。
       tm.applyPrayerBuff();
+      for (const v of aliveVillagers(tm.world)) addUserFaith(v.id, userId, 6, '祈りで村が癒やされた');
       const cal = tm.world.calendar;
       chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `🙏 祈り: ${res.count}人の祈りが届き村が癒やされた`, 'other');
       ws.updateChronicle(chronicle.recent());
@@ -1145,7 +1305,7 @@ function main(): void {
     (effect, _lotId, winnerUserId, amount) => {
       const cal = tm.world.calendar;
       const date = `${cal.month}月${cal.dayOfMonth}日`;
-      const label = effect === 'sanction_free' ? '制裁無料券' : effect === 'virtue_boost' ? '善性のお守り' : 'カード招待状';
+      const label = effect === 'sanction_free' ? '制裁無料券' : effect === 'virtue_boost' ? '善性のお守り' : 'イベントカード';
       // 落札時にのみ徴収 (入札時 hold しない方式)。残高不足なら流す (無言フォールバック禁止 = 記録する)。
       if (!ps.spend(winnerUserId, amount)) {
         chronicle.add(date, `🔨 オークション: 落札者のカルマ不足で「${label}」は流れた`, 'other');
@@ -1154,7 +1314,7 @@ function main(): void {
       }
       if (effect === 'sanction_free') ps.grantSanctionFree(winnerUserId);
       else if (effect === 'virtue_boost') ps.addVirtue(winnerUserId, 0.1);
-      else ps.grantCardFree(winnerUserId);
+      else ps.grantEventCard(winnerUserId, 1);
       chronicle.add(date, `🔨 オークション: 「${label}」を ${amount} カルマで落札`, 'other');
       ws.updateChronicle(chronicle.recent());
       pushState(winnerUserId);
@@ -1300,6 +1460,11 @@ function main(): void {
   const handleMonthRoll = (): void => {
     const cal = tm.world.calendar;
     const date = `${cal.month}月${cal.dayOfMonth}日`;
+    const granted = grantMonthlyEventCardsForKnownUsers();
+    if (granted > 0) {
+      chronicle.add(date, `🃏 月次カード: ${granted}人にイベントカードが1枚ずつ配られた`, 'other');
+      ws.updateChronicle(chronicle.recent());
+    }
     // ㉔ 月間MVP を集計し「今月の主役」を発表する。
     const mvp = spectacle.resolveMvp();
     if (mvp) {

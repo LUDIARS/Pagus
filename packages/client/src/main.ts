@@ -119,9 +119,9 @@ async function main(): Promise<void> {
     },
   }, { commands: ['incite', 'sanction', 'cheer', 'champion'], showVerdict: true });
 
-  // カードパネル (§v1.3-A): カルマで切る一発介入カード 5 種。
+  // イベントカード: 月次配布カードを1枚消費して server 側でガチャ効果を起こす。
   const cards = new CardPanel(el('cards'), {
-    onCard: (card, args) => conn.send({ t: 'card', card, userId, ...args }),
+    onDraw: () => conn.send({ t: 'eventCard', userId }),
   });
 
   // アイテムパネル (§16): 人手でフィールドにアイテム配置 (ランダム/貴金属/薬物)。推しに直送も可。
@@ -196,6 +196,7 @@ async function main(): Promise<void> {
     },
     onPlayers: (count) => vstatus.setPlayers(count),
     onTrialLines: (incidentId, lines) => stage.setTrialLines(incidentId, lines),
+    onTrialVoices: (incidentId, voices) => stage.setTrialVoices(incidentId, voices),
     onLlm: () => undefined,
     onChronicle: (entries) => {
       chronicle.setEntries(entries);
@@ -205,6 +206,7 @@ async function main(): Promise<void> {
     onPlayerState: (state) => {
       interventionControls.setState(state);
       cards.setKarma(state.karma);
+      cards.setInventory(state.eventCards);
       economy.setState(state.karma);
       account.setSpent(state.spent);
       setUserName(state.userName);
@@ -229,7 +231,10 @@ async function main(): Promise<void> {
       villageRules.setActions(entries);
     },
     onBetState: (s) => betPanel.setBetState(s),
-    onLeaderboard: (s) => leaderboard.setLeaderboard(s),
+    onLeaderboard: (s) => {
+      leaderboard.setLeaderboard(s);
+      residents.setLeaderboard(s.players);
+    },
     onAuction: (lots) => economy.setAuction(lots),
     onLaws: (items) => governance.setLaws(items),
     onRevolt: (active, incite, suppress, endsInMs) => governance.setRevolt(active, incite, suppress, endsInMs),

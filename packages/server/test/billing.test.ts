@@ -44,4 +44,16 @@ describe('PlayerState 課金モック (§v1.3-F topup)', () => {
     const lb = ps.leaderboard();
     expect(lb.find((e) => e.userId === 'u')?.spent).toBe(500);
   });
+
+  it('イベントカードは月1回だけ配布され、消費できる', () => {
+    const ps = new PlayerState();
+    expect(ps.grantMonthlyEventCard('u', '2026-7')).toBe(true);
+    expect(ps.grantMonthlyEventCard('u', '2026-7')).toBe(false);
+    expect(ps.snapshot('u', 0).eventCards).toBe(1);
+    expect(ps.consumeEventCard('u')).toBe(true);
+    expect(ps.consumeEventCard('u')).toBe(false);
+    expect(ps.snapshot('u', 0).eventCards).toBe(0);
+    expect(ps.grantMonthlyEventCard('u', '2026-8')).toBe(true);
+    expect(ps.snapshot('u', 0).eventCards).toBe(1);
+  });
 });

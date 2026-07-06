@@ -31,6 +31,7 @@ describe('事件ライフサイクル (§12.3)', () => {
     // StubWorldBrain は min(15, daysInMonth) = 15 を返す。
     expect(world.scheduledIncident).not.toBeNull();
     expect(world.scheduledIncident?.dayOfMonth).toBe(15);
+    expect(world.scheduledIncident?.themeSeed).toBe('人狼風の密告劇');
     expect(world.scheduledIncident?.designed).toBe(false);
     expect(world.scheduledIncident?.fired).toBe(false);
     expect(world.scheduledIncident?.design).toBeNull();

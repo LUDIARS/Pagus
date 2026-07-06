@@ -3,21 +3,22 @@
 // 各メソッドで backend (provider+model) を選び、CLI クライアントで invoke → JSON parse →
 // sim 型で返す。tier ルーティング (routeTier) で軽い局面は per-villager 割当、重い局面
 // (承GANs/裁判/教育) は strong (opus/gpt-5.5) へ寄せる。
-// parse 失敗は 1 回リトライ→なお失敗なら throw (無言フォールバック禁止)。
+// parse/CLI 失敗は 1 回リトライ→なお失敗なら StubBrain にフォールバックする。
 
-import type {
-  Brain,
-  EmotionContext,
-  ActionContext,
-  ActionDecision,
-  IncidentContext,
-  IncidentStep,
-  FoolishVoteContext,
-  FateVoteContext,
-  EducationContext,
-  EmotionState,
-  VillagerId,
-  Reform,
+import {
+  StubBrain,
+  type Brain,
+  type EmotionContext,
+  type ActionContext,
+  type ActionDecision,
+  type IncidentContext,
+  type IncidentStep,
+  type FoolishVoteContext,
+  type FateVoteContext,
+  type EducationContext,
+  type EmotionState,
+  type VillagerId,
+  type Reform,
 } from '@pagus/sim';
 
 import { estimateTokens } from '@ludiars/llm-gateway';
@@ -57,20 +58,32 @@ export interface LlmBrainOptions {
   retries?: number;
   /** LLM 呼び出しごとのコスト計上フック (§7)。未指定なら計上しない。 */
   costSink?: CostSink;
+  /** LLM が止まった時に使う代替 Brain。既定は StubBrain。 */
+  fallback?: Brain;
+  /** 失敗した backend を即時スキップする時間。 */
+  offlineCooldownMs?: number;
 }
+
+const DEFAULT_BRAIN_TIMEOUT_MS = 20_000;
+const DEFAULT_OFFLINE_COOLDOWN_MS = 120_000;
 
 export class LlmBrain implements Brain {
   private readonly registry: BackendRegistry;
   private readonly createClient: (backend: Backend) => LlmClient;
   private readonly clients = new Map<string, LlmClient>();
   private readonly costSink: CostSink | undefined;
+  private readonly fallback: Brain;
+  private readonly offlineCooldownMs: number;
+  private readonly offlineUntil = new Map<string, number>();
   /** プレイヤー扇動: 次の自由行動で事件化を促す。 */
   private incitePending = false;
 
   constructor(registry: BackendRegistry, opts: LlmBrainOptions = {}) {
     this.registry = registry;
     this.costSink = opts.costSink;
-    const timeoutMs = opts.timeoutMs;
+    this.fallback = opts.fallback ?? new StubBrain();
+    this.offlineCooldownMs = opts.offlineCooldownMs ?? DEFAULT_OFFLINE_COOLDOWN_MS;
+    const timeoutMs = opts.timeoutMs ?? DEFAULT_BRAIN_TIMEOUT_MS;
     const retries = opts.retries;
     this.createClient =
       opts.createClient ??
@@ -90,14 +103,17 @@ export class LlmBrain implements Brain {
   async updateEmotion(ctx: EmotionContext): Promise<EmotionState> {
     const parts = buildEmotionPrompt(ctx);
     const backend = this.select(parts, ctx.villager.id, ctx.villager.id);
-    return this.invokeJson(backend, parts, coerceEmotion);
+    return this.invokeJsonOrFallback(backend, parts, coerceEmotion, () => this.fallback.updateEmotion(ctx));
   }
 
   async decideAction(ctx: ActionContext): Promise<ActionDecision> {
     const incited = this.incitePending && ctx.directive === null;
     const parts = buildActionPrompt(ctx, incited);
     const backend = this.select(parts, ctx.villager.id, ctx.villager.id);
-    const decision = await this.invokeJson(backend, parts, coerceAction);
+    const decision = await this.invokeJsonOrFallback(backend, parts, coerceAction, () => {
+      if (incited) this.forceFallbackNext();
+      return this.fallback.decideAction(ctx);
+    });
     if (incited) this.incitePending = false;
     return decision;
   }
@@ -105,26 +121,26 @@ export class LlmBrain implements Brain {
   async advanceIncident(ctx: IncidentContext): Promise<IncidentStep> {
     const parts = buildIncidentPrompt(ctx);
     const backend = this.select(parts, ctx.perpetrator.id, ctx.perpetrator.id);
-    return this.invokeJson(backend, parts, coerceIncidentStep);
+    return this.invokeJsonOrFallback(backend, parts, coerceIncidentStep, () => this.fallback.advanceIncident(ctx));
   }
 
   async groupVoteFoolish(ctx: FoolishVoteContext): Promise<VillagerId> {
     const parts = buildFoolishPrompt(ctx);
     const backend = this.select(parts, ctx.axis, ctx.axis);
     const allowed = new Set<VillagerId>(ctx.candidates.map((c) => c.id));
-    return this.invokeJson(backend, parts, (u) => coerceFoolishPick(u, allowed));
+    return this.invokeJsonOrFallback(backend, parts, (u) => coerceFoolishPick(u, allowed), () => this.fallback.groupVoteFoolish(ctx));
   }
 
   async groupVoteFate(ctx: FateVoteContext): Promise<'kill' | 'spare'> {
     const parts = buildFatePrompt(ctx);
     const backend = this.select(parts, ctx.axis, ctx.axis);
-    return this.invokeJson(backend, parts, coerceFate);
+    return this.invokeJsonOrFallback(backend, parts, coerceFate, () => this.fallback.groupVoteFate(ctx));
   }
 
   async decideEducation(ctx: EducationContext): Promise<Reform> {
     const parts = buildEducationPrompt(ctx);
     const backend = this.select(parts, ctx.perpetrator.id, ctx.perpetrator.id);
-    return this.invokeJson(backend, parts, (u) => coerceReform(u, ctx.perpetrator.id));
+    return this.invokeJsonOrFallback(backend, parts, (u) => coerceReform(u, ctx.perpetrator.id), () => this.fallback.decideEducation(ctx));
   }
 
   // --- 内部 ---------------------------------------------------------------
@@ -143,6 +159,37 @@ export class LlmBrain implements Brain {
       this.clients.set(backend.id, c);
     }
     return c;
+  }
+
+  private forceFallbackNext(): void {
+    const maybe = this.fallback as Brain & { forceNext?: () => void };
+    maybe.forceNext?.();
+  }
+
+  private backendOffline(backend: Backend): boolean {
+    return Date.now() < (this.offlineUntil.get(backend.id) ?? 0);
+  }
+
+  private markBackendOffline(backend: Backend, parts: PromptParts, err: unknown): void {
+    this.offlineUntil.set(backend.id, Date.now() + this.offlineCooldownMs);
+    console.warn(
+      `[pagus] LLM fallback (${parts.kind}, backend=${backend.id}): ${(err as Error).message}`,
+    );
+  }
+
+  private async invokeJsonOrFallback<T>(
+    backend: Backend,
+    parts: PromptParts,
+    validate: (u: unknown) => T,
+    fallback: () => Promise<T>,
+  ): Promise<T> {
+    if (this.backendOffline(backend)) return fallback();
+    try {
+      return await this.invokeJson(backend, parts, validate);
+    } catch (e) {
+      this.markBackendOffline(backend, parts, e);
+      return fallback();
+    }
   }
 
   /**

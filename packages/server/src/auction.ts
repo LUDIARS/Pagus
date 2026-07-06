@@ -19,7 +19,7 @@ interface LotDef {
 const LOTS: readonly LotDef[] = [
   { effect: 'sanction_free', title: '制裁無料券 (次の制裁が無料)' },
   { effect: 'virtue_boost', title: '善性のお守り (善性 +0.1)' },
-  { effect: 'card_grant', title: 'カード招待状 (次のカードのクールダウン無視)' },
+  { effect: 'card_grant', title: 'イベントカード (1枚付与)' },
 ];
 
 /** bid() の結果。不正は ok:false で理由を返す (握り潰さない)。 */

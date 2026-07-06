@@ -11,6 +11,7 @@ import {
   type ServerMessage,
   type ClientMessage,
   type TrialLine,
+  type TrialVoice,
   type LlmInfo,
   type ChronicleEntry,
   type PlayerActionEntry,
@@ -57,7 +58,7 @@ export interface WsHandlers {
   onIncite(targetId: string, rumorAboutId: string | undefined, userId: string): void;
   onSanction(targetId: string, userId: string): void;
   onCheer(targetId: string, userId: string): void;
-  onVote(pick: string, userId?: string): void;
+  onVote(pick: string, userId: string): void;
   onChampion(targetId: string, userId: string): void;
   onVillagerGacha(kind: VillagerGachaKind, userId: string): void;
   /** フィールドアイテム配置 (§16)。toChampion=true で推しに直接送る。 */
@@ -67,6 +68,7 @@ export interface WsHandlers {
   onBet(pick: 'death' | 'educate', amount: number, userId: string): void;
   onFaction(side: Faction, userId: string): void;
   onCard(card: CardName, args: CardArgs, userId: string): void;
+  onEventCard(userId: string): void;
   onInsure(targetId: string, premium: number, userId: string): void;
   onBuyMarket(item: MarketItem, args: MarketArgs, userId: string): void;
   onBid(lotId: string, amount: number, userId: string): void;
@@ -107,6 +109,8 @@ export class GameWsServer {
   private raid: Extract<ServerMessage, { t: 'raid' }> | null = null;
   private mvp: Extract<ServerMessage, { t: 'mvp' }> | null = null;
   private season: Extract<ServerMessage, { t: 'season' }> | null = null;
+  /** 裁判の声。接続時に現値を送る。 */
+  private trialVoices: Extract<ServerMessage, { t: 'trialVoices' }> | null = null;
   /** 接続 → その接続を名乗った userId。per-connection 配信の宛先解決に使う。 */
   private readonly connUser = new Map<WebSocket, string>();
 
@@ -147,6 +151,7 @@ export class GameWsServer {
     if (this.raid) ws.send(JSON.stringify(this.raid));
     if (this.mvp) ws.send(JSON.stringify(this.mvp));
     if (this.season) ws.send(JSON.stringify(this.season));
+    if (this.trialVoices) ws.send(JSON.stringify(this.trialVoices));
     this.broadcastPlayers();
     ws.on('close', () => {
       this.connUser.delete(ws);
@@ -218,7 +223,7 @@ export class GameWsServer {
       this.h.onCheer(msg.targetId, this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'vote') {
       this.bind(ws, msg.userId);
-      this.h.onVote(msg.pick, msg.userId);
+      this.h.onVote(msg.pick, this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'champion') {
       this.bind(ws, msg.userId);
       this.h.onChampion(msg.targetId, this.resolveUser(ws, msg.userId));
@@ -249,6 +254,9 @@ export class GameWsServer {
       if (msg.kind !== undefined) args.kind = msg.kind;
       if (msg.text !== undefined) args.text = msg.text;
       this.h.onCard(msg.card, args, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'eventCard') {
+      this.bind(ws, msg.userId);
+      this.h.onEventCard(this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'insure') {
       this.bind(ws, msg.userId);
       this.h.onInsure(msg.targetId, msg.premium, this.resolveUser(ws, msg.userId));
@@ -316,6 +324,7 @@ export class GameWsServer {
           canCheerInMs: state.canCheerInMs,
           championId: state.championId,
           spent: state.spent,
+          eventCards: state.eventCards,
         }
       : {
           t: 'playerState',
@@ -328,6 +337,7 @@ export class GameWsServer {
           championId: state.championId,
           championName,
           spent: state.spent,
+          eventCards: state.eventCards,
         };
     this.sendToUser(userId, JSON.stringify(msg));
   }
@@ -468,6 +478,13 @@ export class GameWsServer {
   /** 裁判の糾弾セリフ (server 生成/再利用) を配る。 */
   broadcastTrialLines(incidentId: string, lines: TrialLine[]): void {
     const msg: ServerMessage = { t: 'trialLines', incidentId, lines };
+    this.fanout(JSON.stringify(msg));
+  }
+
+  /** 他ユーザーの裁判の声と、信仰している住民の応答を配る。 */
+  broadcastTrialVoices(incidentId: string, voices: TrialVoice[]): void {
+    const msg: Extract<ServerMessage, { t: 'trialVoices' }> = { t: 'trialVoices', incidentId, voices };
+    this.trialVoices = msg;
     this.fanout(JSON.stringify(msg));
   }
 

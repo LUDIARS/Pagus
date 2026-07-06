@@ -59,6 +59,10 @@ interface PlayerEntry {
   faction: Faction | null;
   /** 累計課金額 (§v1.3-F 課金モック)。topup でカルマと共に増える。 */
   spent: number;
+  /** 月次配布されるイベントカードの所持数。 */
+  eventCards: number;
+  /** 最後に月次イベントカードを受け取ったゲーム内年月キー。 */
+  lastEventCardMonth: string | null;
 }
 
 /** 推し保険の 1 契約 (§v1.3-B ③)。userId+villagerId をキーに保持。 */
@@ -102,6 +106,8 @@ export interface PlayerStateSnapshot {
   championId: string | null;
   /** 累計課金額 (§v1.3-F 課金モック)。 */
   spent: number;
+  /** 月次配布されるイベントカードの所持数。 */
+  eventCards: number;
 }
 
 export class PlayerState {
@@ -152,7 +158,7 @@ export class PlayerState {
   get(userId: string): PlayerEntry {
     let e = this.players.get(userId);
     if (!e) {
-      e = { karma: 0, virtue: 0, userName: null, lastCheerMs: 0, championId: null, stats: emptyStats(), faction: null, spent: 0 };
+      e = { karma: 0, virtue: 0, userName: null, lastCheerMs: 0, championId: null, stats: emptyStats(), faction: null, spent: 0, eventCards: 0, lastEventCardMonth: null };
       this.players.set(userId, e);
     }
     return e;
@@ -216,6 +222,34 @@ export class PlayerState {
   /** その userId の推し villager id (未指名は null)。 */
   getChampion(userId: string): string | null {
     return this.get(userId).championId;
+  }
+
+  /** 指定月に未配布ならイベントカードを 1 枚渡す。配布した時だけ true。 */
+  grantMonthlyEventCard(userId: string, monthKey: string): boolean {
+    const e = this.get(userId);
+    if (e.lastEventCardMonth === monthKey) return false;
+    e.lastEventCardMonth = monthKey;
+    e.eventCards += 1;
+    return true;
+  }
+
+  /** イベントカードを任意枚数付与する (オークション等)。 */
+  grantEventCard(userId: string, count = 1): void {
+    const e = this.get(userId);
+    e.eventCards = Math.max(0, e.eventCards + count);
+  }
+
+  /** イベントカードを 1 枚消費できれば true。 */
+  consumeEventCard(userId: string): boolean {
+    const e = this.get(userId);
+    if (e.eventCards <= 0) return false;
+    e.eventCards -= 1;
+    return true;
+  }
+
+  /** イベントカードの所持数。 */
+  eventCards(userId: string): number {
+    return this.get(userId).eventCards;
   }
 
   /** その villager を推しにしている全 userId を返す (死亡検知の弔い対象, §1)。 */
@@ -420,6 +454,7 @@ export class PlayerState {
         virtue: e.virtue,
         stats: { ...e.stats },
         spent: e.spent,
+        championId: e.championId,
       };
     });
   }
@@ -436,6 +471,7 @@ export class PlayerState {
       canCheerInMs: this.canCheerInMs(userId, now),
       championId: e.championId,
       spent: e.spent,
+      eventCards: e.eventCards,
     };
   }
 }

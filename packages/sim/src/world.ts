@@ -67,6 +67,7 @@ export function createWorld(
       archetype: null,
     })),
     relationships: [],
+    userFaith: [],
     villagerActionLog: [],
   };
 }

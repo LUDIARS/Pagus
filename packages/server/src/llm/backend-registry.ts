@@ -41,6 +41,8 @@ export interface BackendRegistryOptions {
   cast?: readonly Backend[];
   /** strong tier の母集合。既定 DEFAULT_STRONG。 */
   strong?: readonly Backend[];
+  /** per-villager assignment weights by backend id. Display cast remains unique. */
+  assignmentWeights?: Readonly<Record<string, number>>;
   /**
    * seed 由来の初期割当 (villagerId → backend.id)。
    * 指定があれば hash 割当より優先する (= seed を尊重)。
@@ -54,6 +56,7 @@ export interface BackendRegistryOptions {
  */
 export class BackendRegistry {
   private readonly cast: readonly Backend[];
+  private readonly assignmentCast: readonly Backend[];
   private readonly strongCast: readonly Backend[];
   private readonly byId: Map<string, Backend>;
   private readonly initial: Readonly<Record<string, string>>;
@@ -67,6 +70,7 @@ export class BackendRegistry {
     if (this.strongCast.length === 0) throw new Error('BackendRegistry: strong が空です');
     this.byId = new Map(this.cast.map((b) => [b.id, b]));
     for (const b of this.strongCast) if (!this.byId.has(b.id)) this.byId.set(b.id, b);
+    this.assignmentCast = buildAssignmentCast(this.cast, this.byId, opts.assignmentWeights);
     this.initial = opts.initialAssignments ?? {};
   }
 
@@ -98,8 +102,8 @@ export class BackendRegistry {
       return b;
     }
 
-    const idx = hashString(villagerId) % this.cast.length;
-    const picked = this.cast[idx];
+    const idx = hashString(villagerId) % this.assignmentCast.length;
+    const picked = this.assignmentCast[idx];
     if (!picked) throw new Error('BackendRegistry: キャスト選択に失敗しました');
     this.assigned.set(villagerId, picked);
     return picked;
@@ -124,6 +128,23 @@ export class BackendRegistry {
 }
 
 /** 決定的な文字列ハッシュ (FNV-1a 32bit)。 */
+function buildAssignmentCast(
+  cast: readonly Backend[],
+  byId: ReadonlyMap<string, Backend>,
+  weights: Readonly<Record<string, number>> | undefined,
+): readonly Backend[] {
+  if (!weights) return cast;
+  const expanded: Backend[] = [];
+  for (const [id, rawWeight] of Object.entries(weights)) {
+    const backend = byId.get(id);
+    if (!backend) throw new Error(`BackendRegistry: assignment weight references unknown backend '${id}'`);
+    const weight = Math.floor(rawWeight);
+    if (weight <= 0) continue;
+    for (let i = 0; i < weight; i += 1) expanded.push(backend);
+  }
+  return expanded.length > 0 ? expanded : cast;
+}
+
 function hashString(s: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) {

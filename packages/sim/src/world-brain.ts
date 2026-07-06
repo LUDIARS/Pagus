@@ -1,7 +1,7 @@
 // 世界側 LLM。Brain (個体の思考) とは別に、その日の裁判結果から村全体を評価する。
 // 出力: 村の徳目評判 delta / 関与どうぶつの性格 delta / 新規出生数。
 
-import type { Villager, VillagerId, Incident, Calendar, Verdict, VillageRule, IncidentDesign } from './types/index.js';
+import type { Villager, VillagerId, Incident, Calendar, Verdict, VillageRule, IncidentDesign, ScheduledIncident } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 import type { Personality } from './personality.js';
 import type { BehaviorRule } from './behavior-rules.js';
@@ -80,6 +80,8 @@ export interface RuleProposalContext {
   villagers: Villager[];
   existingRules: BehaviorRule[];
   calendar: Calendar;
+  /** 予定済み/提案済みの事件。あればルール化の素材にする。 */
+  scheduledIncident: ScheduledIncident | null;
 }
 
 export interface WorldBrain {

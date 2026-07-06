@@ -24,6 +24,19 @@ export interface VillagerRelationship {
   affinity: number;
   hates: boolean;
   note: string;
+  /** 関係図で特別扱いする生活関係。未指定は通常の好悪関係。 */
+  kind?: 'affinity' | 'romance' | 'spouse';
+  /** その関係が記録された term。古い snapshot では未設定。 */
+  sinceTerm?: number;
+}
+
+export interface UserFaithEntry {
+  villagerId: VillagerId;
+  userId: string;
+  /** 0..100。高いほどそのユーザーを神格として認識する。 */
+  faith: number;
+  title: '認識' | '信仰' | '崇拝';
+  note: string;
 }
 
 export interface VillagerActionEntry {
@@ -219,5 +232,6 @@ export interface World {
   martial?: MartialState;
   residentHistory: ResidentHistoryEntry[];
   relationships: VillagerRelationship[];
+  userFaith: UserFaithEntry[];
   villagerActionLog: VillagerActionEntry[];
 }

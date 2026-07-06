@@ -18,6 +18,7 @@ import {
   type BehaviorRule,
   type RuleCategory,
 } from './behavior-rules.js';
+import { routineActionFor, specialtyIncidentSeed, specialtyTriggerWeight } from './life-profile.js';
 
 /** 事件をくぐった反応として溜まるイベント由来パラメータのタグ。 */
 export const REACTION_EXPOSURE = 'incidentExposure';
@@ -107,8 +108,10 @@ export class DailyEngine {
     const exposure = villager.eventParams[REACTION_EXPOSURE] ?? 0;
     // ルールの triggerWeight (wander カテゴリで評価) も閾値を下げる (§2.1)。
     const ruleTriggerWeight = evaluateRules(this.rules, { villager, env, category: 'wander' }).triggerWeight;
+    // 職能・日課由来の火種も閾値を下げる。音楽家の夜演奏、収集家の盗難疑惑など。
+    const specialtyWeight = specialtyTriggerWeight(villager, env);
     // 戒厳令 surge (§v1.3-C ⑨) は閾値を surgeBonus だけ下げて事件を多発させる。
-    const threshold = Math.max(1, this.triggerAfter - exposure - ruleTriggerWeight - this.surgeBonus);
+    const threshold = Math.max(1, this.triggerAfter - exposure - ruleTriggerWeight - specialtyWeight - this.surgeBonus);
     // 対象指定扇動: この個体が指名されていれば即事件化を促す。
     const targeted = this.forcedTargetId === villager.id;
     const trigger = hasNeighbor && (this.forced || targeted || this.actionCount >= threshold);
@@ -119,14 +122,15 @@ export class DailyEngine {
     // 最終カテゴリ (発火時は興奮 = harass 相当) でルール評価し感情・flavor を得る。
     const { emotion, flavor } = this.evalFor(villager, env, trigger ? 'harass' : 'wander');
     const targetIds = trigger ? env.nearby.map((n) => n.id) : [];
+    const routineText = flavor ?? routineActionFor(villager, env);
     return {
       move,
-      action: flavor ?? `${villager.name} は ${env.place} をうろついた`,
+      action: routineText,
       newEmotion: emotion,
       triggersIncident: trigger,
       incidentSeed: trigger
         ? {
-            description: `${villager.name} が ${env.place} で騒ぎを起こした`,
+            description: specialtyIncidentSeed(villager, env),
             involved: env.nearby.map((n) => n.id),
           }
         : null,

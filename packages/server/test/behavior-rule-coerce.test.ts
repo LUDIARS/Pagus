@@ -62,6 +62,25 @@ describe('coerceBehaviorRule (ふるまいの法則 DSL の厳密検証, §2.1)'
     expect(rule.then[0]).toEqual({ kind: 'triggerWeight', delta: 5 });
   });
 
+  it('生活プロファイル向け条件を検証して受け入れる', () => {
+    const rule = coerceBehaviorRule({
+      description: '音楽家の夜騒音',
+      when: [
+        { kind: 'valueIncludes', text: '音楽' },
+        { kind: 'hobby', hobby: 'collector' },
+        { kind: 'activity', activity: 'nocturnal' },
+        { kind: 'wealthAbove', value: 100 },
+      ],
+      then: [{ kind: 'actionFlavor', text: '夜更けの音が響いた' }],
+    });
+    expect(rule.when).toEqual([
+      { kind: 'valueIncludes', text: '音楽' },
+      { kind: 'hobby', hobby: 'collector' },
+      { kind: 'activity', activity: 'nocturnal' },
+      { kind: 'wealthAbove', value: 100 },
+    ]);
+  });
+
   it('コードフェンス付き JSON も extractJson 経由で読める', () => {
     const text = '```json\n{"description":"夜は怖い","when":[{"kind":"timeOfDay","timeOfDay":"night"}],"then":[{"kind":"emotionDelta","emotionAxis":"fear","delta":0.2}]}\n```';
     const rule = coerceBehaviorRule(extractJson(text));
