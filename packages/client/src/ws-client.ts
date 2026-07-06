@@ -2,13 +2,6 @@
 
 import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, TrialVoice, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView, LawView, MartialMode, HighlightCard, SeasonWinner, ChatMessage, ThemeLexicon, MoralDial } from '@pagus/sim';
 
-/** 裁判ベットのプール状態 (§3 betState 受信ペイロード)。 */
-export interface BetStateView {
-  incidentId: string;
-  pool: { death: number; educate: number };
-  yourBet: { pick: 'death' | 'educate'; amount: number } | null;
-}
-
 /** リーダーボード (§4.3 leaderboard 受信ペイロード)。 */
 export interface LeaderboardView {
   players: LeaderboardEntry[];
@@ -43,6 +36,7 @@ export interface WsHandlers {
     sanctionCost: number;
     inciteCost: number;
     canCheerInMs: number;
+    canIntervene: boolean;
     heckleCost: number;
     canHeckleInMs: number;
     testifyCost: number;
@@ -63,8 +57,6 @@ export interface WsHandlers {
   onPlayerActions?(entries: PlayerActionEntry[]): void;
   /** 状態パネル (§7): 稼働時間・ゲーム内日付・LLM コスト。 */
   onSysStatus?(s: SysStatus): void;
-  /** 裁判ベットのプール状態 (§3)。 */
-  onBetState?(s: BetStateView): void;
   /** 称号・陣営のリーダーボード (§4.3)。 */
   onLeaderboard?(s: LeaderboardView): void;
   /** オークションのロット状態 (§v1.3-B ②)。 */
@@ -140,6 +132,7 @@ export function connect(url: string, h: WsHandlers): Conn {
           sanctionCost: msg.sanctionCost,
           inciteCost: msg.inciteCost,
           canCheerInMs: msg.canCheerInMs,
+          canIntervene: msg.canIntervene,
           heckleCost: msg.heckleCost,
           canHeckleInMs: msg.canHeckleInMs,
           testifyCost: msg.testifyCost,
@@ -164,8 +157,6 @@ export function connect(url: string, h: WsHandlers): Conn {
           term: msg.term,
           cost: msg.cost,
         });
-      } else if (msg.t === 'betState') {
-        h.onBetState?.({ incidentId: msg.incidentId, pool: msg.pool, yourBet: msg.yourBet });
       } else if (msg.t === 'leaderboard') {
         h.onLeaderboard?.({ players: msg.players, factions: msg.factions });
       } else if (msg.t === 'laws') h.onLaws?.(msg.items);

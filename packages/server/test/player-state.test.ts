@@ -138,10 +138,10 @@ describe('PlayerState 称号 (§4.2 titles)', () => {
 
   it('最大保持者の同点は userId 昇順で先勝ち', () => {
     const ps = new PlayerState();
-    ps.bumpStat('z', 'betsWon', 2);
-    ps.bumpStat('a', 'betsWon', 2);
+    ps.bumpStat('z', 'trialVotes', 2);
+    ps.bumpStat('a', 'trialVotes', 2);
     const titles = ps.titles();
-    expect(titles.get('a')).toBe('博徒'); // 同点 → 昇順で a
+    expect(titles.get('a')).toBe('陪審員'); // 同点 → 昇順で a
     expect(titles.get('z')).toBeNull();
   });
 

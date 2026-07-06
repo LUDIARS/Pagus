@@ -16,7 +16,6 @@ import { CardPanel } from './card-panel.js';
 import { EconomyPanel } from './economy-panel.js';
 import { GovernancePanel } from './governance-panel.js';
 import { SpectaclePanel } from './spectacle-panel.js';
-import { BetPanel } from './bet-panel.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
 import { AccountPanel, AccountSettingsPanel } from './account-panel.js';
 import { ItemPanel } from './item-panel.js';
@@ -74,9 +73,10 @@ async function main(): Promise<void> {
   const userId = getUserId();
   const userName = getUserName();
   let conn: Conn;
-  const trial = new TrialPanel(el('trial'), (pick) => conn.send({ t: 'vote', pick, userId }));
-  // 裁判ベット (§3): 運命段階で死刑/教育に賭ける。
-  const betPanel = new BetPanel(el('bet'), (pick, amount) => conn.send({ t: 'bet', pick, amount, userId }));
+  const trial = new TrialPanel(el('trial'), (pick) => {
+    conn.send({ t: 'vote', pick, userId });
+    if (pick === 'kill' || pick === 'spare') stage.playerVerdict(pick === 'kill' ? 'guilty' : 'innocent');
+  });
   // スコアボード (§4): 称号・陣営・綱引き。陣営選択を送る。
   const leaderboard = new LeaderboardPanel(el('leaderboard'), userId);
 
@@ -129,7 +129,7 @@ async function main(): Promise<void> {
       conn.send({ t: 'fanFlames', targetId, userId });
       stage.reactToAction(targetId, 'fanFlames');
     },
-  }, { commands: ['incite', 'sanction', 'cheer', 'champion', 'gift-treat', 'gift-poison', 'fanFlames'], showVerdict: true });
+  }, { commands: ['incite', 'sanction', 'cheer', 'champion', 'gift-treat', 'gift-poison', 'fanFlames'], showVerdict: false });
 
   // 野次 (§v1.4-A): 事件 (承) の進行中だけ中央に出る 煽る/なだめる ボタン。
   const heckle = new HeckleButtons(el('heckle'), (side) => {
@@ -160,6 +160,7 @@ async function main(): Promise<void> {
   };
   new ResidentGachaPanel(el('resident-gacha'), residentHandlers);
   const residents = new ResidentPanel(el('residents'), residentHandlers, { showGacha: false });
+  stage.setVillagerTapHandler((villagerId) => residents.showVillagerDetails(villagerId));
 
   // 経済パネル (§v1.3-B): 保険 / 闇市 / オークション (送金・銀行は廃止)。
   const economy = new EconomyPanel(el('economy'), {
@@ -193,6 +194,7 @@ async function main(): Promise<void> {
 
   conn = connect(WS_URL, {
     onSnapshot: (world) => {
+      log.setDate(`${world.calendar.month}月${world.calendar.dayOfMonth}日`);
       stage.update(world);
       radar.update(world.reputation);
       hud.updateCalendar(world);
@@ -209,7 +211,6 @@ async function main(): Promise<void> {
       economy.setWorld(world);
       governance.setWorld(world); // 村長/世論調査 (§17) は snapshot から
       spectacle.setWorld(world);
-      betPanel.update(world);
       heckle.setWorld(world);
       testify.setWorld(world);
     },
@@ -231,21 +232,10 @@ async function main(): Promise<void> {
       villageRules.setEntries(entries);
     },
     // テーマパック (§v1.4-D): 語彙を各所へ適用し、wholesome では死刑ボタンを隠す。
-    onTheme: (_pack, moral, lexicon) => {
+    onTheme: (_pack, _moral, lexicon) => {
       stage.setTheme(lexicon);
       vstatus.setTheme(lexicon);
       interventionControls.setPoisonLabel(lexicon.giftPoisonLabel);
-      const setBtn = (id: string, ja: string, en: string): void => {
-        const btn = el(id);
-        const jaEl = btn.querySelector('.vb-ja');
-        const enEl = btn.querySelector('.vb-en');
-        if (jaEl) jaEl.textContent = ja;
-        if (enEl) enEl.textContent = en;
-      };
-      setBtn('v-guilty', lexicon.verdictDeathJa, lexicon.verdictDeathEn);
-      setBtn('v-innocent', lexicon.verdictEducateJa, lexicon.verdictEducateEn);
-      // モラルダイヤル: wholesome では死刑 (kill 票) の口を塞ぐ (sim 側でも無効)。
-      (el('v-guilty') as HTMLButtonElement).style.display = moral === 'wholesome' ? 'none' : '';
     },
     onSysStatus: (s) => statusPanel.setStatus(s),
     onPlayerState: (state) => {
@@ -267,6 +257,7 @@ async function main(): Promise<void> {
         championId: state.championId,
         ...(state.championName !== undefined ? { championName: state.championName } : {}),
         canCheerInMs: state.canCheerInMs,
+        canIntervene: state.canIntervene,
       });
     },
     onCommandRejected: (reason) => showToast(`⚠ ${reason}`),
@@ -278,7 +269,6 @@ async function main(): Promise<void> {
       chronicle.setActions(entries);
       villageRules.setActions(entries);
     },
-    onBetState: (s) => betPanel.setBetState(s),
     onLeaderboard: (s) => {
       leaderboard.setLeaderboard(s);
       residents.setLeaderboard(s.players);
@@ -293,18 +283,6 @@ async function main(): Promise<void> {
     onMvp: (villagerId, name) => spectacle.setMvp(villagerId, name),
     onRaid: (active, villainName, hp, hpMax, endsInMs) => spectacle.setRaid(active, villainName, hp, hpMax, endsInMs),
     onSeason: (num, winner, leaderboard) => spectacle.setSeason(num, winner, leaderboard),
-  });
-
-  // 裁判の票は中央の 死刑/教育 に一本化 (沈静化は廃止 §4.1)。
-  //   死刑 = 殺す(kill) 投票、教育 = 活かす(spare→教育) 投票。
-  //   同時にプレイヤーの罵倒/擁護を吹き出しで表示。投票し直しは server 側で前票を差し替え。
-  el('v-guilty').addEventListener('click', () => {
-    conn.send({ t: 'vote', pick: 'kill', userId });
-    stage.playerVerdict('guilty');
-  });
-  el('v-innocent').addEventListener('click', () => {
-    conn.send({ t: 'vote', pick: 'spare', userId });
-    stage.playerVerdict('innocent');
   });
 
   // 🔔 通知: 裁判が始まったら端末へ push (接続を閉じていても投票を促す)。

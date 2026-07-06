@@ -6,7 +6,20 @@ import type { Phase } from '@pagus/sim';
 const MAX = 9;
 
 export class LogOverlay {
+  private currentDate = '';
+
   constructor(private readonly root: HTMLElement) {}
+
+  setDate(date: string): void {
+    if (date === this.currentDate) return;
+    this.currentDate = date;
+    this.root.dataset.date = date;
+    this.root.replaceChildren();
+    const div = document.createElement('div');
+    div.className = 'ov-line log-kisho';
+    div.textContent = `── ${date} ──`;
+    this.root.appendChild(div);
+  }
 
   add(phase: Phase, text: string): void {
     const div = document.createElement('div');

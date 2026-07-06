@@ -69,7 +69,10 @@ export class VillageScene {
   private sceneCy = 0;
   private pulse = 0;
 
-  constructor(private readonly tex: Map<AnimalName, Texture>) {
+  constructor(
+    private readonly tex: Map<AnimalName, Texture>,
+    private readonly onVillagerTap: ((villagerId: string) => void) | null = null,
+  ) {
     this.layer.sortableChildren = true;
     // itemLayer は grid の上・どうぶつ (layer) の下に置く (落とし物は足元に見える)。
     this.root.addChild(this.bg, this.grid, this.itemLayer, this.layer, this.vignette);
@@ -187,6 +190,9 @@ export class VillageScene {
       let u = this.units.get(v.id);
       if (!u) {
         u = this.createUnit(v.name, this.tex.get(animalFor(v))!, (v.position.x + 0.5) * cellX, (v.position.y + 0.5) * cellY);
+        u.node.eventMode = 'static';
+        u.node.cursor = 'pointer';
+        u.node.on('pointertap', () => this.onVillagerTap?.(v.id));
         this.units.set(v.id, u);
         this.layer.addChild(u.node);
       }

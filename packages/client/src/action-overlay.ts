@@ -1,9 +1,9 @@
-// 統合介入パネル (§v1.3-E)。増えたユーザ操作 (操作/カード/村/裁判/経済/情報) を
+// 統合介入パネル (§v1.3-E)。増えたユーザ操作 (操作/カード/村/経済/情報) を
 // 1 つのタブ式パネルへ集約し、上部に常時ヘッダ (カルマ残高 / 善性 / 課金 / 推し / クールダウン) を出す。
 //
 // 本クラスは「枠」の責務だけを持つ: タブ切替・ヘッダ描画・開閉 (ドロワー/埋め込み)。
-// 各操作パネル (PlayerControls / CardPanel / EconomyPanel / GovernancePanel / TrialPanel /
-// BetPanel / LeaderboardPanel / SpectaclePanel / StatusPanel / AccountPanel) は従来どおり
+// 各操作パネル (PlayerControls / CardPanel / EconomyPanel / GovernancePanel /
+// LeaderboardPanel / SpectaclePanel / StatusPanel / AccountPanel) は従来どおり
 // それぞれのクラスが該当タブ内の DOM (#controls 等) へ mount する (送信/受信ロジックは無改変)。
 
 /** ヘッダに出す自分の状態 (playerState 受信から組む)。 */
@@ -15,6 +15,8 @@ export interface OverlayPlayerState {
   championName?: string;
   /** 応援クールダウンの残り (ms)。0 以下で「いま可能」。 */
   canCheerInMs: number;
+  /** 今日まだ通常介入を使えるか。false なら介入タブをグレーアウトする。 */
+  canIntervene: boolean;
 }
 
 export interface ActionOverlayOptions {
@@ -46,6 +48,7 @@ export class ActionOverlay {
       btn.type = 'button';
       btn.role = 'tab';
       btn.className = 'ao-tab-btn';
+      btn.dataset.tab = id;
       btn.textContent = sec.dataset.label ?? id;
       btn.addEventListener('click', () => this.selectTab(id));
       this.tabBar.appendChild(btn);
@@ -68,6 +71,7 @@ export class ActionOverlay {
   setPlayerState(s: OverlayPlayerState): void {
     this.state = s;
     this.stateAt = Date.now();
+    this.root.classList.toggle('ao-no-intervention', !s.canIntervene);
     this.renderHeader();
   }
 
@@ -112,6 +116,7 @@ export class ActionOverlay {
       chip('💴 課金', `¥${s.spent}`),
       chip('⭐ 推し', champ),
       chip('🌸 応援', cd <= 0 ? '可' : `${Math.ceil(cd / 1000)}s`),
+      chip('🎛 介入', s.canIntervene ? '可' : '済'),
     );
   }
 }

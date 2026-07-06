@@ -92,6 +92,9 @@ export class VillageStatus {
 
     const alive = w.villagers.filter((v) => v.alive).length;
     this.root.appendChild(row('🐾 生存どうぶつ', `${alive} 匹`));
+    const mayor = w.mayorId ? w.villagers.find((v) => v.id === w.mayorId) : null;
+    this.root.appendChild(row('👑 村長', mayor ? `${villagerDisplayName(w, mayor)} (${mayor.species})` : '空位'));
+    this.root.appendChild(row('🗳 任期', w.mayorTermsLeft > 0 ? `残り ${w.mayorTermsLeft}日` : '未定'));
 
     this.root.appendChild(h('div', '村の評判 (徳目6軸)', 'sub'));
     for (const v of VIRTUES) {

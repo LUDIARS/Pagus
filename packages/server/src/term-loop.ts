@@ -1,7 +1,19 @@
 // TermMachine をフェーズに応じて 1 ステップずつ駆動するループ。
 // 時間制御はここが所有する: 起のセグメントはカレンダー導出ペース、事件の局面は速めに刻む。
 
-import type { TermMachine, World, HeckleSide, HeckleResult, TestifyOutcome, GiftKind, GiftResult, SpotResult, FanFlamesResult } from '@pagus/sim';
+import type {
+  TermMachine,
+  World,
+  HeckleSide,
+  HeckleResult,
+  TestifyOutcome,
+  GiftKind,
+  GiftResult,
+  SpotResult,
+  FanFlamesResult,
+  PlayerStatementResolution,
+  TrialRepairResult,
+} from '@pagus/sim';
 import { pacedSegmentMs, type PaceOptions } from './clock.js';
 
 /** テーマパック (§v1.4-D) 由来の feed 文言。省略時は classic 相当。 */
@@ -93,6 +105,18 @@ export class TermLoop {
     this.tm.addUserVote(pick, userId);
   }
 
+  resolveTrialAfterPlayerStatement(pick: 'kill' | 'spare'): PlayerStatementResolution | null {
+    const result = this.tm.resolveTrialAfterPlayerStatement(pick);
+    if (!result) return null;
+    for (const r of result.reactions) {
+      const side = r.supports ? '同調' : '反論';
+      this.h.onLog('ten', `⚖ ${r.name} (${side})「${r.line}」`);
+    }
+    this.h.onLog('ketsu', this.strings.verdictLine(result.verdict));
+    this.h.onSnapshot(this.tm.world);
+    return result;
+  }
+
   /** プレイヤーの野次 (§v1.4-A): 進行中の事件を煽る/なだめる。事件中でなければ null。 */
   heckle(side: HeckleSide): HeckleResult | null {
     return this.tm.heckle(side);
@@ -138,9 +162,33 @@ export class TermLoop {
     if (!this.running) return;
     this.timer = setTimeout(() => {
       this.tick()
-        .catch((err) => console.error('[pagus] tick error', err))
+        .catch((err) => this.handleTickError(err))
         .finally(() => this.scheduleNext(this.nextDelay()));
     }, delay);
+  }
+
+  private handleTickError(err: unknown): void {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[pagus] tick error', err);
+    const phase = this.tm.world.phase;
+    this.h.onLog(phase, `🛠 自動修正: 進行エラーを検知 (${msg})`);
+    const repaired = this.tm.repairTrialState(msg);
+    this.logRepair(repaired);
+    if (!repaired.repaired) this.h.onLog(this.tm.world.phase, '🛠 自動修正: 補正対象なし。次のtickで再試行');
+    this.h.onSnapshot(this.tm.world);
+  }
+
+  private logRepair(result: TrialRepairResult): void {
+    for (const m of result.messages) this.h.onLog(this.tm.world.phase, `🛠 ${m}`);
+  }
+
+  private trialTrace(): string | null {
+    const t = this.tm.world.trial;
+    if (!t) return null;
+    const stage = t.stage === 'foolish' ? '被告選択' : t.stage === 'fate' ? '量刑' : '判決済み';
+    const pending = t.pendingGroups.length;
+    const defendant = t.defendant ? this.tm.world.villagers.get(t.defendant)?.name ?? t.defendant : '未定';
+    return `${stage} / 残り${pending}組 / 被告=${defendant} / 死刑${t.fateVotes.kill}-教育${t.fateVotes.spare}`;
   }
 
   private async tick(): Promise<void> {
@@ -195,11 +243,17 @@ export class TermLoop {
         break;
       }
       case 'ten': {
+        const repaired = this.tm.repairTrialState('before tenStep');
+        this.logRepair(repaired);
+        const before = this.trialTrace();
+        if (before) this.h.onLog('ten', `⚖ 進行: ${before}`);
         const r = await this.tm.tenStep();
         // 真犯人の発覚 (§v1.4-B reveal): 冤罪被告が差し替わる逆転をログに出す。
         if (r.reveal) {
           this.h.onLog('ten', `🔦 逆転: 真犯人は ${r.reveal.toName} だった！ ${r.reveal.fromName} は解放された`);
         }
+        const after = this.trialTrace();
+        if (after && after !== before) this.h.onLog('ten', `⚖ 更新: ${after}`);
         if (this.tm.world.phase === 'ketsu' && w.trial?.verdict) {
           this.h.onLog('ketsu', this.strings.verdictLine(w.trial.verdict));
         }

@@ -81,14 +81,13 @@ export interface CardsConfig {
   spiritAwayDays: number; // PAGUS_SPIRITAWAY_DAYS
 }
 
-/** 経済パック (§v1.3-B) + ベット/しきたり改定/課金. */
+/** 経済パック (§v1.3-B) + しきたり改定/課金. */
 export interface EconomyConfig {
   insureDays: number; // PAGUS_INSURE_DAYS
   insureMult: number; // PAGUS_INSURE_MULT
   reviveCost: number; // PAGUS_REVIVE_COST
   auctionPeriodMs: number; // PAGUS_AUCTION_PERIOD_MS
   marketPremium: number; // PAGUS_MARKET_PREMIUM
-  betMin: number; // PAGUS_BET_MIN
   ruleAddCost: number; // PAGUS_RULE_ADD_COST
   ruleRemoveCost: number; // PAGUS_RULE_REMOVE_COST
   villageRulesMax: number; // PAGUS_VILLAGE_RULES_MAX
@@ -292,7 +291,6 @@ export const DEFAULT_CONFIG: PagusConfig = {
     reviveCost: 80,
     auctionPeriodMs: 120000,
     marketPremium: 1.5,
-    betMin: 1,
     ruleAddCost: 15,
     ruleRemoveCost: 25,
     villageRulesMax: 12,

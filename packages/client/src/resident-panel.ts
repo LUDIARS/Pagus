@@ -1,5 +1,5 @@
 import type { WireWorld, VillagerGachaKind, LeaderboardEntry, Villager } from '@pagus/sim';
-import { KARMA_GACHA_COST, isAwake, lifeProfileFor, routineTextFor, sleepRoutineTextFor, timeOfDayForSegment } from '@pagus/sim';
+import { HOBBY_LABELS, KARMA_GACHA_COST, PERSONALITY_LABELS, dominantAxis, isAwake, lifeProfileFor, routineTextFor, sleepRoutineTextFor, timeOfDayForSegment } from '@pagus/sim';
 import { residentHistoryDisplayName, villagerNameMap } from './villager-display.js';
 
 const REL_HATE_THRESHOLD = -35;
@@ -22,10 +22,13 @@ export class ResidentPanel {
   private leaderboard: LeaderboardEntry[] = [];
   private readonly gachaBox = document.createElement('div');
   private readonly statusBox = document.createElement('div');
+  private readonly brainBox = document.createElement('div');
   private readonly championBox = document.createElement('div');
   private readonly relBox = document.createElement('div');
   private readonly historyBox = document.createElement('div');
   private readonly actionBox = document.createElement('div');
+  private readonly modal = document.createElement('div');
+  private readonly modalBody = document.createElement('div');
 
   constructor(
     private readonly root: HTMLElement,
@@ -44,6 +47,10 @@ export class ResidentPanel {
     this.statusBox.className = 'resident-list resident-status-list';
     this.root.appendChild(this.statusBox);
 
+    this.root.appendChild(sub('住民LLM脳'));
+    this.brainBox.className = 'resident-list';
+    this.root.appendChild(this.brainBox);
+
     this.root.appendChild(sub('他ユーザーの推し'));
     this.championBox.className = 'resident-list';
     this.root.appendChild(this.championBox);
@@ -59,6 +66,7 @@ export class ResidentPanel {
     this.root.appendChild(sub('住民の行動記録'));
     this.actionBox.className = 'resident-list';
     this.root.appendChild(this.actionBox);
+    this.setupModal();
     this.render();
   }
 
@@ -72,9 +80,20 @@ export class ResidentPanel {
     this.render();
   }
 
+  showVillagerDetails(villagerId: string): void {
+    const w = this.world;
+    if (!w) return;
+    const villager = w.villagers.find((v) => v.id === villagerId);
+    if (!villager) return;
+    this.modalBody.replaceChildren();
+    this.modalBody.appendChild(villagerDetails(w, villager));
+    this.modal.classList.add('show');
+  }
+
   private render(): void {
     const w = this.world;
     this.statusBox.replaceChildren();
+    this.brainBox.replaceChildren();
     this.championBox.replaceChildren();
     this.relBox.replaceChildren();
     this.historyBox.replaceChildren();
@@ -101,13 +120,18 @@ export class ResidentPanel {
       const recent = latestAction.get(v.id);
       const meta = [
         `職能:${profile.label}`,
+        `脳:${brainLabelFor(w, v.id)}`,
         `活動:${activityLabel(v.activity)}`,
         awake ? '起床中' : '睡眠中',
         relationLabel(w, v, byId, alive),
         `日課:${routine}`,
         recent ? `最近:${recent}` : null,
       ].filter((s): s is string => s !== null).join(' / ');
-      this.statusBox.appendChild(row(`${v.name} (${v.species})`, meta));
+      this.statusBox.appendChild(row(`${v.name} (${v.species})`, meta, () => this.showVillagerDetails(v.id)));
+    }
+
+    for (const v of w.villagers.filter((x) => x.alive).sort((a, b) => a.name.localeCompare(b.name))) {
+      this.brainBox.appendChild(row(`${v.name} (${v.species})`, `LLM脳: ${brainLabelFor(w, v.id)}`, () => this.showVillagerDetails(v.id)));
     }
 
     const championRows = this.leaderboard.filter((p) => p.championId);
@@ -117,7 +141,7 @@ export class ResidentPanel {
     } else {
       for (const p of championRows.slice(0, 12)) {
         const champion = p.championId ? byId.get(p.championId) ?? p.championId : '未指定';
-        this.championBox.appendChild(row(p.userName ?? p.userId.slice(0, 8), `推し: ${champion}`));
+        this.championBox.appendChild(row(p.userName ?? p.userId.slice(0, 8), `推し: ${champion}`, p.championId ? () => this.showVillagerDetails(p.championId as string) : undefined));
       }
     }
 
@@ -148,6 +172,32 @@ export class ResidentPanel {
     for (const a of [...(w.villagerActionLog ?? [])].reverse().slice(0, 14)) {
       this.actionBox.appendChild(row(`${a.date} ${a.villagerName}`, a.text));
     }
+  }
+
+  private setupModal(): void {
+    this.modal.className = 'resident-modal';
+    const box = document.createElement('div');
+    box.className = 'resident-modal-box';
+    const head = document.createElement('div');
+    head.className = 'resident-modal-head';
+    const title = document.createElement('div');
+    title.className = 'resident-modal-title';
+    title.textContent = '住民詳細';
+    const close = document.createElement('button');
+    close.className = 'resident-modal-close';
+    close.textContent = '×';
+    close.addEventListener('click', () => this.modal.classList.remove('show'));
+    this.modal.addEventListener('click', (e) => {
+      if (e.target === this.modal) this.modal.classList.remove('show');
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.modal.classList.remove('show');
+    });
+    this.modalBody.className = 'resident-modal-body';
+    head.append(title, close);
+    box.append(head, this.modalBody);
+    this.modal.appendChild(box);
+    document.body.appendChild(this.modal);
   }
 }
 
@@ -217,9 +267,20 @@ function gachaButtons(onGacha: (kind: VillagerGachaKind) => void, showStatus = f
   return box;
 }
 
-function row(title: string, meta: string): HTMLElement {
+function row(title: string, meta: string, onClick?: () => void): HTMLElement {
   const el = document.createElement('div');
-  el.className = 'resident-row';
+  el.className = onClick ? 'resident-row resident-row-clickable' : 'resident-row';
+  if (onClick) {
+    el.tabIndex = 0;
+    el.role = 'button';
+    el.addEventListener('click', onClick);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onClick();
+      }
+    });
+  }
   const t = document.createElement('div');
   t.className = 'resident-title';
   t.textContent = title;
@@ -228,6 +289,101 @@ function row(title: string, meta: string): HTMLElement {
   m.textContent = meta;
   el.append(t, m);
   return el;
+}
+
+function villagerDetails(w: WireWorld, v: Villager): HTMLElement {
+  const box = document.createElement('div');
+  const names = villagerNameMap(w);
+  const alive = new Set(w.villagers.filter((x) => x.alive).map((x) => x.id));
+  const profile = lifeProfileFor(v);
+  const now = timeOfDayForSegment(w.calendar.segment, w.config.segmentsPerDay);
+  const awake = isAwake(v.activity, w.calendar.segment, w.config.segmentsPerDay);
+  const latest = latestActionByVillager(w).get(v.id);
+
+  const title = document.createElement('div');
+  title.className = 'resident-detail-title';
+  title.textContent = `${v.name} (${v.species})`;
+  const meta = document.createElement('div');
+  meta.className = 'resident-detail-meta';
+  meta.textContent = [
+    v.alive ? '生存' : '退場',
+    `出自:${originLabel(v.origin)}`,
+    `活動:${activityLabel(v.activity)}`,
+    awake ? '起床中' : '睡眠中',
+    `職能:${profile.label}`,
+  ].join(' / ');
+  box.append(title, meta);
+
+  const currentRoutine = awake ? routineTextFor(v, now) : sleepRoutineTextFor(now);
+  box.appendChild(section('現在', [
+    `場所: (${v.position.x}, ${v.position.y})`,
+    `LLM脳: ${brainLabelFor(w, v.id)}`,
+    `日課: ${currentRoutine}`,
+    `気分: ${v.emotion.label}`,
+    `ストレス: ${v.stress}`,
+    `所持金: ${Math.round(v.wealth)} / 趣味:${HOBBY_LABELS[v.hobby]}`,
+    latest ? `最近の行動: ${latest}` : '最近の行動: なし',
+  ]));
+
+  box.appendChild(section('日々のルーティーン', [
+    `朝: ${profile.routine.morning}`,
+    `昼: ${profile.routine.noon}`,
+    `夕: ${profile.routine.evening}`,
+    `夜: ${profile.routine.night}`,
+  ]));
+
+  box.appendChild(section('事件の火種', [
+    profile.incident.description,
+    `発火しやすさ: ${profile.incident.triggerWeight >= 0.7 ? '高' : profile.incident.triggerWeight >= 0.45 ? '中' : '低'}`,
+  ]));
+
+  box.appendChild(section('性格', [
+    `主軸: ${PERSONALITY_LABELS[dominantAxis(v.persona.traits)]}`,
+    ...Object.entries(v.persona.traits).map(([axis, value]) => `${PERSONALITY_LABELS[axis as keyof typeof PERSONALITY_LABELS] ?? axis}: ${value.toFixed(2)}`),
+  ]));
+
+  box.appendChild(section('関係', relationshipLines(w, v, names, alive)));
+  box.appendChild(section('信条と記憶', [
+    `信条: ${v.persona.values.join(' / ') || 'なし'}`,
+    `口調: ${v.persona.speechStyle}`,
+    ...v.information.slice(-4).map((info) => `記憶: ${info.text}`),
+  ]));
+  return box;
+}
+
+function section(title: string, lines: string[]): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'resident-detail-section';
+  const h = document.createElement('div');
+  h.className = 'resident-detail-section-title';
+  h.textContent = title;
+  box.appendChild(h);
+  for (const line of lines.length > 0 ? lines : ['なし']) {
+    const row = document.createElement('div');
+    row.className = 'resident-detail-line';
+    row.textContent = line;
+    box.appendChild(row);
+  }
+  return box;
+}
+
+function relationshipLines(w: WireWorld, v: Villager, names: Map<string, string>, alive: Set<string>): string[] {
+  const lines: string[] = [];
+  if (v.partnerId && alive.has(v.partnerId)) lines.push(`配偶者: ${names.get(v.partnerId) ?? v.partnerId}`);
+  for (const rel of (w.relationships ?? []).filter((r) => r.from === v.id && alive.has(r.to))) {
+    if (rel.kind === 'spouse' && rel.to === v.partnerId) continue;
+    const kind = rel.kind === 'spouse' ? '夫婦' : rel.kind === 'romance' ? '恋愛' : '関係';
+    lines.push(`${kind}: ${names.get(rel.to) ?? rel.to} / ${rel.affinity} / ${rel.note}`);
+  }
+  for (const faith of (w.userFaith ?? []).filter((f) => f.villagerId === v.id && f.faith >= 25)) {
+    lines.push(`信仰: ${faith.title} ${faith.faith} / ${faith.note}`);
+  }
+  return lines;
+}
+
+function brainLabelFor(w: WireWorld, villagerId: string): string {
+  const history = (w.residentHistory ?? []).find((h) => h.id === villagerId);
+  return history?.llmBrain ?? 'stub';
 }
 
 function latestActionByVillager(w: WireWorld): Map<string, string> {

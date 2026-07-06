@@ -97,11 +97,11 @@ const TITLE_CATEGORIES: { key: keyof PlayerStats; title: string }[] = [
   { key: 'sanctions', title: '審判者' },
   { key: 'cheers', title: '聖人' },
   { key: 'rulesAdded', title: '立法者' },
-  { key: 'betsWon', title: '博徒' },
+  { key: 'trialVotes', title: '陪審員' },
 ];
 
 function emptyStats(): PlayerStats {
-  return { incites: 0, sanctions: 0, cheers: 0, rulesAdded: 0, betsWon: 0, championDeaths: 0 };
+  return { incites: 0, sanctions: 0, cheers: 0, rulesAdded: 0, trialVotes: 0, championDeaths: 0 };
 }
 
 /** 保険清算 1 件 (§v1.3-B ③): どの userId にいくら払い戻すか。 */
@@ -127,6 +127,8 @@ export interface PlayerStateSnapshot {
   spent: number;
   /** 月次配布されるイベントカードの所持数。 */
   eventCards: number;
+  /** 今日はまだ通常介入を使えるか。false のとき client は介入メニューをグレーアウトする。 */
+  canIntervene: boolean;
   // --- 即効介入 (§v1.4-A) のコスト/クールダウン表示用 ---
   heckleCost: number;
   canHeckleInMs: number;
@@ -191,6 +193,12 @@ export class PlayerState {
     if (!e) {
       e = { karma: 0, virtue: 0, userName: null, lastCheerMs: 0, championId: null, stats: emptyStats(), faction: null, spent: 0, eventCards: 0, lastEventCardMonth: null };
       this.players.set(userId, e);
+    } else {
+      const legacy = e.stats as PlayerStats & { betsWon?: number };
+      if (legacy.trialVotes === undefined) {
+        legacy.trialVotes = legacy.betsWon ?? 0;
+      }
+      delete legacy.betsWon;
     }
     return e;
   }
@@ -370,7 +378,7 @@ export class PlayerState {
     };
   }
 
-  /** カルマを加算する (ベット払い戻し, §3)。下限0。払い戻しは上限 max を超過してよい。 */
+  /** カルマを加算する。下限0。報酬は上限 max を超過してよい。 */
   addKarma(userId: string, amount: number): void {
     const e = this.get(userId);
     e.karma = Math.max(0, e.karma + amount);
@@ -439,6 +447,8 @@ export class PlayerState {
 
   /** 実績カウンタを増やす (§4.1)。 */
   bumpStat(userId: string, key: keyof PlayerStats, by = 1): void {
+    const stats = this.get(userId).stats;
+    if (stats[key] === undefined) stats[key] = 0;
     this.get(userId).stats[key] += by;
   }
 
@@ -530,6 +540,7 @@ export class PlayerState {
       championId: e.championId,
       spent: e.spent,
       eventCards: e.eventCards,
+      canIntervene: true,
       heckleCost: this.intervene.heckleCost,
       canHeckleInMs: this.heckleCooldownInMs(userId, now),
       testifyCost: this.intervene.testifyCost,

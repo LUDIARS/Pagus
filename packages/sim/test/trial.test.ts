@@ -17,6 +17,14 @@ function harshWorld(): World {
   return createWorld([x, y, z], DEFAULT_CONFIG, { year: 2026, month: 6 });
 }
 
+function fourVillagerWorld(): World {
+  const x = createVillager({ id: 'x', name: 'ガオ', position: { x: 12, y: 12 }, activity: 'always', traits: { aggression: 0.9 } });
+  const y = createVillager({ id: 'y', name: 'リツ', position: { x: 13, y: 12 }, activity: 'always', traits: { discipline: 0.9 } });
+  const z = createVillager({ id: 'z', name: 'ヤミ', position: { x: 11, y: 12 }, activity: 'always', traits: { ambition: 0.9 } });
+  const q = createVillager({ id: 'q', name: 'コウ', position: { x: 10, y: 12 }, activity: 'always', traits: { aggression: 0.8 } });
+  return createWorld([x, y, z, q], DEFAULT_CONFIG, { year: 2026, month: 6 });
+}
+
 describe('投票裁判', () => {
   it('全グループが kill 投票 → 死刑 → 被告は追放される', async () => {
     const w = harshWorld();
@@ -86,5 +94,70 @@ describe('投票裁判', () => {
     expect(w.trial?.stage).toBe('fate');
     expect(w.trial?.defendant).toBe('x');
     expect(w.trial?.pendingGroups.length).toBeGreaterThan(0);
+  });
+
+  it('同じゲーム内日には2回目の裁判を開かない', () => {
+    const w = harshWorld();
+    const tm = new TermMachine(w, new StubBrain());
+
+    expect(tm.sanction('x')).toBe(true);
+    expect(w.trialDayKey).not.toBeNull();
+
+    w.phase = 'kisho';
+    w.incident = null;
+    w.trial = null;
+
+    expect(tm.sanction('y')).toBe(false);
+    expect(w.trial).toBeNull();
+  });
+
+  it('recovers a fate trial with missing defendant and exhausted groups', () => {
+    const w = harshWorld();
+    w.phase = 'ten';
+    w.incident = {
+      id: 'inc_fate_stuck',
+      perpetrator: 'x',
+      involved: ['y'],
+      description: 'stuck fate trial',
+      damage: 12,
+      steps: [],
+      resolved: true,
+    };
+    w.trial = {
+      incidentId: 'inc_fate_stuck',
+      judge: { kind: 'nekomori' },
+      candidates: ['x', 'y'],
+      stage: 'fate',
+      pendingGroups: [],
+      foolishVotes: { x: 2 },
+      defendant: null,
+      fateVotes: { kill: 1, spare: 0 },
+      votes: [],
+      verdict: null,
+    };
+
+    const tm = new TermMachine(w, new StubBrain());
+    const repaired = tm.repairTrialState('test');
+
+    expect(repaired.repaired).toBe(true);
+    expect(w.phase).toBe('ketsu');
+    expect(w.trial?.stage).toBe('decided');
+    expect(w.trial?.defendant).toBe('x');
+    expect(w.trial?.verdict).not.toBeNull();
+  });
+
+  it('player verdict statement produces three resident reactions and closes fate', () => {
+    const w = fourVillagerWorld();
+    const tm = new TermMachine(w, new StubBrain());
+
+    expect(tm.sanction('x')).toBe(true);
+    tm.addUserVote('spare', 'u1');
+    const result = tm.resolveTrialAfterPlayerStatement('spare');
+
+    expect(result).not.toBeNull();
+    expect(result?.reactions).toHaveLength(3);
+    expect(w.phase).toBe('ketsu');
+    expect(w.trial?.stage).toBe('decided');
+    expect(w.trial?.verdict).not.toBeNull();
   });
 });

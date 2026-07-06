@@ -200,6 +200,16 @@ export interface ShoResult {
   secondaryVictim: string | null;
 }
 
+export interface TrialRepairResult {
+  repaired: boolean;
+  messages: string[];
+}
+
+export interface PlayerStatementResolution {
+  reactions: Array<{ villagerId: VillagerId; name: string; supports: boolean; line: string }>;
+  verdict: Verdict;
+}
+
 export interface KishoTickResult {
   /** 起きていて行動した どうぶつ の行動概要。 */
   actions: Array<{ villager: VillagerId; action: string }>;
@@ -330,6 +340,19 @@ export class TermMachine {
     return this.ruleCount;
   }
 
+  private todayKey(): string {
+    const c = this.world.calendar;
+    return `${c.year}-${c.month}-${c.dayOfMonth}`;
+  }
+
+  trialOpenedToday(): boolean {
+    return this.world.trialDayKey === this.todayKey();
+  }
+
+  private markTrialOpened(): void {
+    this.world.trialDayKey = this.todayKey();
+  }
+
   /**
    * ふるまいの法則を 1 つ増やす (RuleSmith, §2.1)。worldBrain が無ければ null。
    * worldBrain.proposeRule で起案 → world.behaviorRules に追加。
@@ -433,6 +456,7 @@ export class TermMachine {
   sanction(targetId: VillagerId): boolean {
     const target = this.world.villagers.get(targetId);
     if (!target || !target.alive) return false;
+    if (this.trialOpenedToday()) return false;
     if (this.world.incident || this.world.trial) return false;
     const incident: Incident = {
       id: this.newIncidentId(),
@@ -453,6 +477,7 @@ export class TermMachine {
   /** 固定被告の裁判を開く (§4.3 制裁: foolish 段階を飛ばして fate から始める)。 */
   private openTrialFixed(incident: Incident, defendantId: VillagerId): TrialState {
     this.userVotes.clear();
+    this.markTrialOpened();
     return {
       incidentId: incident.id,
       judge: { kind: 'nekomori' },
@@ -895,6 +920,7 @@ export class TermMachine {
     if (this.world.calendar.dayOfMonth !== sched.dayOfMonth) return false;
     if (this.world.phase !== 'kisho' && this.world.phase !== 'idle') return false;
     if (this.world.incident) return false;
+    if (this.trialOpenedToday()) return false;
     // 戒厳令 freeze (§v1.3-C ⑨): 月次スケジュール事件を一時凍結する (発火させない)。
     if (this.martialActive('freeze')) return false;
 
@@ -1447,6 +1473,18 @@ export class TermMachine {
     // 事件が一線を越えたら裁判へ (和解より優先)。
     if (step.ended || incident.damage >= this.world.config.damageThreshold) {
       incident.resolved = true;
+      if (this.trialOpenedToday()) {
+        const perpName = this.world.villagers.get(incident.perpetrator)?.name ?? incident.perpetrator;
+        this.addPlotThread({
+          kind: 'rumor',
+          actors: [{ id: incident.perpetrator, name: perpName }],
+          heat: 0.28,
+          note: `${perpName}の事件は今日二度目の裁判を避け、火種だけが残った`,
+        });
+        this.world.incident = null;
+        this.world.phase = 'kisho';
+        return { outcome: 'reconciled', secondaryVictim: null };
+      }
       this.world.trial = this.openTrial(incident);
       this.world.phase = 'ten';
       return { outcome: 'trial', secondaryVictim: null };
@@ -1554,6 +1592,7 @@ export class TermMachine {
 
   private openTrial(incident: Incident): TrialState {
     this.userVotes.clear();
+    this.markTrialOpened();
     const trial: TrialState = {
       incidentId: incident.id,
       judge: { kind: 'nekomori' },
@@ -1602,6 +1641,174 @@ export class TermMachine {
     else if (pick === 'kill') trial.fateVotes.kill += 1;
     else if (pick === 'spare') trial.fateVotes.spare += 1;
     this.userVotes.set(userId, { stage: trial.stage, pick });
+  }
+
+  repairTrialState(reason = 'unknown'): TrialRepairResult {
+    const messages: string[] = [];
+    const w = this.world;
+
+    if (w.phase === 'sho' && !w.incident) {
+      w.phase = 'kisho';
+      messages.push(`承の事件が欠落していたため起へ戻しました (${reason})`);
+    }
+
+    if (w.phase === 'ten' && !w.incident) {
+      w.trial = null;
+      w.phase = 'kisho';
+      messages.push(`裁判の事件データが欠落していたため裁判を閉じました (${reason})`);
+      return { repaired: messages.length > 0, messages };
+    }
+
+    if (w.phase === 'ten' && w.incident && !w.trial) {
+      if (this.trialOpenedToday()) {
+        w.incident = null;
+        w.phase = 'kisho';
+        messages.push('同日二度目の裁判を避けるため、欠落裁判を閉じました');
+      } else {
+        w.trial = this.openTrial(w.incident);
+        messages.push('裁判データが欠落していたため、事件から裁判を再生成しました');
+      }
+    }
+
+    const trial = w.trial;
+    if (!trial) return { repaired: messages.length > 0, messages };
+
+    if ((w.phase === 'ketsu' || w.phase === 'reform') && !w.incident) {
+      w.trial = null;
+      w.phase = 'kisho';
+      messages.push('判決後の事件データが欠落していたため、通常進行へ戻しました');
+      return { repaired: true, messages };
+    }
+
+    const aliveIds = new Set(aliveVillagers(w).map((v) => v.id));
+    const beforeCandidates = trial.candidates.length;
+    trial.candidates = trial.candidates.filter((id) => aliveIds.has(id));
+    if (trial.candidates.length !== beforeCandidates) messages.push('裁判候補から不在の住民を除外しました');
+
+    const seedIds: VillagerId[] = [];
+    if (w.incident) {
+      seedIds.push(w.incident.perpetrator, ...w.incident.involved);
+      if (w.incident.framedTargetId) seedIds.push(w.incident.framedTargetId);
+    }
+    for (const id of seedIds) {
+      if (aliveIds.has(id) && !trial.candidates.includes(id)) {
+        trial.candidates.push(id);
+        messages.push(`裁判候補を補完しました: ${this.world.villagers.get(id)?.name ?? id}`);
+      }
+    }
+    if (trial.candidates.length === 0) {
+      const fallback = aliveVillagers(w)[0];
+      if (fallback) {
+        trial.candidates.push(fallback.id);
+        messages.push(`裁判候補が空だったため補完しました: ${fallback.name}`);
+      }
+    }
+
+    if (!Array.isArray(trial.pendingGroups)) {
+      trial.pendingGroups = this.groupAxes();
+      messages.push('裁判の発言順を再生成しました');
+    }
+
+    if (trial.stage === 'foolish') {
+      if (trial.pendingGroups.length === 0 || trial.candidates.length === 1) {
+        if (w.incident) this.finishFoolishStage(trial, w.incident);
+        else trial.stage = 'fate';
+        messages.push(`被告選択段階を修復しました: ${trial.defendant ?? '未定'}`);
+      }
+    } else if (trial.stage === 'fate') {
+      if (!trial.defendant || !trial.candidates.includes(trial.defendant)) {
+        trial.defendant = this.argmaxCandidate(trial);
+        messages.push(`被告を補完しました: ${trial.defendant}`);
+      }
+      if (trial.pendingGroups.length === 0 && trial.verdict === null) {
+        this.finishFateStage(trial);
+        messages.push(`運命段階を判決まで補完しました: ${trial.verdict}`);
+      }
+    } else if (trial.stage === 'decided') {
+      if (trial.verdict === null) {
+        trial.verdict = trial.fateVotes.kill > trial.fateVotes.spare ? 'death' : 'spared';
+        messages.push(`欠落した判決を補完しました: ${trial.verdict}`);
+      }
+      if (w.phase !== 'ketsu' && w.phase !== 'reform') {
+        w.phase = 'ketsu';
+        messages.push('判決済み裁判の phase を ketsu に戻しました');
+      }
+    }
+
+    if (w.phase === 'ketsu' && trial.verdict === null) {
+      if (!trial.defendant) trial.defendant = this.argmaxCandidate(trial);
+      this.finishFateStage(trial);
+      messages.push(`判決 phase の欠落を補完しました: ${trial.verdict}`);
+    }
+
+    return { repaired: messages.length > 0, messages };
+  }
+
+  resolveTrialAfterPlayerStatement(pick: 'kill' | 'spare'): PlayerStatementResolution | null {
+    const trial = this.world.trial;
+    if (this.world.phase !== 'ten' || !trial || trial.stage !== 'fate' || !trial.defendant || trial.verdict !== null) return null;
+
+    const speakers = this.trialStatementSpeakers(trial);
+    const reactions = speakers.map((v) => {
+      const supports = this.supportsPlayerStatement(v, pick);
+      if (supports) {
+        if (pick === 'kill') trial.fateVotes.kill += 1;
+        else trial.fateVotes.spare += 1;
+      } else if (pick === 'kill') {
+        trial.fateVotes.spare += 1;
+      } else {
+        trial.fateVotes.kill += 1;
+      }
+      return {
+        villagerId: v.id,
+        name: v.name,
+        supports,
+        line: this.reactionLine(v, pick, supports),
+      };
+    });
+    trial.pendingGroups = [];
+    this.finishFateStage(trial);
+    return { reactions, verdict: trial.verdict ?? 'spared' };
+  }
+
+  private trialStatementSpeakers(trial: TrialState): Villager[] {
+    const incident = this.world.incident;
+    const related = incident ? this.incidentRelatedIds(incident) : new Set<VillagerId>();
+    return aliveVillagers(this.world)
+      .filter((v) => v.id !== trial.defendant)
+      .map((v) => ({
+        v,
+        score:
+          (related.has(v.id) ? 100 : 0) +
+          Math.min(24, v.stress * 2) +
+          v.persona.traits.sociability * 12 +
+          v.persona.traits.curiosity * 8 +
+          v.persona.traits.discipline * 4,
+      }))
+      .sort((a, b) => b.score - a.score || a.v.id.localeCompare(b.v.id))
+      .slice(0, 3)
+      .map(({ v }) => v);
+  }
+
+  private supportsPlayerStatement(v: Villager, pick: 'kill' | 'spare'): boolean {
+    const t = v.persona.traits;
+    if (pick === 'kill') {
+      const score = t.aggression * 0.38 + t.discipline * 0.22 + t.ambition * 0.18 + this.world.reputation.malice * 0.22 - t.kindness * 0.28;
+      return score >= 0.34;
+    }
+    const score = t.kindness * 0.4 + t.sociability * 0.2 + t.curiosity * 0.12 + this.world.reputation.benevolence * 0.2 - t.aggression * 0.24;
+    return score >= 0.34;
+  }
+
+  private reactionLine(v: Villager, pick: 'kill' | 'spare', supports: boolean): string {
+    const axis = dominantAxis(v.persona.traits);
+    const label = PERSONALITY_LABELS[axis] ?? axis;
+    if (pick === 'kill') {
+      if (supports) return `${label}の目で見ても、もう庇えないと思う`;
+      return `${label}としては、まだ決めつけるには早い`;
+    }
+    if (supports) return `${label}の私には、教育で戻せる余地が見える`;
+    return `${label}の立場では、甘すぎる裁きに見える`;
   }
 
   /** 生存している狂人 (いなければ null)。 */
@@ -1707,7 +1914,7 @@ export class TermMachine {
     if (!axis) {
       return { reveal: this.finishPendingTrialStage(trial, incident) };
     }
-    const voters = this.relatedVotersOf(axis, incident);
+    const voters = this.votersOf(axis);
     if (voters.length === 0) {
       trial.pendingGroups.shift();
       if (trial.pendingGroups.length === 0) reveal = this.finishPendingTrialStage(trial, incident);

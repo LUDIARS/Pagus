@@ -230,6 +230,8 @@ export interface World {
   incident: Incident | null;
   /** 進行中の裁判 (なければ null)。 */
   trial: TrialState | null;
+  /** 同じゲーム内日付で裁判を複数回開かないためのロックキー。未開廷日は null。 */
+  trialDayKey: string | null;
   /** その月の事件スケジュール (§12.3)。未設定なら null。 */
   scheduledIncident: ScheduledIncident | null;
   scheduledParty: ScheduledParty | null;

@@ -12,7 +12,6 @@ import { loadPagusConfig, type PagusConfig } from './config/pagus-config.js';
 import { TermLoop } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
 import { PlayerState } from './player-state.js';
-import { BetPool } from './bet-pool.js';
 import { AuctionManager } from './auction.js';
 import { Governance } from './governance.js';
 import { SpectacleManager, RaidManager, SeasonStore } from './spectacle.js';
@@ -321,14 +320,6 @@ function main(): void {
     }),
   );
 
-  // 裁判ベット (§3): 現裁判 (incidentId) ごとのプール。
-  const betPool = new BetPool();
-  const BET_MIN = cfg.economy.betMin;
-  // 決済済みの裁判 incidentId (多重清算防止, §3)。
-  const settledBets = new Set<string>();
-  // fate 段階の betState を最後に初期配信した incidentId (重複初期配信の抑制)。
-  let lastBetIncident: string | null = null;
-
   // カードパック (§v1.3-A) の card 別コストと効果日数。
   const CARD_COSTS: Record<CardName, number> = {
     disaster: cfg.cards.disasterCost,
@@ -382,6 +373,7 @@ function main(): void {
   let dailyHighlightDoneTerm = -1;
   const dailyLogs: string[] = [];
   const dailyActions: string[] = [];
+  const interventionByUser = new Map<string, number>();
 
   let loop: TermLoop;
   let ws: GameWsServer;
@@ -410,21 +402,9 @@ function main(): void {
   /** その userId の現状態を本人の全接続へ push (推し名は world から補完, §1)。 */
   const pushState = (userId: string): void => {
     const snap = ps.snapshot(userId, Date.now());
+    const state = { ...snap, canIntervene: interventionByUser.get(userId) !== tm.world.term };
     const name = snap.championId ? tm.world.villagers.get(snap.championId)?.name : undefined;
-    ws.sendPlayerState(userId, snap, name);
-  };
-
-  /** その userId へ現在のベットプール状態を送る (§3, yourBet は個別)。裁判が無ければ送らない。 */
-  const pushBetState = (userId: string): void => {
-    const trial = tm.world.trial;
-    if (!trial) return;
-    betPool.ensure(trial.incidentId);
-    ws.sendBetState(userId, trial.incidentId, betPool.totals(), betPool.yourBet(userId));
-  };
-
-  /** 接続中の全ユーザへ betState を配る (プール総額が変わったとき)。 */
-  const broadcastBetState = (): void => {
-    for (const uid of knownUsers) pushBetState(uid);
+    ws.sendPlayerState(userId, state, name);
   };
 
   const monthKeyOf = (w: World): string => `${w.calendar.year}-${w.calendar.month}`;
@@ -471,6 +451,7 @@ function main(): void {
   let trialVoiceIncident: string | null = null;
   let trialVoiceSeq = 0;
   const trialVoices: TrialVoice[] = [];
+  const trialParticipants = new Set<string>();
 
   const faithfulResponder = (userId: string): { villagerId: string; faith: number } | null => {
     const candidates = tm.world.userFaith
@@ -511,9 +492,31 @@ function main(): void {
 
   const handleVote = (pick: string, userId: string): void => {
     knownUsers.add(userId);
-    const trial = tm.world.trial ? { ...tm.world.trial } : null;
+    const trial = tm.world.trial;
+    if (tm.world.phase !== 'ten' || !trial || trial.stage === 'decided') {
+      ws.sendRejected(userId, '参加できる裁判が開いていません');
+      pushState(userId);
+      return;
+    }
+    const validPick = trial.stage === 'foolish'
+      ? trial.candidates.includes(pick)
+      : pick === 'kill' || pick === 'spare';
+    if (!validPick) {
+      ws.sendRejected(userId, 'その裁判では選べない票です');
+      pushState(userId);
+      return;
+    }
+    const resolvesFate = trial?.stage === 'fate' && (pick === 'kill' || pick === 'spare');
     loop.vote(pick, userId);
     recordTrialVoice(trial, pick, userId);
+    const participantKey = `${trial.incidentId}:${userId}`;
+    if (!trialParticipants.has(participantKey)) {
+      trialParticipants.add(participantKey);
+      ps.bumpStat(userId, 'trialVotes');
+    }
+    if (resolvesFate) loop.resolveTrialAfterPlayerStatement(pick as 'kill' | 'spare');
+    pushState(userId);
+    scheduleLeaderboard();
   };
 
   const resolveEventCard = (userId: string): string => {
@@ -586,39 +589,6 @@ function main(): void {
   };
 
   /**
-   * ベット決済を検知して清算する (§3)。trial.verdict が確定 (death/spared) した incidentId を
-   * 1 回だけ処理する。death→死刑側勝ち / spared→教育側勝ち。払い戻しを各ユーザの karma へ加算し、
-   * 勝者の betsWon を +1。プール総額が動いたら true (chronicle 更新は呼び出し側)。
-   */
-  const detectBetSettlement = (w: World): boolean => {
-    const trial = w.trial;
-    if (!trial || trial.verdict === null) return false;
-    const incidentId = trial.incidentId;
-    if (settledBets.has(incidentId)) return false;
-    settledBets.add(incidentId);
-    if (betPool.currentIncidentId !== incidentId) return false; // 誰も賭けていない裁判
-    const verdictWins = trial.verdict === 'death' ? 'death' : 'educate';
-    const settlement = betPool.settle(verdictWins);
-    for (const [uid, payout] of settlement.payouts) {
-      ps.addKarma(uid, payout);
-      pushState(uid);
-    }
-    for (const uid of settlement.winners) ps.bumpStat(uid, 'betsWon');
-    const cal = w.calendar;
-    if (settlement.refunded) {
-      if (settlement.payouts.size > 0) {
-        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, '🎲 ベット不成立: 片側に賭けが無く全額返金', 'other');
-      }
-    } else {
-      const side = verdictWins === 'death' ? '死刑' : '教育';
-      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `🎲 ベット決済: ${side}側 ${settlement.winners.length}人が的中`, 'other');
-    }
-    broadcastBetState(); // プールは空になった
-    scheduleLeaderboard();
-    return settlement.payouts.size > 0;
-  };
-
-  /**
    * 推しの死を検知して弔う (§1)。前回 alive → 今回 消滅(alive=false or 不在) の villager を拾い、
    * 推しにしていた全ユーザへ onChampionDeath + playerState push。推しが 1 人でもいた死には
    * 追悼の村ルールを 1 件追加し chronicle に弔いを刻む。snapshot/chronicle を変えたら true。
@@ -670,12 +640,12 @@ function main(): void {
     for (const id of currentAlive) prevAliveIds.add(id);
     return changed;
   };
-  const interventionByUser = new Map<string, number>();
   const tryIntervention = (userId: string): boolean => {
     const term = tm.world.term;
     const date = dateLabel(tm.world);
     if (interventionByUser.get(userId) === term) {
       ws.sendRejected(userId, `介入はゲーム内時間で1日1回までです (${date})`);
+      pushState(userId);
       return false;
     }
     return true;
@@ -694,6 +664,7 @@ function main(): void {
     playerActions.push({ date, userId, type, target: name });
     if (playerActions.length > PLAYER_ACTIONS_CAP) playerActions.shift();
     ws.broadcastPlayerActions(playerActions);
+    pushState(userId);
   };
 
   const recordVillagerAction = (villagerId: string, text: string): void => {
@@ -735,7 +706,6 @@ function main(): void {
       if (userName !== undefined) ps.setUserName(userId, userName);
       grantMonthlyEventCard(userId);
       pushState(userId);
-      pushBetState(userId); // 進行中の裁判があればベット状態も
       scheduleSysStatus(); // 接続時に最新の状態を反映 (§2.3 イベント駆動)
       scheduleLeaderboard(); // 新規ユーザを反映 (§4.3)
     },
@@ -758,7 +728,6 @@ function main(): void {
       knownUsers.add(userId);
       grantMonthlyEventCard(userId);
       pushState(userId);
-      pushBetState(userId);
       scheduleSysStatus();
       scheduleLeaderboard();
     },
@@ -1134,47 +1103,6 @@ function main(): void {
       ws.broadcastSnapshot(tm.world);
       recordAction(userId, 'removeRule', text, false);
       pushState(userId);
-    },
-    onBet: (pick, amount, userId) => {
-      knownUsers.add(userId);
-      const trial = tm.world.trial;
-      // 運命 (fate) 段階の裁判が開いているときのみ賭けられる (§3)。
-      if (!trial || trial.stage !== 'fate') {
-        ws.sendRejected(userId, 'いまはベットできない (裁判の運命段階のみ)');
-        return;
-      }
-      if (!Number.isInteger(amount)) {
-        ws.sendRejected(userId, '賭け金は整数で指定');
-        return;
-      }
-      if (amount < BET_MIN) {
-        ws.sendRejected(userId, `賭けは ${BET_MIN} カルマ以上`);
-        return;
-      }
-      if (amount > ps.get(userId).karma) {
-        ws.sendRejected(userId, 'カルマが足りない');
-        return;
-      }
-      const incidentId = trial.incidentId;
-      betPool.ensure(incidentId);
-      // 別 pick への乗り換えは不可 (増額のみ) → カルマを引く前に弾く (§3)。
-      const existing = betPool.yourBet(userId);
-      if (existing && existing.pick !== pick) {
-        ws.sendRejected(userId, '別の選択肢には乗り換えできない (増額のみ可)');
-        return;
-      }
-      if (!ps.spend(userId, amount)) {
-        ws.sendRejected(userId, 'カルマが足りない');
-        return;
-      }
-      const res = betPool.place(incidentId, userId, pick, amount);
-      if (!res.ok) {
-        ps.addKarma(userId, amount); // 想定外の拒否は返金 (握り潰さない)
-        ws.sendRejected(userId, res.reason);
-        return;
-      }
-      pushState(userId);
-      broadcastBetState(); // プール総額が変わったので全員へ
     },
     onFaction: (side, userId) => {
       knownUsers.add(userId);
@@ -1812,15 +1740,8 @@ function main(): void {
         handleMonthRoll();
       }
       const mourned = detectChampionDeaths(w); // 推しの死 → 弔い (world/chronicle を変えうる)
-      const settled = detectBetSettlement(w); // ベット決済 (§3, chronicle を変えうる)
-      // 運命段階の裁判に入ったら、その incidentId の betState を初回配信 (プールは空)。
-      const trial = w.trial;
-      if (trial && trial.stage === 'fate' && trial.incidentId !== lastBetIncident) {
-        lastBetIncident = trial.incidentId;
-        broadcastBetState();
-      }
       ws.broadcastSnapshot(w);
-      if (mourned || settled) ws.updateChronicle(chronicle.recent());
+      if (mourned) ws.updateChronicle(chronicle.recent());
       sessionLog.snapshot(w);
       store.maybeSave(w, tm.getBornCount(), tm.getIncidentCount(), tm.getRuleCount()); // 揮発状態 (出生/改変/評判/法則) を間引いて永続化
       scheduleSysStatus(); // スナップショット送信時に状態を反映 (§2.3 イベント駆動)
@@ -1955,7 +1876,7 @@ function main(): void {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  httpServer.listen(port);
+  httpServer.listen(port, '127.0.0.1');
 
   const brainLabel = process.env.PAGUS_BRAIN ?? 'stub';
   console.log(`[pagus] server ws://localhost:${port} (+HTTP API) | ${villagers.length} どうぶつ | brain=${brainLabel} | accel x${pace.accel}`);

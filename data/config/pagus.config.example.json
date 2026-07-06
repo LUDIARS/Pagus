@@ -40,7 +40,6 @@
     "reviveCost": 80,
     "auctionPeriodMs": 120000,
     "marketPremium": 1.5,
-    "betMin": 1,
     "ruleAddCost": 15,
     "ruleRemoveCost": 25,
     "villageRulesMax": 12,

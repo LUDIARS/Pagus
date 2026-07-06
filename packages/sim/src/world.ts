@@ -49,6 +49,7 @@ export function createWorld(
     villagers: new Map(villagers.map((v) => [v.id, v])),
     incident: null,
     trial: null,
+    trialDayKey: null,
     scheduledIncident: null,
     scheduledParty: null,
     villageRules,

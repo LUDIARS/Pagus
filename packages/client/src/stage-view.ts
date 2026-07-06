@@ -24,6 +24,7 @@ export class StageView {
   private calm = true;
   private lastIncidentId: string | null = null;
   private lastStepCount = 0;
+  private villagerTapHandler: ((villagerId: string) => void) | null = null;
 
   async mount(el: HTMLElement): Promise<void> {
     this.width = Math.max(1, el.clientWidth);
@@ -39,7 +40,7 @@ export class StageView {
     el.appendChild(this.app.canvas);
 
     const tex = await loadAnimalTextures();
-    this.village = new VillageScene(tex);
+    this.village = new VillageScene(tex, (villagerId) => this.villagerTapHandler?.(villagerId));
     this.trial = new TrialScene(tex);
     this.chatter = new ChatterDirector(this.village);
     this.app.stage.addChild(this.village.root, this.trial.root);
@@ -61,6 +62,10 @@ export class StageView {
   /** 裁判中か (有罪/無罪ボタンの表示制御に使う)。 */
   get isTrial(): boolean {
     return this.inTrial;
+  }
+
+  setVillagerTapHandler(handler: ((villagerId: string) => void) | null): void {
+    this.villagerTapHandler = handler;
   }
 
   /** プレイヤーの有罪/無罪表明を裁判シーンの吹き出しに出す。 */

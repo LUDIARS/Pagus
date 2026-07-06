@@ -73,7 +73,6 @@ export interface WsHandlers {
   onPlaceItem(kind: 'random' | 'precious' | 'drug', toChampion: boolean, userId: string): void;
   onAddRule(text: string, userId: string): void;
   onRemoveRule(ruleId: string, userId: string): void;
-  onBet(pick: 'death' | 'educate', amount: number, userId: string): void;
   onFaction(side: Faction, userId: string): void;
   onCard(card: CardName, args: CardArgs, userId: string): void;
   onEventCard(userId: string): void;
@@ -272,9 +271,6 @@ export class GameWsServer {
     } else if (msg.t === 'removeRule') {
       this.bind(ws, msg.userId);
       this.h.onRemoveRule(msg.ruleId, this.resolveUser(ws, msg.userId));
-    } else if (msg.t === 'bet') {
-      this.bind(ws, msg.userId);
-      this.h.onBet(msg.pick, msg.amount, this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'faction') {
       this.bind(ws, msg.userId);
       this.h.onFaction(msg.side, this.resolveUser(ws, msg.userId));
@@ -354,6 +350,7 @@ export class GameWsServer {
       sanctionCost: state.sanctionCost,
       inciteCost: state.inciteCost,
       canCheerInMs: state.canCheerInMs,
+      canIntervene: state.canIntervene,
       heckleCost: state.heckleCost,
       canHeckleInMs: state.canHeckleInMs,
       testifyCost: state.testifyCost,
@@ -431,17 +428,6 @@ export class GameWsServer {
     const msg: Extract<ServerMessage, { t: 'season' }> = { t: 'season', number, winner, leaderboard };
     this.season = msg;
     this.fanout(JSON.stringify(msg));
-  }
-
-  /** 裁判ベットのプール状態を特定 userId の全接続へ送る (§3, yourBet が個別なので per-connection)。 */
-  sendBetState(
-    userId: string,
-    incidentId: string,
-    pool: { death: number; educate: number },
-    yourBet: { pick: 'death' | 'educate'; amount: number } | null,
-  ): void {
-    const msg: ServerMessage = { t: 'betState', incidentId, pool, yourBet };
-    this.sendToUser(userId, JSON.stringify(msg));
   }
 
   /** リーダーボード (§4.3) を更新し全クライアントへ配る。接続時にも現値を送る。 */

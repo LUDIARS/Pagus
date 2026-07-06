@@ -10,6 +10,7 @@ export interface PlayerStateView {
   sanctionCost: number;
   inciteCost: number;
   canCheerInMs: number;
+  canIntervene: boolean;
   heckleCost: number;
   canHeckleInMs: number;
   testifyCost: number;
@@ -269,8 +270,11 @@ export class PlayerControls {
   private renderState(): void {
     const verdictActive = this.world?.phase === 'ten' && this.world.trial?.stage === 'fate';
     const verdictCooling = Date.now() < this.verdictCooldownUntil;
+    const canIntervene = this.state?.canIntervene ?? false;
     this.commandRow.style.display = 'flex';
     this.verdictBox.style.display = this.showVerdict && verdictActive ? 'flex' : 'none';
+    this.root.classList.toggle('dock-intervention-disabled', !canIntervene);
+    if (!canIntervene && this.isDialogOpen()) this.closeDialog();
 
     for (const btn of this.verdictBox.querySelectorAll('button')) {
       (btn as HTMLButtonElement).disabled = !this.showVerdict || !verdictActive || verdictCooling;
@@ -288,7 +292,7 @@ export class PlayerControls {
       cost.className = 'dock-cmd-cost';
       cost.textContent = this.costText(cmd);
       btn.append(lab, cost);
-      btn.disabled = !this.world || !this.state || this.targetsFor(cmd).length === 0 || (cmd === 'cheer' && cheerCd > 0);
+      btn.disabled = !canIntervene || !this.world || !this.state || this.targetsFor(cmd).length === 0 || (cmd === 'cheer' && cheerCd > 0);
     }
   }
 

@@ -14,6 +14,7 @@ export interface WireWorld {
   villagers: Villager[];
   incident: Incident | null;
   trial: TrialState | null;
+  trialDayKey?: string | null;
   scheduledIncident: ScheduledIncident | null;
   scheduledParty: ScheduledParty | null;
   villageRules: VillageRule[];
@@ -48,6 +49,7 @@ export function toWire(world: World): WireWorld {
     villagers: [...world.villagers.values()],
     incident: world.incident,
     trial: world.trial,
+    trialDayKey: world.trialDayKey,
     scheduledIncident: world.scheduledIncident,
     scheduledParty: world.scheduledParty,
     villageRules: world.villageRules,
@@ -79,6 +81,7 @@ export function fromWire(wire: WireWorld): World {
     villagers: new Map(wire.villagers.map((v) => [v.id, v])),
     incident: wire.incident,
     trial: wire.trial,
+    trialDayKey: wire.trialDayKey ?? null,
     scheduledIncident: wire.scheduledIncident ?? null,
     scheduledParty: wire.scheduledParty ?? null,
     villageRules: wire.villageRules ?? [],
@@ -264,6 +267,8 @@ export interface PlayerState {
   spent: number;
   /** 月次配布されるイベントカードの所持数。 */
   eventCards: number;
+  /** 今日まだ通常介入を使えるか。false のとき介入メニューはグレーアウトする。 */
+  canIntervene: boolean;
 }
 
 /** オークション (§v1.3-B ②) の 1 ロットの配信形。 */
@@ -302,8 +307,8 @@ export interface PlayerStats {
   cheers: number;
   /** しきたりを追加した回数。 */
   rulesAdded: number;
-  /** 裁判ベットで勝った回数 (§3)。 */
-  betsWon: number;
+  /** 裁判へ参加した回数。 */
+  trialVotes: number;
   /** 推しが死んだ回数 (§1)。 */
   championDeaths: number;
 }
@@ -431,6 +436,8 @@ export type ServerMessage =
       /** いま扇動に必要なカルマ (固定コスト, §4 消費カルマ表示用)。 */
       inciteCost: number;
       canCheerInMs: number;
+      /** 今日まだ通常介入を使えるか。false のとき通常介入メニューはグレーアウトする。 */
+      canIntervene: boolean;
       // --- 即効介入 (§v1.4-A) のコスト/クールダウン表示用 ---
       /** 野次の固定コスト。 */
       heckleCost: number;
@@ -458,14 +465,6 @@ export type ServerMessage =
   | { t: 'loggedOut'; reason: string } // 別端末ログインで現セッションが追い出された (§v1.3-F)
   | { t: 'auction'; lots: AuctionLotView[] } // オークションのロット状態 (§v1.3-B ②, broadcast)
   | { t: 'commandRejected'; reason: string } // カルマ不足/インターバル中など
-  | {
-      t: 'betState'; // 裁判ベットのプール状態 (§3, per-connection: yourBet が個別)
-      incidentId: string;
-      /** 賭けの総額 (全員共通)。 */
-      pool: { death: number; educate: number };
-      /** その接続ユーザの賭け (未賭けは null)。 */
-      yourBet: { pick: 'death' | 'educate'; amount: number } | null;
-    }
   | {
       t: 'leaderboard'; // 称号・陣営のスコアボード (§4, broadcast)
       players: LeaderboardEntry[];
@@ -529,7 +528,6 @@ export type ClientMessage =
   | { t: 'placeItem'; kind: 'random' | 'precious' | 'drug'; toChampion?: boolean; userId?: string }
   | { t: 'addRule'; text: string; userId?: string } // カルマを払って村のしきたりを 1 件追加 (§2)
   | { t: 'removeRule'; ruleId: string; userId?: string } // カルマを払って村のしきたりを 1 件廃する (§2)
-  | { t: 'bet'; pick: 'death' | 'educate'; amount: number; userId?: string } // 裁判の運命段階で結果に賭ける (§3)
   | { t: 'faction'; side: 'guide' | 'incite'; userId?: string } // 二大陣営を明示選択 (§4.3)
   // カードパック (§v1.3-A): カルマで切る一発介入。card 別に必要な引数だけ伴う。
   // disaster=kind / spiritAway=targetId / swap=targetId(a)+targetId2(b) / awaken=targetId / falseProphecy=text?
