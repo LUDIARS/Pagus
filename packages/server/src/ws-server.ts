@@ -28,6 +28,7 @@ import {
   type SeasonWinner,
   type VillagerGachaKind,
   type ChatMessage,
+  type ChatChannel,
 } from '@pagus/sim';
 import type { PlayerStateSnapshot } from './player-state.js';
 import { isValidUserCode, connectionsToLogout } from './user-code.js';
@@ -56,7 +57,7 @@ export interface WsHandlers {
   onTopup(amount: number, userId: string): void;
   onLogin(userId: string): void;
   onSetUserName(name: string, userId: string): void;
-  onChat(text: string, userId: string): void;
+  onChat(text: string, userId: string, channel: ChatChannel, dmWithVillagerId: string | undefined): void;
   onIncite(targetId: string, rumorAboutId: string | undefined, userId: string): void;
   onSanction(targetId: string, userId: string): void;
   onCheer(targetId: string, userId: string): void;
@@ -228,7 +229,7 @@ export class GameWsServer {
       this.h.onSetUserName(msg.name, this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'chat') {
       this.bind(ws, msg.userId);
-      this.h.onChat(msg.text, this.resolveUser(ws, msg.userId));
+      this.h.onChat(msg.text, this.resolveUser(ws, msg.userId), msg.channel ?? 'human', msg.dmWithVillagerId);
     } else if (msg.t === 'incite') {
       this.bind(ws, msg.userId);
       this.h.onIncite(msg.targetId, msg.rumorAboutId, this.resolveUser(ws, msg.userId));

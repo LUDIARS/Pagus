@@ -45,7 +45,7 @@ async function main(): Promise<void> {
 
   const radar = new Radar(el('radar') as HTMLCanvasElement);
   const hud = new Hud(el('hud'), el('status'));
-  const log = new LogOverlay(el('log'));
+  const log = new LogOverlay(el('village-log'));
   const incident = new IncidentPanel(el('incident-info'));
   const vstatus = new VillageStatus(el('vstatus'));
   const ruleHandlers = {
@@ -186,10 +186,27 @@ async function main(): Promise<void> {
     onRaidStrike: (amount) => conn.send({ t: 'raidStrike', amount, userId }),
   }, { readOnly: true });
 
-  const chat = new ChatPanel(el('chat'), userId, (text) => conn.send({ t: 'chat', text, userId }));
+  const godChat = new ChatPanel(
+    el('god-chat'),
+    userId,
+    (text) => conn.send({ t: 'chat', text, userId, channel: 'god' }),
+    { title: null, placeholder: '神の声を落とす', emptyText: 'まだ神の声はありません。' },
+  );
+  const humanChat = new ChatPanel(
+    el('human-chat'),
+    userId,
+    (text) => conn.send({ t: 'chat', text, userId, channel: 'human' }),
+    { title: null, placeholder: '人間だけに送る', emptyText: 'まだ人間同士の会話はありません。' },
+  );
+  const dmChat = new ChatPanel(
+    el('dm-chat'),
+    userId,
+    () => undefined,
+    { title: null, readOnly: true, emptyText: '住民とのDMは未配線です。' },
+  );
 
   // 統合アクションオーバーレイ (§v1.3-E): 左ペインに埋め込む介入パネル。
-  // 課金以外の操作群 (介入/カード/村/裁判/経済/チャット) をタブ式に集約する。
+  // 課金以外の操作群 (介入/カード/村のしきたり) をタブ式に集約する。
   const overlay = new ActionOverlay(el('action-overlay'), el('ao-header'), el('ao-tabs'), null, el('ao-backdrop'), { embedded: true });
 
   conn = connect(WS_URL, {
@@ -279,7 +296,11 @@ async function main(): Promise<void> {
     onMartial: (mode) => governance.setMartial(mode),
     onFund: (amount, threshold) => governance.setFund(amount, threshold),
     onHighlights: (cards) => spectacle.setHighlights(cards),
-    onChat: (messages) => chat.setMessages(messages),
+    onChat: (messages) => {
+      godChat.setMessages(messages.filter((msg) => msg.channel === 'god'));
+      humanChat.setMessages(messages.filter((msg) => msg.channel === 'human'));
+      dmChat.setMessages(messages.filter((msg) => msg.channel === 'dm'));
+    },
     onMvp: (villagerId, name) => spectacle.setMvp(villagerId, name),
     onRaid: (active, villainName, hp, hpMax, endsInMs) => spectacle.setRaid(active, villainName, hp, hpMax, endsInMs),
     onSeason: (num, winner, leaderboard) => spectacle.setSeason(num, winner, leaderboard),
@@ -304,6 +325,7 @@ async function main(): Promise<void> {
   });
 
   setupAccountOverlay();
+  setupLogTabs();
   setupRightTabs();
   setupDrawers();
 }
@@ -367,6 +389,21 @@ function setupRightTabs(): void {
     button.addEventListener('click', () => select(button.dataset.rightTab ?? 'village'));
   }
   select(buttons.find((button) => button.classList.contains('active'))?.dataset.rightTab ?? 'village');
+}
+
+/** 中央下ログの「村の様子 / チャット」タブを切り替える。 */
+function setupLogTabs(): void {
+  const root = el('log');
+  const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-log-tab]'));
+  const panels = Array.from(root.querySelectorAll<HTMLElement>('[data-log-panel]'));
+  const select = (id: string): void => {
+    for (const button of buttons) button.classList.toggle('active', button.dataset.logTab === id);
+    for (const panel of panels) panel.hidden = panel.dataset.logPanel !== id;
+  };
+  for (const button of buttons) {
+    button.addEventListener('click', () => select(button.dataset.logTab ?? 'village'));
+  }
+  select(buttons.find((button) => button.classList.contains('active'))?.dataset.logTab ?? 'village');
 }
 
 /** モバイル: 左右パネルをドロワーとして開閉する。 */

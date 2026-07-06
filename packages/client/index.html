@@ -62,11 +62,27 @@
       #stage canvas { display: block; width: 100%; height: 100%; }
       #log {
         position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%);
-        width: 72%; max-height: 38%; overflow: hidden;
-        display: flex; flex-direction: column; gap: 3px;
+        width: 76%; height: min(42%, 320px); min-height: 210px; overflow: hidden;
+        display: flex; flex-direction: column;
         background: rgba(8, 10, 16, 0.62); border: 1px solid #2a3346; border-radius: 10px;
-        padding: 10px 14px; backdrop-filter: blur(2px); pointer-events: none;
+        padding: 0; backdrop-filter: blur(2px); pointer-events: auto;
       }
+      .log-tab-panel {
+        flex: 1 1 auto; min-height: 0; overflow-y: auto;
+        display: flex; flex-direction: column; gap: 3px; padding: 10px 14px 8px;
+      }
+      .log-tab-panel[hidden] { display: none; }
+      .log-tabs {
+        display: flex; gap: 2px; flex: 0 0 auto; padding: 0 8px;
+        background: rgba(17,21,31,0.92); border-top: 1px solid #2a3346;
+      }
+      .log-tab-btn {
+        flex: 1; min-width: 0; border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+        background: transparent; color: #8b96ad; padding: 8px 4px; font-size: 12px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .log-tab-btn:hover { background: rgba(86,204,242,0.08); color: #e6ebf5; }
+      .log-tab-btn.active { color: #9be3ff; border-bottom-color: #56ccf2; font-weight: 700; }
       .ov-line { font-size: 16px; line-height: 1.45; color: #e6ebf5; text-shadow: 0 1px 2px #000; }
 
       /* パネル共通 */
@@ -452,12 +468,16 @@
       #chat h3 { color: #9be3ff; }
       .chat-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; margin-bottom: 8px; }
       .chat-row { padding: 6px 8px; background: #0d121a; border: 1px solid #1d2a3c; border-radius: 6px; }
+      .chat-row-villager { border-color: #31545a; background: rgba(13,20,23,0.85); }
+      .chat-row-self { border-color: #4a4566; background: rgba(20,18,31,0.85); }
       .chat-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: #8b96ad; margin-bottom: 2px; }
       .chat-name { color: #9be3ff; font-weight: bold; }
       .chat-text { font-size: 13px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
       .chat-form { display: flex; gap: 6px; }
       .chat-input { flex: 1; min-width: 0; background: #0e121b; color: #cdd6e4; border: 1px solid #38405a; border-radius: 6px; padding: 7px 8px; font-size: 13px; }
       .chat-send { white-space: nowrap; border-color: #56ccf2; color: #cdeeff; }
+      #log .chat-list { flex: 1 1 auto; min-height: 0; max-height: none; margin-bottom: 8px; }
+      #log .chat-form { flex: 0 0 auto; }
 
       /* モバイル: 中央を全画面、左右はスライドインのドロワー。 */
       .drawer-toggle { display: none; }
@@ -558,12 +578,6 @@
               <div id="governance" hidden></div>
               <div id="intervention-rules"></div>
             </section>
-            <section class="ao-tab" data-tab="econ" data-label="💰 経済" hidden data-hidden="true">
-              <div id="economy"></div>
-            </section>
-            <section class="ao-tab" data-tab="chat" data-label="💬 チャット">
-              <div id="chat"></div>
-            </section>
           </div>
         </div>
       </div>
@@ -572,7 +586,18 @@
         <div id="heckle"></div>
         <div id="testify"></div>
         <div id="trial"></div>
-        <div id="log"></div>
+        <div id="log">
+          <div id="village-log" class="log-tab-panel" data-log-panel="village"></div>
+          <div id="god-chat" class="log-tab-panel" data-log-panel="god" hidden></div>
+          <div id="human-chat" class="log-tab-panel" data-log-panel="human" hidden></div>
+          <div id="dm-chat" class="log-tab-panel" data-log-panel="dm" hidden></div>
+          <div id="log-tabs" class="log-tabs">
+            <button class="log-tab-btn active" data-log-tab="village">村の様子</button>
+            <button class="log-tab-btn" data-log-tab="god">神の声チャット</button>
+            <button class="log-tab-btn" data-log-tab="human">人間のみ</button>
+            <button class="log-tab-btn" data-log-tab="dm">住民とのDM</button>
+          </div>
+        </div>
       </div>
       <div id="right" class="col">
         <div class="side-tabs">
@@ -604,6 +629,7 @@
       <div id="backdrop"></div>
     </div>
     <div id="ao-backdrop"></div>
+    <div id="economy" hidden></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -6,7 +6,7 @@
 // 例外で env 維持: PAGUS_CONFIG_KEY (マスター鍵) / PAGUS_FRESH (その起動だけ world.json 無視) /
 // PAGUS_BRAIN (stub|llm の起動モード) / PAGUS_DATA_DIR (config 自体の置き場を解決するため)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, rollVillagerGacha, ensureResidentHistory, addVillagerActionLog, KARMA_GACHA_COST, shouldAdoptRule, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem, type VillagerGachaKind, type ChatMessage, type TrialState, type TrialVoice } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, rollVillagerGacha, ensureResidentHistory, addVillagerActionLog, KARMA_GACHA_COST, shouldAdoptRule, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem, type VillagerGachaKind, type ChatMessage, type ChatChannel, type TrialState, type TrialVoice } from '@pagus/sim';
 import { loadConfig, loadSeed, loadIncidentArcs } from './load-data.js';
 import { loadPagusConfig, type PagusConfig } from './config/pagus-config.js';
 import { TermLoop, type TrialCloseInfo } from './term-loop.js';
@@ -22,6 +22,8 @@ import { TrialNarrator } from './trial-narrator.js';
 import { Chronicle } from './chronicle.js';
 import { WorldStore } from './world-store.js';
 import { PushService } from './push-service.js';
+import { ChatStore } from './chat-store.js';
+import { GodChatResponder } from './god-chat.js';
 import type { BlackBox } from '@ludiars/blackbox';
 import { makeTrialFateBlackBox } from './llm/fate-blackbox.js';
 import { createRequestListener } from './http-api.js';
@@ -394,9 +396,13 @@ function main(): void {
   // 人間の行動記録のリングバッファ (§8, 上限 200)。
   const PLAYER_ACTIONS_CAP = 200;
   const playerActions: PlayerActionEntry[] = [];
-  // ユーザー間チャットのリングバッファ。
-  const CHAT_CAP = 100;
-  const chatMessages: ChatMessage[] = [];
+  // チャット履歴。神の声/人間のみ/DM を永続化する。
+  const chatStore = new ChatStore();
+  let chatSeq = 0;
+  const godChat = new GodChatResponder({
+    client: new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: 0 }),
+    costSink: (e) => costLog.record(e),
+  });
   let dailyHighlightDate = dateLabel(tm.world);
   let dailyHighlightPending = false;
   let dailyHighlightDoneTerm = -1;
@@ -714,6 +720,63 @@ function main(): void {
     dailyActions.push(`${villagerName}: ${text}`);
   };
 
+  const nextChatId = (prefix: string): string => {
+    chatSeq += 1;
+    return `${prefix}-${Date.now().toString(36)}-${chatSeq.toString(36)}`;
+  };
+
+  const broadcastChat = (): void => {
+    ws.broadcastChat(chatStore.all());
+  };
+
+  const addHumanChat = (
+    channel: ChatChannel,
+    userId: string,
+    text: string,
+    dmWithVillagerId: string | undefined,
+  ): ChatMessage => {
+    const msg: ChatMessage = {
+      id: nextChatId(channel),
+      channel,
+      speakerKind: 'human',
+      userId,
+      userName: ps.getUserName(userId),
+      text,
+      at: Date.now(),
+    };
+    if (channel === 'dm' && dmWithVillagerId !== undefined) msg.dmWithVillagerId = dmWithVillagerId;
+    chatStore.add(msg);
+    broadcastChat();
+    return msg;
+  };
+
+  const appendGodChatReactions = (text: string): void => {
+    void godChat.respond(text, tm.world)
+      .then((reactions) => {
+        if (reactions.length === 0) return;
+        const at = Date.now();
+        const messages = reactions.map((r, i) => {
+          const msg: ChatMessage = {
+            id: nextChatId('villager'),
+            channel: 'god',
+            speakerKind: 'villager',
+            userId: `villager:${r.villagerId}`,
+            userName: r.villagerName,
+            text: r.text,
+            at: at + i,
+            villagerId: r.villagerId,
+          };
+          if (r.keywords.length > 0) msg.keywords = r.keywords;
+          return msg;
+        });
+        chatStore.addMany(messages);
+        broadcastChat();
+      })
+      .catch((err) => {
+        console.warn(`[pagus] 神の声チャット応答に失敗: ${(err as Error).message}`);
+      });
+  };
+
   const finalizeDailyHighlight = (): void => {
     if (dailyHighlightPending || dailyHighlightDoneTerm === tm.world.term) return;
     const logs = dailyLogs.splice(0);
@@ -773,29 +836,20 @@ function main(): void {
     onSetUserName: (name, userId) => {
       knownUsers.add(userId);
       const normalized = ps.setUserName(userId, name);
-      for (const msg of chatMessages) {
-        if (msg.userId === userId) msg.userName = normalized;
-      }
+      const messages = chatStore.updateUserName(userId, normalized);
       pushState(userId);
       scheduleLeaderboard();
-      if (chatMessages.length > 0) ws.broadcastChat(chatMessages);
+      if (messages.length > 0) ws.broadcastChat(messages);
     },
-    onChat: (text, userId) => {
+    onChat: (text, userId, channel, dmWithVillagerId) => {
       knownUsers.add(userId);
       const trimmed = text.trim().replace(/\s+/g, ' ').slice(0, 160);
       if (trimmed.length === 0) {
         ws.sendRejected(userId, 'チャット本文が空です');
         return;
       }
-      chatMessages.push({
-        id: `${Date.now().toString(36)}-${chatMessages.length.toString(36)}`,
-        userId,
-        userName: ps.getUserName(userId),
-        text: trimmed,
-        at: Date.now(),
-      });
-      if (chatMessages.length > CHAT_CAP) chatMessages.shift();
-      ws.broadcastChat(chatMessages);
+      addHumanChat(channel, userId, trimmed, dmWithVillagerId);
+      if (channel === 'god') appendGodChatReactions(trimmed);
     },
     onIncite: (targetId, rumorAboutId, userId) => {
       knownUsers.add(userId);
@@ -1505,6 +1559,7 @@ function main(): void {
   ws.setLlmInfo(llmInfo);
   ws.setTheme(cfg.theme.pack, MORAL, lexicon); // テーマパック (§v1.4-D) を初期配信対象に
   ws.updateChronicle(chronicle.recent()); // 既存の歴史を初期配信対象に。
+  ws.broadcastChat(chatStore.all()); // 永続化済みチャットを初期配信対象に。
 
   // オークション (§v1.3-B ②): 固定ロット3種ローテ。落札時のみカルマ徴収し効果付与する。
   auction = new AuctionManager(
