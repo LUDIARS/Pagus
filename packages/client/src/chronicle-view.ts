@@ -57,6 +57,11 @@ const ACTION_JA: Partial<Record<PlayerActionEntry['type'], string>> = {
   martial: '戒厳令',
   pray: '祈り',
   raidStrike: 'レイド攻撃',
+  heckle: '野次',
+  testify: '証言',
+  gift: '贈り物',
+  spot: '場所介入',
+  fanFlames: '言いふらし',
 };
 
 /** しきたり改定 (§2) のコスト表示。既定 env (PAGUS_RULE_ADD_COST/REMOVE_COST) に合わせる。 */

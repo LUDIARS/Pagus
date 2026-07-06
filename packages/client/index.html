@@ -374,7 +374,36 @@
       .verdict-btn.innocent { border-color: #56ccf2; color: #9be3ff; box-shadow: 0 0 22px rgba(86,204,242,0.35); }
       .verdict-btn.innocent:hover { box-shadow: 0 0 30px rgba(86,204,242,0.6); }
 
-      /* 左ペインの統合介入パネル (§v1.3-E): 全ユーザ操作を 1 つのタブ式パネルへ集約。 */
+      /* 野次 (§v1.4-A): 事件 (承) 進行中だけ中央上部に出す。 */
+      #heckle { display: none; position: absolute; top: 12%; left: 0; right: 0; justify-content: center; gap: 16px; pointer-events: none; }
+      #heckle.show { display: flex; }
+      .heckle-btn {
+        pointer-events: auto; padding: 8px 18px; border-radius: 10px; cursor: pointer;
+        border: 2px solid; background: rgba(10,12,18,0.72); backdrop-filter: blur(2px);
+        font-size: 15px; font-weight: 700;
+      }
+      .heckle-btn.agitate { border-color: #eb5757; color: #ff8a8a; }
+      .heckle-btn.soothe { border-color: #56ccf2; color: #9be3ff; }
+      .heckle-btn:disabled { opacity: 0.45; cursor: default; }
+
+      /* 証言 (§v1.4-A): 裁判の運命段階だけ判決ボタンの下に出す。 */
+      #testify { display: none; position: absolute; top: 27%; left: 0; right: 0; justify-content: center; align-items: center; gap: 10px; pointer-events: none; flex-wrap: wrap; }
+      #testify.show { display: flex; }
+      .testify-input {
+        pointer-events: auto; width: 220px; padding: 6px 10px; border-radius: 8px;
+        border: 1px solid #2a3346; background: rgba(10,12,18,0.72); color: #e6ebf5; font-size: 14px;
+      }
+      .testify-btn {
+        pointer-events: auto; padding: 7px 14px; border-radius: 10px; cursor: pointer;
+        border: 2px solid; background: rgba(10,12,18,0.72); font-size: 14px; font-weight: 700;
+      }
+      .testify-btn.accuse { border-color: #eb5757; color: #ff8a8a; }
+      .testify-btn.defend { border-color: #56ccf2; color: #9be3ff; }
+      .testify-btn:disabled { opacity: 0.45; cursor: default; }
+      .item-btn.spot-defile { border-color: #9b51e0; color: #c99df2; }
+      .item-btn.spot-bless { border-color: #6fcf97; color: #a8e6c4; }
+
+      /* 統合アクションオーバーレイ (§v1.3-E): 全ユーザ操作を 1 つのタブ式パネルへ集約。 */
       #action-overlay {
         position: fixed; top: 88px; right: 12px; bottom: calc(var(--dock-h) + 8px); z-index: 55;
         width: 384px; max-width: calc(100vw - 24px);
@@ -536,6 +565,8 @@
           <button id="v-guilty" class="verdict-btn guilty"><span class="vb-ja">死刑</span><span class="vb-en">DEATH</span></button>
           <button id="v-innocent" class="verdict-btn innocent"><span class="vb-ja">教育</span><span class="vb-en">EDUCATE</span></button>
         </div>
+        <div id="heckle"></div>
+        <div id="testify"></div>
         <div id="log"></div>
       </div>
       <div id="right" class="col">

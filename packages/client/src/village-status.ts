@@ -2,7 +2,7 @@
 // players は WS の 'players' メッセージで、それ以外は snapshot で更新される。
 
 import { VIRTUES, VIRTUE_LABELS, wealthTier, HOBBY_LABELS } from '@pagus/sim';
-import type { WireWorld, Virtue } from '@pagus/sim';
+import type { WireWorld, Virtue, ThemeLexicon } from '@pagus/sim';
 import { villagerDisplayName } from './villager-display.js';
 
 const VIRTUE_COLOR: Record<Virtue, string> = {
@@ -17,6 +17,13 @@ const VIRTUE_COLOR: Record<Virtue, string> = {
 export class VillageStatus {
   private world: WireWorld | null = null;
   private players = 0;
+  private lex: ThemeLexicon | null = null;
+
+  /** テーマパック (§v1.4-D) の語彙を適用する。 */
+  setTheme(lex: ThemeLexicon): void {
+    this.lex = lex;
+    this.render();
+  }
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -59,6 +66,23 @@ export class VillageStatus {
     }
   }
 
+  /** 火種 (§v1.4-B): くすぶる遺恨/未解決/噂を一覧して「次に何が起きそうか」を見せる。 */
+  private renderThreads(w: WireWorld): void {
+    const threads = w.plotThreads ?? [];
+    if (threads.length === 0) return;
+    this.root.appendChild(h('div', '火種 (くすぶる物語)', 'sub'));
+    const icon: Record<string, string> = {
+      grudge: '💢',
+      unresolved: '🕵',
+      redemption: '🕊',
+      rumor: '💬',
+      ruleViolation: '📜',
+    };
+    for (const t of [...threads].sort((a, b) => b.heat - a.heat).slice(0, 5)) {
+      this.root.appendChild(row(`${icon[t.kind] ?? '🧵'} ${t.note.slice(0, 18)}${t.note.length > 18 ? '…' : ''}`, `🔥${Math.round(t.heat * 100)}`));
+    }
+  }
+
   private render(): void {
     this.root.replaceChildren();
     this.root.appendChild(row('👥 接続プレイヤー', `${this.players} 人`));
@@ -75,6 +99,7 @@ export class VillageStatus {
     }
 
     this.renderEconomy(w);
+    this.renderThreads(w);
 
     this.root.appendChild(h('div', '裁判 / 投票結果', 'sub'));
     const t = w.trial;
@@ -90,7 +115,7 @@ export class VillageStatus {
     // 狂人の扇動を明示する。
     const madVote = t.votes.find((v) => v.voter === 'madman');
     if (madVote) {
-      this.root.appendChild(p('verdict', `😈 狂人が扇動 (${nameOf(madVote.pick) || madVote.pick} へ +${madVote.weight})`));
+      this.root.appendChild(p('verdict', `😈 ${this.lex?.madmanLabel ?? '狂人'}が扇動 (${nameOf(madVote.pick) || madVote.pick} へ +${madVote.weight})`));
     }
 
     if (Object.keys(t.foolishVotes).length > 0) {
@@ -100,12 +125,12 @@ export class VillageStatus {
       }
     }
     if (t.fateVotes.kill > 0 || t.fateVotes.spare > 0) {
-      this.root.appendChild(row('　死刑', `${t.fateVotes.kill}`));
-      this.root.appendChild(row('　教育', `${t.fateVotes.spare}`));
+      this.root.appendChild(row(`　${this.lex?.verdictDeathJa ?? '死刑'}`, `${t.fateVotes.kill}`));
+      this.root.appendChild(row(`　${this.lex?.verdictEducateJa ?? '教育'}`, `${t.fateVotes.spare}`));
     }
     if (t.verdict) {
       this.root.appendChild(
-        p('verdict', `判決: ${t.verdict === 'death' ? '死刑（追放）' : '教育（改変）'}`),
+        p('verdict', `${this.lex?.verdictFeedPrefix ?? '判決'}: ${t.verdict === 'death' ? this.lex?.verdictDeathResult ?? '死刑（追放）' : this.lex?.verdictEducateResult ?? '教育（改変）'}`),
       );
     }
   }

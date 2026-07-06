@@ -44,7 +44,48 @@
     "ruleAddCost": 15,
     "ruleRemoveCost": 25,
     "villageRulesMax": 12,
-    "topupPacks": [100, 500, 1000]
+    "topupPacks": [
+      100,
+      500,
+      1000
+    ]
+  },
+  "intervene": {
+    "heckleCost": 3,
+    "heckleCooldownMs": 10000,
+    "heckleDamage": 1,
+    "heckleBias": 0.08,
+    "testifyCost": 8,
+    "giftTreatCost": 5,
+    "giftPoisonCost": 15,
+    "giftTreatWealth": 25,
+    "giftTreatJoy": 0.2,
+    "spotCost": 20,
+    "spotDays": 2,
+    "spotAnger": 0.15,
+    "spotJoy": 0.15,
+    "fanFlamesCost": 10
+  },
+  "arc": {
+    "threadsMax": 8,
+    "heatDecay": 0.05,
+    "heatOnIncident": 0.2,
+    "minorChance": 0.25,
+    "minorResidueChance": 0.5,
+    "witnessMax": 2,
+    "witnessWeight": 2,
+    "revealChance": 0.25
+  },
+  "theme": {
+    "pack": "classic",
+    "moral": "balanced"
+  },
+  "distill": {
+    "enabled": true,
+    "sampleChance": 0.02,
+    "minCases": 5,
+    "maxCases": 10,
+    "acceptGain": 0.1
   },
   "politics": {
     "revoltThreshold": 0.7,

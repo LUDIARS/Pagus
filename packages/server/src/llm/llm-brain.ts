@@ -46,8 +46,11 @@ import {
   coerceIncidentStep,
   coerceFoolishPick,
   coerceFate,
+  coerceFateJudgement,
   coerceReform,
 } from './json-coerce.js';
+import type { BlackBox, LlmJudgement } from '@ludiars/blackbox';
+import { DOMAIN_TRIAL_FATE, fateFeatures, parseProposedFateRule, type FateOutput } from './fate-blackbox.js';
 
 export interface LlmBrainOptions {
   /** backend → LlmClient のファクトリ (test 差し替え用)。既定は CLI クライアント。 */
@@ -62,6 +65,11 @@ export interface LlmBrainOptions {
   fallback?: Brain;
   /** 失敗した backend を即時スキップする時間。 */
   offlineCooldownMs?: number;
+  /**
+   * 裁判 fate 投票の判例化 (成長型ブラックボックス)。指定すると groupVoteFate は
+   * 卒業/試用の判例ルールで即決し、無ければ LLM 投票を教師に判例を育てる。
+   */
+  fateBlackbox?: BlackBox;
 }
 
 const DEFAULT_BRAIN_TIMEOUT_MS = 20_000;
@@ -75,6 +83,7 @@ export class LlmBrain implements Brain {
   private readonly fallback: Brain;
   private readonly offlineCooldownMs: number;
   private readonly offlineUntil = new Map<string, number>();
+  private readonly fateBlackbox: BlackBox | undefined;
   /** プレイヤー扇動: 次の自由行動で事件化を促す。 */
   private incitePending = false;
 
@@ -84,6 +93,7 @@ export class LlmBrain implements Brain {
     this.fallback = opts.fallback ?? new StubBrain();
     this.offlineCooldownMs = opts.offlineCooldownMs ?? DEFAULT_OFFLINE_COOLDOWN_MS;
     const timeoutMs = opts.timeoutMs ?? DEFAULT_BRAIN_TIMEOUT_MS;
+    this.fateBlackbox = opts.fateBlackbox;
     const retries = opts.retries;
     this.createClient =
       opts.createClient ??
@@ -132,9 +142,39 @@ export class LlmBrain implements Brain {
   }
 
   async groupVoteFate(ctx: FateVoteContext): Promise<'kill' | 'spare'> {
-    const parts = buildFatePrompt(ctx);
-    const backend = this.select(parts, ctx.axis, ctx.axis);
-    return this.invokeJsonOrFallback(backend, parts, coerceFate, () => this.fallback.groupVoteFate(ctx));
+    const bb = this.fateBlackbox;
+    if (!bb) {
+      const parts = buildFatePrompt(ctx);
+      const backend = this.select(parts, ctx.axis, ctx.axis);
+      return this.invokeJsonOrFallback(backend, parts, coerceFate, () => this.fallback.groupVoteFate(ctx));
+    }
+    // 判例化: 卒業/試用の判例ルールが一致すれば LLM を呼ばず即決。無ければ
+    // LLM 投票を教師に判例候補を影評価で育てる (fate-blackbox.ts)。
+    const features = fateFeatures(ctx);
+    const { decision } = await bb.engine.decide<{ axis: string; incident: string }, FateOutput>(
+      DOMAIN_TRIAL_FATE,
+      { axis: ctx.axis, incident: ctx.incident.description },
+      features,
+      async (_input, _features, bbCtx) => {
+        const parts = buildFatePrompt(ctx, { features, retiredRules: bbCtx.retiredRules });
+        const backend = this.select(parts, ctx.axis, ctx.axis);
+        const j = await this.invokeJsonOrFallback(backend, parts, coerceFateJudgement, async () => ({
+          verdict: await this.fallback.groupVoteFate(ctx),
+          confidence: 0.3,
+          rationale: 'fallback',
+          proposedRule: null,
+        }));
+        const judgement: LlmJudgement<FateOutput> = {
+          output: { verdict: j.verdict },
+          confidence: j.confidence,
+          rationale: j.rationale,
+        };
+        const proposed = parseProposedFateRule(j.proposedRule, j.verdict);
+        if (proposed) judgement.proposedRule = proposed;
+        return judgement;
+      },
+    );
+    return decision.output.verdict;
   }
 
   async decideEducation(ctx: EducationContext): Promise<Reform> {

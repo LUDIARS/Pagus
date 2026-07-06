@@ -4,7 +4,7 @@
 // - 暇な間は雑談ディレクタがにぎやかにする。
 
 import { Application } from 'pixi.js';
-import type { WireWorld, Phase, TrialLine, TrialVoice } from '@pagus/sim';
+import type { WireWorld, Phase, TrialLine, TrialVoice, ThemeLexicon } from '@pagus/sim';
 import { loadAnimalTextures } from './assets.js';
 import { VillageScene } from './village-scene.js';
 import { TrialScene } from './trial-scene.js';
@@ -78,20 +78,53 @@ export class StageView {
     this.trial.setVoices(incidentId, voices);
   }
 
+  /** テーマパック (§v1.4-D) の語彙を裁判シーンへ適用する。 */
+  setTheme(lex: ThemeLexicon): void {
+    this.trial.setTheme({
+      trialOpen: lex.trialOpen,
+      stageFoolish: lex.stageFoolish,
+      stageFate: lex.stageFate,
+      stageDecided: lex.stageDecided,
+      taunts: lex.taunts,
+      defenses: lex.defenses,
+      denounces: lex.denounces,
+      retorts: lex.retorts,
+      screams: lex.screams,
+      reliefs: lex.reliefs,
+    });
+  }
+
   /**
-   * プレイヤーの行動 (§4) に対象どうぶつが即リアクションする吹き出し (扇動の手応えが無い問題への対応)。
-   * 村シーン表示中のみ。裁判中は何もしない。
+   * プレイヤーの行動 (§4/§v1.4-A) に対象どうぶつが即リアクションする吹き出し
+   * (介入 2 点セットの「3 秒で見える」側)。村シーン表示中のみ。裁判中は何もしない。
    */
-  reactToAction(targetId: string, type: 'incite' | 'sanction' | 'cheer' | 'champion'): void {
+  reactToAction(targetId: string, type: 'incite' | 'sanction' | 'cheer' | 'champion' | 'gift-treat' | 'gift-poison' | 'fanFlames'): void {
     if (this.inTrial) return;
     const react: Record<typeof type, { text: string; tone: 'calm' | 'angry' }> = {
       incite: { text: 'なんだと…！？', tone: 'angry' },
       sanction: { text: 'やめてくれ…！', tone: 'angry' },
-      cheer: { text: 'ありがとう！', tone: 'calm' },
+      cheer: { text: 'ありがとう！うれしい！', tone: 'calm' },
       champion: { text: '推されてる…！', tone: 'calm' },
+      'gift-treat': { text: 'わぁ、ありがとう！🍬', tone: 'calm' },
+      'gift-poison': { text: 'うっ…なんだこれ…', tone: 'angry' },
+      fanFlames: { text: '噂が広まっていく…', tone: 'angry' },
     };
     const r = react[type];
     this.village.say(targetId, r.text, r.tone);
+  }
+
+  /** 野次 (§v1.4-A) のリアクション: 事件の加害者が観客の声にざわつく吹き出し。 */
+  reactToHeckle(side: 'agitate' | 'soothe'): void {
+    if (this.inTrial) return;
+    const perpetrator = this.last?.incident?.perpetrator;
+    if (!perpetrator) return;
+    if (side === 'agitate') this.village.say(perpetrator, '観客が騒いでいる…！', 'angry');
+    else this.village.say(perpetrator, '観客がなだめている…', 'calm');
+  }
+
+  /** 証言 (§v1.4-A) の吹き出し: 裁判シーンにプレイヤーの証言を出す。 */
+  playerTestify(stance: 'accuse' | 'defend', text?: string): void {
+    if (this.inTrial) this.trial.testifySay(stance, text);
   }
 
   update(world: WireWorld): void {

@@ -1,8 +1,9 @@
 // 世界側 LLM。Brain (個体の思考) とは別に、その日の裁判結果から村全体を評価する。
 // 出力: 村の徳目評判 delta / 関与どうぶつの性格 delta / 新規出生数。
 
-import type { Villager, VillagerId, Incident, Calendar, Verdict, VillageRule, IncidentDesign, ScheduledIncident } from './types/index.js';
+import type { Villager, VillagerId, Incident, Calendar, Verdict, VillageRule, IncidentDesign, ScheduledIncident, PlotThread } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
+import type { DivergenceCase } from './rule-replay.js';
 import type { Personality } from './personality.js';
 import type { BehaviorRule } from './behavior-rules.js';
 
@@ -46,12 +47,24 @@ export interface HolidayEvent {
 
 // --- 月次事件のスケジューリング / デザイン (§12.3) ---------------------------
 
+/** 事件アーク (§v1.4-B) が火種から選んだテーマのヒント。 */
+export interface ArcHint {
+  /** 派生表が選んだテーマの種。LLM はこれを採用して肉付けする。 */
+  themeSeed: string;
+  /** 拾った火種の 1 行文脈。 */
+  threadNote: string;
+  /** 火種の関係者名。 */
+  actorNames: string[];
+}
+
 /** 月初の発生日決定の文脈 (§12.3.1)。 */
 export interface MonthlyScheduleContext {
   calendar: Calendar;
   reputation: VirtueVector;
   villagers: Villager[];
   villageRules: VillageRule[];
+  /** 火種由来のテーマヒント (§v1.4-B)。無ければ自由テーマ。 */
+  arcHint?: ArcHint;
 }
 
 /** 月初に決まる事件の発生日と大まかなテーマの種。 */
@@ -70,6 +83,8 @@ export interface IncidentDesignContext {
   themeSeed: string;
   /** 居座る過去の事件用キャラ (連続犯の継続入力, §12.3.3)。 */
   survivingCulprits: Villager[];
+  /** くすぶる火種 (§v1.4-B)。デザインの文脈に使う。 */
+  plotThreads: PlotThread[];
 }
 
 // --- ふるまいの法則の起案 (RuleSmith, §2.1) ----------------------------------
@@ -84,6 +99,15 @@ export interface RuleProposalContext {
   scheduledIncident: ScheduledIncident | null;
 }
 
+/** 蒸留 (§v1.4-C) の文脈: 教師 (LLM) と生徒 (DailyEngine) の乖離ケース束。 */
+export interface DistillContext {
+  reputation: VirtueVector;
+  calendar: Calendar;
+  existingRules: BehaviorRule[];
+  /** 直近の乖離ケース (最大 maxCases 件)。 */
+  cases: DivergenceCase[];
+}
+
 export interface WorldBrain {
   evaluateDay(ctx: WorldEvalContext): Promise<DayEvaluation>;
   /** 祝日にあたる日のイベントを生成する (§4.7)。 */
@@ -94,4 +118,6 @@ export interface WorldBrain {
   designIncident(ctx: IncidentDesignContext): Promise<IncidentDesign>;
   /** ふるまいの法則を 1 つ起案する (RuleSmith, §2.1)。source='haiku'。 */
   proposeRule(ctx: RuleProposalContext): Promise<BehaviorRule>;
+  /** 乖離ケースを説明するふるまいの法則を蒸留する (§v1.4-C)。source='distill'。 */
+  distillRule(ctx: DistillContext): Promise<BehaviorRule>;
 }

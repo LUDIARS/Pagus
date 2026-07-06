@@ -1,4 +1,4 @@
-import type { World, WorldConfig, Villager, GridPos, Calendar, VillageRule } from './types/index.js';
+import type { World, WorldConfig, Villager, GridPos, Calendar, VillageRule, SpotMode } from './types/index.js';
 import type { EnvironmentView } from './brain.js';
 import { season, daysInMonth, timeOfDayForSegment, isAwake } from './calendar.js';
 import { makeVirtueVector } from './virtue.js';
@@ -54,6 +54,8 @@ export function createWorld(
     villageRules,
     behaviorRules,
     items: [],
+    placeStates: [],
+    plotThreads: [],
     mayorId: null,
     mayorTermsLeft: 0,
     mayorPoll: null,
@@ -70,6 +72,17 @@ export function createWorld(
     userFaith: [],
     villagerActionLog: [],
   };
+}
+
+/** placeAt が返しうる場所ラベル (§v1.4-A' spot の対象一覧)。 */
+export const PLACES = ['広場', '住宅地', '村はずれ'] as const;
+
+/** その場所の現在の状態 (§v1.4-A')。有効な entry が無ければ null。 */
+export function placeStateOf(world: World, place: string): SpotMode | null {
+  for (const e of world.placeStates) {
+    if (e.place === place && e.untilTerm > world.term) return e.state;
+  }
+  return null;
 }
 
 /** どうぶつのイベント由来パラメータ (§12.6) を加算する。日常エンジンの発火条件に使う。 */
@@ -115,12 +128,17 @@ export function environmentView(world: World, villager: Villager): EnvironmentVi
   const nearby = aliveVillagers(world)
     .filter((v) => v.id !== villager.id && chebyshev(v.position, villager.position) <= NEARBY_RADIUS)
     .map((v) => ({ id: v.id, name: v.name, pos: { ...v.position } }));
-  return {
+  const place = placeAt(world, villager.position);
+  const view: EnvironmentView = {
     position: { ...villager.position },
-    place: placeAt(world, villager.position),
+    place,
     timeOfDay: timeOfDayForSegment(world.calendar.segment, world.config.segmentsPerDay),
     nearby,
   };
+  // 場所の状態 (§v1.4-A'): 有効なときだけキーを足す (exactOptionalPropertyTypes)。
+  const state = placeStateOf(world, place);
+  if (state !== null) view.placeState = state;
+  return view;
 }
 
 /** グリッド内へ座標をクランプする。 */

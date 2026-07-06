@@ -243,3 +243,28 @@ describe('PlayerState 二大陣営 (§4.3 faction)', () => {
     expect(ps.factionOf('u')).toBe('guide');
   });
 });
+
+describe('即効介入 (§v1.4-A 野次クールダウン/コスト)', () => {
+  it('canHeckle は未使用なら true、markHeckle 後はクールダウンが明けるまで false', () => {
+    const ps = new PlayerState();
+    expect(ps.canHeckle('u', 0)).toBe(true);
+    ps.markHeckle('u', 0);
+    expect(ps.canHeckle('u', 5000)).toBe(false); // 既定 10000ms
+    expect(ps.heckleCooldownInMs('u', 5000)).toBe(5000);
+    expect(ps.canHeckle('u', 10000)).toBe(true);
+    expect(ps.heckleCooldownInMs('u', 10000)).toBe(0);
+  });
+
+  it('snapshot は介入コストと野次クールダウンを載せる', () => {
+    const ps = new PlayerState();
+    ps.markHeckle('u', 0);
+    const s = ps.snapshot('u', 4000);
+    expect(s.heckleCost).toBe(3);
+    expect(s.canHeckleInMs).toBe(6000);
+    expect(s.testifyCost).toBe(8);
+    expect(s.giftTreatCost).toBe(5);
+    expect(s.giftPoisonCost).toBe(15);
+    expect(s.spotCost).toBe(20);
+    expect(s.fanFlamesCost).toBe(10);
+  });
+});

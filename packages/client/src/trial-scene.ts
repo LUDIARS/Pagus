@@ -46,6 +46,20 @@ interface TChar {
   size: number;
 }
 
+/** テーマパック (§v1.4-D) で差し替え可能な語彙。既定は classic 相当の組込み定数。 */
+interface TrialLexicon {
+  trialOpen: string;
+  stageFoolish: string;
+  stageFate: string;
+  stageDecided: string;
+  taunts: string[];
+  defenses: string[];
+  denounces: string[];
+  retorts: string[];
+  screams: string[];
+  reliefs: string[];
+}
+
 export class TrialScene {
   readonly root = new Container();
   private readonly bg = new Graphics();
@@ -53,6 +67,24 @@ export class TrialScene {
   private readonly voiceLayer = new Container();
   private readonly title = new Text({ text: '', style: { fontSize: 22, fill: 0xf2c94c, fontWeight: 'bold' } });
   private readonly chars = new Map<string, TChar>();
+  private lex: TrialLexicon = {
+    trialOpen: '審判の時',
+    stageFoolish: '最も愚かな行動を裁く',
+    stageFate: '殺すか、活かすか',
+    stageDecided: '判決',
+    taunts: TAUNTS,
+    defenses: DEFENSES,
+    denounces: DENOUNCE,
+    retorts: RETORT,
+    screams: SCREAM,
+    reliefs: RELIEF,
+  };
+
+  /** テーマパック (§v1.4-D) の語彙を適用する。次の台本組み直しから効く。 */
+  setTheme(lex: TrialLexicon): void {
+    this.lex = lex;
+    this.scriptKey = ''; // 台本を組み直させる。
+  }
 
   private script: Utterance[] = [];
   private scriptKey = '';
@@ -92,10 +124,20 @@ export class TrialScene {
 
   /** プレイヤーの罵倒(有罪)/擁護(無罪)を画面下部中央に表示する。 */
   playerSay(side: 'guilty' | 'innocent'): void {
-    const pool = side === 'guilty' ? TAUNTS : DEFENSES;
+    const pool = side === 'guilty' ? this.lex.taunts : this.lex.defenses;
     const text = pool[Math.floor(Math.random() * pool.length)] ?? '…';
+    this.showPlayerBubble(`あなた「${text}」`, side);
+  }
+
+  /** プレイヤーの証言 (§v1.4-A) を画面下部中央に表示する。text 無しは定型文。 */
+  testifySay(stance: 'accuse' | 'defend', text?: string): void {
+    const fallback = stance === 'accuse' ? 'わたしは見た。あいつがやったんだ！' : 'あの子はそんなことをする子じゃない！';
+    this.showPlayerBubble(`証言「${text ?? fallback}」`, stance === 'accuse' ? 'guilty' : 'innocent');
+  }
+
+  private showPlayerBubble(line: string, side: 'guilty' | 'innocent'): void {
     if (this.playerBubble) this.playerBubble.destroy();
-    const b = new AnimatedBubble(`あなた「${text}」`, 'angry', 1700, PLAYER_COLORS[side]);
+    const b = new AnimatedBubble(line, 'angry', 1700, PLAYER_COLORS[side]);
     b.node.x = this.w / 2;
     b.node.y = this.h * 0.96;
     this.root.addChild(b.node);
@@ -125,8 +167,8 @@ export class TrialScene {
     const victims = world.incident?.involved ?? [];
 
     const stageLabel =
-      trial.stage === 'foolish' ? '最も愚かな行動を裁く' : trial.stage === 'fate' ? '殺すか、活かすか' : '判決';
-    this.title.text = `—— 審判の時 ——　${stageLabel}`;
+      trial.stage === 'foolish' ? this.lex.stageFoolish : trial.stage === 'fate' ? this.lex.stageFate : this.lex.stageDecided;
+    this.title.text = `—— ${this.lex.trialOpen} ——　${stageLabel}`;
     this.title.x = w / 2;
     this.title.y = 12;
 
@@ -238,7 +280,7 @@ export class TrialScene {
       // 判決後: 敗者の悲鳴 (処刑) or 安堵 (教育)。
       this.finale = verdict === 'death' ? 'death' : 'spared';
       this.defFade = 0;
-      const lines = verdict === 'death' ? SCREAM : RELIEF;
+      const lines = verdict === 'death' ? this.lex.screams : this.lex.reliefs;
       this.script = lines.map((t) => ({ speaker: target.id, text: t }));
       return;
     }
@@ -249,12 +291,12 @@ export class TrialScene {
     const sLines = this.serverLines && this.serverLines.incidentId === this.incidentId ? this.serverLines.byId : null;
     accusers.forEach((v, i) => {
       // server 生成 (Haiku) の糾弾があれば優先、無ければ定型文。
-      const text = sLines?.get(v.id) ?? pick(DENOUNCE, v.id).replace('{d}', dname);
+      const text = sLines?.get(v.id) ?? pick(this.lex.denounces, v.id).replace('{d}', dname);
       out.push({ speaker: v.id, text });
       if (target && i % 2 === 1) {
         const victim = victims.length ? byId.get(victims[i % victims.length] ?? '') : null;
         const tname = victim ? villagerDisplayName(world, victim) : accusers[0] ? villagerDisplayName(world, accusers[0]) : '誰か';
-        out.push({ speaker: target.id, text: pick(RETORT, `${target.id}${i}`).replace('{t}', tname) });
+        out.push({ speaker: target.id, text: pick(this.lex.retorts, `${target.id}${i}`).replace('{t}', tname) });
       }
     });
     this.script = out.length ? out : [{ speaker: target?.id ?? accusers[0]?.id ?? '', text: '…' }];

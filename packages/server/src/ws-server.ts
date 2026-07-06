@@ -19,6 +19,8 @@ import {
   type Faction,
   type CardName,
   type MarketItem,
+  type ThemeLexicon,
+  type MoralDial,
   type AuctionLotView,
   type LawView,
   type MartialMode,
@@ -58,6 +60,12 @@ export interface WsHandlers {
   onIncite(targetId: string, rumorAboutId: string | undefined, userId: string): void;
   onSanction(targetId: string, userId: string): void;
   onCheer(targetId: string, userId: string): void;
+  // 即効介入 (§v1.4-A): 野次 / 証言 / 差し入れ・毒饅頭。
+  onHeckle(side: 'agitate' | 'soothe', userId: string): void;
+  onTestify(stance: 'accuse' | 'defend', text: string | undefined, userId: string): void;
+  onGift(targetId: string, kind: 'treat' | 'poison', userId: string): void;
+  onSpot(place: string, mode: 'defile' | 'bless', userId: string): void;
+  onFanFlames(targetId: string, userId: string): void;
   onVote(pick: string, userId: string): void;
   onChampion(targetId: string, userId: string): void;
   onVillagerGacha(kind: VillagerGachaKind, userId: string): void;
@@ -89,6 +97,8 @@ export class GameWsServer {
   private readonly wss: WebSocketServer;
   private lastSnapshot: string | null = null;
   private llmInfo: LlmInfo | null = null;
+  /** テーマパック (§v1.4-D)。接続時に現値を送る。 */
+  private theme: Extract<ServerMessage, { t: 'theme' }> | null = null;
   private chronicle: ChronicleEntry[] = [];
   private playerActions: PlayerActionEntry[] = [];
   /** リーダーボード (§4.3) の最新値。接続時に現値を送る。 */
@@ -125,6 +135,13 @@ export class GameWsServer {
     this.llmInfo = info;
   }
 
+  /** テーマパック (§v1.4-D) を設定し、全クライアントへ配る。接続時にも現値を送る。 */
+  setTheme(pack: string, moral: MoralDial, lexicon: ThemeLexicon): void {
+    const msg: Extract<ServerMessage, { t: 'theme' }> = { t: 'theme', pack, moral, lexicon };
+    this.theme = msg;
+    this.fanout(JSON.stringify(msg));
+  }
+
   /** 村の歴史を更新し、全クライアントへ配る。 */
   updateChronicle(entries: ChronicleEntry[]): void {
     this.chronicle = entries;
@@ -135,6 +152,7 @@ export class GameWsServer {
     // 接続直後に最新スナップショット・接続人数・LLM 構成・村の歴史・人間の行動記録を送る。
     if (this.lastSnapshot) ws.send(this.lastSnapshot);
     if (this.llmInfo) ws.send(JSON.stringify({ t: 'llm', info: this.llmInfo } satisfies ServerMessage));
+    if (this.theme) ws.send(JSON.stringify(this.theme));
     if (this.chronicle.length > 0) {
       ws.send(JSON.stringify({ t: 'chronicle', entries: this.chronicle } satisfies ServerMessage));
     }
@@ -221,6 +239,21 @@ export class GameWsServer {
     } else if (msg.t === 'cheer') {
       this.bind(ws, msg.userId);
       this.h.onCheer(msg.targetId, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'heckle') {
+      this.bind(ws, msg.userId);
+      this.h.onHeckle(msg.side, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'testify') {
+      this.bind(ws, msg.userId);
+      this.h.onTestify(msg.stance, msg.text, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'gift') {
+      this.bind(ws, msg.userId);
+      this.h.onGift(msg.targetId, msg.kind, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'spot') {
+      this.bind(ws, msg.userId);
+      this.h.onSpot(msg.place, msg.mode, this.resolveUser(ws, msg.userId));
+    } else if (msg.t === 'fanFlames') {
+      this.bind(ws, msg.userId);
+      this.h.onFanFlames(msg.targetId, this.resolveUser(ws, msg.userId));
     } else if (msg.t === 'vote') {
       this.bind(ws, msg.userId);
       this.h.onVote(msg.pick, this.resolveUser(ws, msg.userId));
@@ -313,32 +346,26 @@ export class GameWsServer {
    */
   sendPlayerState(userId: string, state: PlayerStateSnapshot, championName?: string): void {
     // exactOptionalPropertyTypes: championName は値があるときだけキーを足す。
-    const msg: ServerMessage = championName === undefined
-      ? {
-          t: 'playerState',
-          karma: state.karma,
-          virtue: state.virtue,
-          userName: state.userName,
-          sanctionCost: state.sanctionCost,
-          inciteCost: state.inciteCost,
-          canCheerInMs: state.canCheerInMs,
-          championId: state.championId,
-          spent: state.spent,
-          eventCards: state.eventCards,
-        }
-      : {
-          t: 'playerState',
-          karma: state.karma,
-          virtue: state.virtue,
-          userName: state.userName,
-          sanctionCost: state.sanctionCost,
-          inciteCost: state.inciteCost,
-          canCheerInMs: state.canCheerInMs,
-          championId: state.championId,
-          championName,
-          spent: state.spent,
-          eventCards: state.eventCards,
-        };
+    const msg: ServerMessage = {
+      t: 'playerState',
+      karma: state.karma,
+      virtue: state.virtue,
+      userName: state.userName,
+      sanctionCost: state.sanctionCost,
+      inciteCost: state.inciteCost,
+      canCheerInMs: state.canCheerInMs,
+      heckleCost: state.heckleCost,
+      canHeckleInMs: state.canHeckleInMs,
+      testifyCost: state.testifyCost,
+      giftTreatCost: state.giftTreatCost,
+      giftPoisonCost: state.giftPoisonCost,
+      spotCost: state.spotCost,
+      fanFlamesCost: state.fanFlamesCost,
+      championId: state.championId,
+      spent: state.spent,
+      eventCards: state.eventCards,
+      ...(championName !== undefined ? { championName } : {}),
+    };
     this.sendToUser(userId, JSON.stringify(msg));
   }
 

@@ -1,5 +1,6 @@
 // プレイヤー行動パネル (§4)。指定された行動を消費カルマ付きボタンとして描画し、
 // 押下後に対象選択ダイアログを開く。
+
 import type { Villager, WireWorld } from '@pagus/sim';
 import { villagerDisplayName } from './villager-display.js';
 
@@ -9,17 +10,26 @@ export interface PlayerStateView {
   sanctionCost: number;
   inciteCost: number;
   canCheerInMs: number;
+  heckleCost: number;
+  canHeckleInMs: number;
+  testifyCost: number;
+  giftTreatCost: number;
+  giftPoisonCost: number;
+  spotCost: number;
+  fanFlamesCost: number;
   championId: string | null;
   championName?: string;
 }
 
 export type ActionType = 'incite' | 'sanction' | 'cheer';
-export type PlayerCommand = ActionType | 'champion';
+export type PlayerCommand = ActionType | 'champion' | 'gift-treat' | 'gift-poison' | 'fanFlames';
 
 export interface ControlHandlers {
   onAction(type: ActionType, targetId: string, rumorAboutId?: string): void;
   onChampion(targetId: string): void;
   onVerdict(pick: 'kill' | 'spare'): void;
+  onGift(targetId: string, kind: 'treat' | 'poison'): void;
+  onFanFlames(targetId: string): void;
 }
 
 interface CommandMeta {
@@ -32,11 +42,14 @@ interface CommandMeta {
 const COMMANDS: Record<PlayerCommand, CommandMeta> = {
   incite: { label: '🔥 扇動', dialogTitle: '扇動する相手', excludeChampion: true, needsRumor: true },
   sanction: { label: '⚖ 制裁', dialogTitle: '制裁する相手', excludeChampion: false, needsRumor: false },
-  cheer: { label: '✨ 応援', dialogTitle: '応援する相手', excludeChampion: false, needsRumor: false },
-  champion: { label: '⭐ 推し指定', dialogTitle: '推しにする住民', excludeChampion: false, needsRumor: false },
+  cheer: { label: '🌸 応援', dialogTitle: '応援する相手', excludeChampion: false, needsRumor: false },
+  champion: { label: '⭐ 推し指名', dialogTitle: '推しにする住民', excludeChampion: false, needsRumor: false },
+  'gift-treat': { label: '🍬 差し入れ', dialogTitle: '差し入れる相手', excludeChampion: false, needsRumor: false },
+  'gift-poison': { label: '☠ 毒饅頭', dialogTitle: '毒饅頭を渡す相手', excludeChampion: true, needsRumor: false },
+  fanFlames: { label: '📢 言いふらす', dialogTitle: '噂を広げる相手', excludeChampion: false, needsRumor: false },
 };
 
-const DEFAULT_COMMANDS: PlayerCommand[] = ['incite', 'sanction', 'cheer', 'champion'];
+const DEFAULT_COMMANDS: PlayerCommand[] = ['incite', 'sanction', 'cheer', 'champion', 'gift-treat', 'gift-poison', 'fanFlames'];
 
 export interface PlayerControlsOptions {
   commands?: readonly PlayerCommand[];
@@ -49,6 +62,7 @@ export class PlayerControls {
   private command: PlayerCommand;
   private rumorAboutId: string | null = null;
   private verdictCooldownUntil = 0;
+  private poisonLabel: string | null = null;
 
   private readonly commands: readonly PlayerCommand[];
   private readonly showVerdict: boolean;
@@ -102,6 +116,11 @@ export class PlayerControls {
     if (this.isDialogOpen()) this.renderDialog();
   }
 
+  setPoisonLabel(label: string): void {
+    this.poisonLabel = label;
+    this.renderState();
+  }
+
   setState(s: PlayerStateView): void {
     this.state = s;
     this.renderState();
@@ -153,7 +172,7 @@ export class PlayerControls {
 
   private renderDialog(): void {
     const meta = COMMANDS[this.command];
-    this.dialogTitle.textContent = `${meta.dialogTitle}を選ぶ`;
+    this.dialogTitle.textContent = `${this.commandLabel(this.command)}: ${meta.dialogTitle}`;
     this.dialogBody.replaceChildren();
 
     if (meta.needsRumor) this.dialogBody.appendChild(this.rumorField());
@@ -229,12 +248,19 @@ export class PlayerControls {
     if (!s) return 0;
     if (cmd === 'incite') return s.inciteCost;
     if (cmd === 'sanction') return Math.round(s.sanctionCost);
+    if (cmd === 'gift-treat') return s.giftTreatCost;
+    if (cmd === 'gift-poison') return s.giftPoisonCost;
+    if (cmd === 'fanFlames') return s.fanFlamesCost;
     return 0;
+  }
+
+  private commandLabel(cmd: PlayerCommand): string {
+    return cmd === 'gift-poison' && this.poisonLabel ? this.poisonLabel : COMMANDS[cmd].label;
   }
 
   private costText(cmd: PlayerCommand): string {
     if (!this.state) return '...';
-    const cd = this.state ? Math.max(0, this.state.canCheerInMs) : 0;
+    const cd = Math.max(0, this.state.canCheerInMs);
     if (cmd === 'cheer' && cd > 0) return `あと${Math.ceil(cd / 1000)}s`;
     const cost = this.costOf(cmd);
     return cost > 0 ? `消費 ${cost}カルマ` : '無料';
@@ -257,7 +283,7 @@ export class PlayerControls {
       btn.replaceChildren();
       const lab = document.createElement('span');
       lab.className = 'dock-cmd-label';
-      lab.textContent = COMMANDS[cmd].label;
+      lab.textContent = this.commandLabel(cmd);
       const cost = document.createElement('span');
       cost.className = 'dock-cmd-cost';
       cost.textContent = this.costText(cmd);
@@ -267,8 +293,11 @@ export class PlayerControls {
   }
 
   private executeTarget(id: string): void {
-    if (this.command === 'champion') {
-      this.h.onChampion(id);
+    if (this.command === 'champion') this.h.onChampion(id);
+    else if (this.command === 'gift-treat' || this.command === 'gift-poison') {
+      this.h.onGift(id, this.command === 'gift-treat' ? 'treat' : 'poison');
+    } else if (this.command === 'fanFlames') {
+      this.h.onFanFlames(id);
     } else if (this.command === 'incite') {
       this.h.onAction('incite', id, this.rumorAboutId ?? undefined);
     } else {

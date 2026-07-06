@@ -6,7 +6,7 @@
 import { pickTrialAttendees, type World, type Villager, type TrialLine } from '@pagus/sim';
 import type { LlmClient } from './llm/llm-client.js';
 import { extractJson } from './llm/json-coerce.js';
-import { Repertoire } from './repertoire.js';
+import { Repertoire, type RepertoireOptions } from './repertoire.js';
 
 const HAIKU_MODEL = 'claude-haiku-4-5';
 
@@ -15,16 +15,23 @@ export interface TrialNarratorOptions {
   client?: LlmClient;
   /** 新規生成する割合 (0..1)。既定 0.65。 */
   genProbability?: number;
+  /** テーマパックのトーン指示 (§v1.4-D)。生成プロンプトに足す。 */
+  tone?: string;
+  /** レパートリーの永続ファイル/種 (§v1.4-D、パックごとに分ける)。 */
+  repertoire?: RepertoireOptions;
 }
 
 export class TrialNarrator {
-  private readonly repertoire = new Repertoire();
+  private readonly repertoire: Repertoire;
   private readonly client: LlmClient | undefined;
   private readonly genProb: number;
+  private readonly tone: string;
 
   constructor(opts: TrialNarratorOptions = {}) {
+    this.repertoire = new Repertoire(opts.repertoire ?? {});
     this.client = opts.client;
     this.genProb = opts.genProbability ?? 0.65;
+    this.tone = opts.tone ?? '';
   }
 
   /** ログ用: 現在のプール件数。 */
@@ -65,6 +72,7 @@ export class TrialNarrator {
   private async generate(accuser: Villager, target: Villager, incidentDesc: string): Promise<string> {
     const system =
       'あなたは村の住民。裁判で被告を糾弾する短い一言を作る。8〜20文字、感情的・口語、日本語。' +
+      (this.tone ? `トーン: ${this.tone}` : '') +
       'JSON オブジェクトだけを返す: {"line":"..."}。説明文・コードフェンスは付けない。';
     const prompt =
       `被告: ${target.name}(${target.species})\n` +

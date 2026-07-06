@@ -1,8 +1,21 @@
 // TermMachine をフェーズに応じて 1 ステップずつ駆動するループ。
 // 時間制御はここが所有する: 起のセグメントはカレンダー導出ペース、事件の局面は速めに刻む。
 
-import type { TermMachine, World } from '@pagus/sim';
+import type { TermMachine, World, HeckleSide, HeckleResult, TestifyOutcome, GiftKind, GiftResult, SpotResult, FanFlamesResult } from '@pagus/sim';
 import { pacedSegmentMs, type PaceOptions } from './clock.js';
+
+/** テーマパック (§v1.4-D) 由来の feed 文言。省略時は classic 相当。 */
+export interface LoopStrings {
+  /** 開廷の行 (例: —— 審判の時 ——)。 */
+  trialOpen: string;
+  /** 判決の行 (verdict → 表示文)。 */
+  verdictLine: (verdict: 'death' | 'spared') => string;
+}
+
+const DEFAULT_STRINGS: LoopStrings = {
+  trialOpen: '—— 審判の時 ——',
+  verdictLine: (v) => `判決: ${v}`,
+};
 
 export interface LoopHandlers {
   onSnapshot(world: World): void;
@@ -34,10 +47,14 @@ export class TermLoop {
     private readonly incidentStepMs: number,
     private readonly h: LoopHandlers,
     ruleGen: RuleGenOptions = { enabled: false, chance: 0 },
+    strings: LoopStrings = DEFAULT_STRINGS,
   ) {
     this.ruleGen = ruleGen;
     this.ruleRng = ruleGen.rng ?? Math.random;
+    this.strings = strings;
   }
+
+  private readonly strings: LoopStrings;
 
   start(): void {
     if (this.running) return;
@@ -74,6 +91,31 @@ export class TermLoop {
   /** プレイヤーの裁判投票を加える (userId ごとに 1 席、重み合算)。 */
   vote(pick: string, userId?: string): void {
     this.tm.addUserVote(pick, userId);
+  }
+
+  /** プレイヤーの野次 (§v1.4-A): 進行中の事件を煽る/なだめる。事件中でなければ null。 */
+  heckle(side: HeckleSide): HeckleResult | null {
+    return this.tm.heckle(side);
+  }
+
+  /** プレイヤーの証言 (§v1.4-A): 裁判の fate 段階へ 1 グループ分の票を上乗せする。 */
+  testify(userId: string, stance: 'accuse' | 'defend', text?: string): TestifyOutcome {
+    return this.tm.testify(userId, stance, text);
+  }
+
+  /** プレイヤーの贈り物 (§v1.4-A): 差し入れ/毒饅頭を対象へ即適用する。不在なら null。 */
+  gift(targetId: string, kind: GiftKind): GiftResult | null {
+    return this.tm.giveGift(targetId, kind);
+  }
+
+  /** プレイヤーの場所介入 (§v1.4-A'): 荒らす/清める。place 不正なら null。 */
+  spot(place: string, mode: 'defile' | 'bless', days: number): SpotResult | null {
+    return this.tm.spot(place, mode, days);
+  }
+
+  /** プレイヤーの噂の増幅 (§v1.4-A')。対象不在/噂なしなら null。 */
+  fanFlames(targetId: string): FanFlamesResult | null {
+    return this.tm.fanFlames(targetId);
   }
 
   /** 事件前日の詳細デザイン + 事件用キャラ生成を実行し、予兆をログに出す (§12.3.2)。 */
@@ -126,6 +168,10 @@ export class TermLoop {
           this.h.onVillagerAction?.(a);
           this.h.onLog('kisho', a.action);
         }
+        // フィールドアイテムの回収 (§v1.4-A 体感即時化): 最寄りが取りに歩き、届いたら拾う。
+        for (const p of this.tm.tickItems()) {
+          this.h.onLog('kisho', p.kind === 'precious' ? `💎 ${p.name} が貴金属を拾った` : `💊 ${p.name} が薬物に手を出した`);
+        }
         if (r.incidentStarted) {
           this.h.onLog('sho', `⚡ 事件: ${w.incident?.description ?? ''}`);
         } else {
@@ -139,15 +185,26 @@ export class TermLoop {
         if (r.outcome === 'reconciled') {
           this.h.onLog('kisho', '🕊 和解した — 事件は裁判にならず収まった');
         } else if (this.tm.world.phase === 'ten') {
-          this.h.onLog('ten', '—— 審判の時 ——');
+          this.h.onLog('ten', this.strings.trialOpen);
+          // 目撃者 (§v1.4-B witness): 開廷時の証言をログに出す。
+          for (const wit of this.tm.world.trial?.witnesses ?? []) {
+            this.h.onLog('ten', `👁 目撃者 ${wit.name}「${wit.line}」`);
+          }
           this.h.onTrialOpen?.(this.tm.world);
         }
         break;
       }
-      case 'ten':
-        await this.tm.tenStep();
-        if (this.tm.world.phase === 'ketsu') this.h.onLog('ketsu', `判決: ${w.trial?.verdict ?? ''}`);
+      case 'ten': {
+        const r = await this.tm.tenStep();
+        // 真犯人の発覚 (§v1.4-B reveal): 冤罪被告が差し替わる逆転をログに出す。
+        if (r.reveal) {
+          this.h.onLog('ten', `🔦 逆転: 真犯人は ${r.reveal.toName} だった！ ${r.reveal.fromName} は解放された`);
+        }
+        if (this.tm.world.phase === 'ketsu' && w.trial?.verdict) {
+          this.h.onLog('ketsu', this.strings.verdictLine(w.trial.verdict));
+        }
         break;
+      }
       case 'ketsu':
         await this.tm.ketsuStep();
         break;
@@ -165,6 +222,10 @@ export class TermLoop {
         // 天災カード等の TTL 切れ一時ルールを除去する (§v1.3-A)。hidden 退避の復帰は advanceDay 内で済む。
         const expired = this.tm.pruneExpiredRules();
         for (const rule of expired) this.h.onLog('kisho', `🃏 天災がおさまった: 「${rule.description}」`);
+        // 場所の状態 (§v1.4-A') の期限切れを掃除する。
+        for (const spot of this.tm.pruneExpiredPlaceStates()) {
+          this.h.onLog('kisho', spot.state === 'defiled' ? `💨 ${spot.place}の穢れが晴れた` : `💨 ${spot.place}の清めが薄れた`);
+        }
         const extra = `${r.monthRolled ? ' / 月がかわった' : ''}${r.holiday ? ` (${r.holiday})` : ''}`;
         this.h.onLog('kisho', `日が暮れた${extra}`);
         // 村長選挙 (§17): 通常選挙/補欠選挙が起きたらログに出す。
@@ -178,6 +239,8 @@ export class TermLoop {
           const m = await this.tm.scheduleMonthlyIncident();
           if (m) {
             this.h.onLog('kisho', `📅 今月の事件予定: ${m.dayOfMonth}日`);
+            // 事件アーク (§v1.4-B): 火種由来のテーマが選ばれたら明示する。
+            if (m.arcNote) this.h.onLog('kisho', `🧵 火種が芽吹く: ${m.arcNote} → 「${m.themeSeed}」`);
             if (m.dayOfMonth <= 1) await this.designScheduled();
           }
           const party = this.tm.scheduleMonthlyParty();

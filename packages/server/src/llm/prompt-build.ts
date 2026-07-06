@@ -32,6 +32,7 @@ import type {
   VillageRule,
   Personality,
   BehaviorRule,
+  DistillContext,
 } from '@pagus/sim';
 
 /** 組み上げたプロンプト。kind は tier ルーティングに使う。 */
@@ -202,16 +203,37 @@ export function buildFoolishPrompt(ctx: FoolishVoteContext): PromptParts {
   ]);
 }
 
-export function buildFatePrompt(ctx: FateVoteContext): PromptParts {
+/** 判例化 (blackbox) 用の追加文脈。features は fate-blackbox.fateFeatures と同じ map。 */
+export interface FateRuleHint {
+  features: Record<string, string | number | boolean>;
+  retiredRules: Array<{ description: string; whenText: string }>;
+}
+
+export function buildFatePrompt(ctx: FateVoteContext, ruleHint?: FateRuleHint): PromptParts {
+  const ruleSys = ruleHint
+    ? '\nさらに、この量刑判断が特徴量の単純な条件で再現できるなら proposedRule に「判例」を書け:\n' +
+      '{"verdict": ..., "confidence": 0.0-1.0, "rationale": "一言",\n' +
+      ' "proposedRule": {"description":"判例の説明","when":{"op":"and","clauses":[{"op":"cmp","feature":"axis","cmp":"==","value":"aggression"},{"op":"cmp","feature":"damage","cmp":">=","value":30}]},"output":{"verdict":"kill"},"confidence":0.8}}\n' +
+      '使える feature: axis(グループ軸), damage(被害量), involvedCount, reformCount, madman, scummy, stress, dominantTrait(被告の最強気質), aggression, kindness。\n' +
+      'proposedRule は自信が無ければ省略可。'
+    : '';
   const sys =
     'あなたは裁判で 1 つの性格グループを代表して投票する。\n' +
     '被告を「殺す(kill)」か「活かす(spare→教育)」かを決める。\n' +
     '出力スキーマ: {"verdict": "kill" | "spare"}。' +
+    ruleSys +
     JSON_ONLY;
+  const hintUser = ruleHint
+    ? `特徴量: ${JSON.stringify(ruleHint.features)}\n` +
+      (ruleHint.retiredRules.length
+        ? `撤回済み判例 (同じ提案はしないこと): ${ruleHint.retiredRules.map((r) => `${r.description}[${r.whenText}]`).join(' / ')}\n`
+        : '')
+    : '';
   const user =
     `グループの軸: ${PERSONALITY_LABELS[ctx.axis]} (${ctx.axis})\n` +
     `事件: ${ctx.incident.description}\n` +
     `被告:\n${villagerBrief(ctx.defendant)}\n` +
+    hintUser +
     'このグループの価値観で kill / spare を JSON で返せ。';
   return partsFromSegments('fate', [
     { stability: 'fixed', role: 'system', text: sys },
@@ -288,6 +310,11 @@ export function buildSchedulePrompt(ctx: MonthlyScheduleContext): PromptParts {
     `村の評判: ${repLine}\n` +
     `住民 (${ctx.villagers.length}体): ${names || 'なし'}\n` +
     `村のしきたり:\n${rulesBlock(ctx.villageRules)}\n` +
+    // 事件アーク (§v1.4-B): 火種由来のヒントがあればテーマの種はそれを必ず採用させる。
+    (ctx.arcHint
+      ? `くすぶる火種: ${ctx.arcHint.threadNote} (関係者: ${ctx.arcHint.actorNames.join('・') || 'なし'})\n` +
+        `themeSeed は必ず「${ctx.arcHint.themeSeed}」を使い、この火種の続きとして設計せよ。\n`
+      : '') +
     'この月の事件の発生日とテーマの種を JSON で返せ。';
   return partsFromSegments('world', [
     { stability: 'fixed', role: 'system', text: sys },
@@ -328,6 +355,8 @@ export function buildDesignPrompt(ctx: IncidentDesignContext): PromptParts {
     `既存住民:\n${ctx.villagers.map(villagerLine).join('\n') || '(なし)'}\n` +
     `村のしきたり:\n${rulesBlock(ctx.villageRules)}\n` +
     `居座る過去の事件犯 (連続犯の継続入力):\n${culprits}\n` +
+    // 火種 (§v1.4-B): 事件デザインの文脈として渡す (どう拾うかは LLM の裁量)。
+    `くすぶる火種:\n${ctx.plotThreads.map((t) => `- [${t.kind}] ${t.note} (熱${t.heat.toFixed(2)})`).join('\n') || '(なし)'}\n` +
     '明日の事件の詳細デザインを JSON で返せ。';
   return partsFromSegments('world', [
     { stability: 'fixed', role: 'system', text: sys },
@@ -382,6 +411,51 @@ export function buildRulePrompt(ctx: RuleProposalContext): PromptParts {
     `予定・提案済みの事件:\n${scheduled}\n` +
     `既存のふるまいの法則:\n${existing}\n` +
     '村の今の様子に映える新しいふるまいの法則を 1 つ JSON で返せ。';
+  return partsFromSegments('rule', [
+    { stability: 'fixed', role: 'system', text: sys },
+    { stability: 'volatile', role: 'user', text: user },
+  ]);
+}
+
+// --- 蒸留 (§v1.4-C): 乖離ケースを説明するルールを起案する --------------------
+
+export function buildDistillPrompt(ctx: DistillContext): PromptParts {
+  const axisList = PERSONALITY_AXES.map((a) => `${a}(${PERSONALITY_LABELS[a]})`).join(', ');
+  const sys =
+    'あなたは村の「ふるまいの法則」を蒸留する者。教師 (大きな知能) と生徒 (ルールエンジン) の判断が' +
+    '食い違ったケース群を観て、その食い違いを説明する安全なルールを 1 つだけ起案する。\n' +
+    '出力スキーマ: {"description": "ルールの説明(短い日本語)", "when": [<条件>...], "then": [<効果>...]}\n' +
+    '条件 (kind):\n' +
+    '  {"kind":"traitAbove"|"traitBelow","axis":<気質軸>,"value":0..1}\n' +
+    '  {"kind":"emotionAbove"|"emotionBelow","emotionAxis":"anger|joy など","value":-1..1}\n' +
+    '  {"kind":"eventParamAbove","tag":"...","value":数値} / {"kind":"stressAbove","value":数値}\n' +
+    '  {"kind":"wealthBelow"|"wealthAbove","value":数値}\n' +
+    '  {"kind":"place","place":"広場|住宅地|村はずれ"} / {"kind":"placeState","state":"defiled|blessed"}\n' +
+    '  {"kind":"timeOfDay","timeOfDay":"night|morning|noon|evening"} / {"kind":"hasNeighbor"}\n' +
+    '  {"kind":"infoContains","substr":"..."} / {"kind":"infoFromPlayer"} / {"kind":"actionCategory","category":"harass|good|chat|wander"}\n' +
+    '効果 (kind):\n' +
+    '  {"kind":"emotionDelta","emotionAxis":"...","delta":-1..1} / {"kind":"triggerWeight","delta":-5..5}\n' +
+    '  {"kind":"actionFlavor","text":"..."} / {"kind":"spreadInfo"} / {"kind":"moveBias","towards":"partner|admire|awayMadman"} / {"kind":"wealthDelta","delta":-20..20}\n' +
+    `気質軸: ${axisList}。ケース群に共通する条件を when に、教師の傾向 (感情の向き/事件化) を then に写せ。` +
+    JSON_ONLY;
+  const caseLines = ctx.cases
+    .map((c, i) => {
+      const teacherEmo = Object.entries(c.teacher.emotionDelta)
+        .filter(([, d]) => Math.abs(d) > 0.01)
+        .map(([k, d]) => `${k}${d > 0 ? '+' : ''}${d.toFixed(2)}`)
+        .join(' ') || '(変化なし)';
+      return (
+        `#${i + 1} 場所=${c.env.place}${c.env.placeState ? `(${c.env.placeState})` : ''} 時間=${c.env.timeOfDay} ` +
+        `隣人=${c.env.hasNeighbor ? 'あり' : 'なし'} ストレス=${c.villager.stress} 所持金=${Math.round(c.villager.wealth)}\n` +
+        `   教師: 感情 ${teacherEmo} / 事件化=${c.teacher.triggersIncident} — 生徒: 事件化=${c.student.triggersIncident}`
+      );
+    })
+    .join('\n');
+  const existing = ctx.existingRules.map(ruleLine).join('\n') || '(なし)';
+  const user =
+    `乖離ケース (${ctx.cases.length}件):\n${caseLines}\n` +
+    `既存のふるまいの法則:\n${existing}\n` +
+    'これらの乖離を最もよく説明するふるまいの法則を 1 つ JSON で返せ。';
   return partsFromSegments('rule', [
     { stability: 'fixed', role: 'system', text: sys },
     { stability: 'volatile', role: 'user', text: user },

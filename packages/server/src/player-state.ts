@@ -29,9 +29,19 @@ export interface PlayerStateConfig {
   championDeathPenalty: number;
   /** カード使用クールダウン ms。 */
   cardCooldownMs: number;
+  /** 即効介入 (§v1.4-A) のコスト表示/徴収と野次クールダウン。 */
+  intervene: {
+    heckleCost: number;
+    heckleCooldownMs: number;
+    testifyCost: number;
+    giftTreatCost: number;
+    giftPoisonCost: number;
+    spotCost: number;
+    fanFlamesCost: number;
+  };
 }
 
-/** 既定値 (暗号化 config 未注入時 / テスト用)。DEFAULT_CONFIG.karma と一致させる。 */
+/** 既定値 (暗号化 config 未注入時 / テスト用)。DEFAULT_CONFIG.karma / .intervene と一致させる。 */
 export const DEFAULT_PLAYER_STATE_CONFIG: PlayerStateConfig = {
   rate: 0.5,
   max: 100,
@@ -43,6 +53,15 @@ export const DEFAULT_PLAYER_STATE_CONFIG: PlayerStateConfig = {
   championKarmaMult: 1.5,
   championDeathPenalty: 20,
   cardCooldownMs: 60000,
+  intervene: {
+    heckleCost: 3,
+    heckleCooldownMs: 10000,
+    testifyCost: 8,
+    giftTreatCost: 5,
+    giftPoisonCost: 15,
+    spotCost: 20,
+    fanFlamesCost: 10,
+  },
 };
 
 interface PlayerEntry {
@@ -108,6 +127,14 @@ export interface PlayerStateSnapshot {
   spent: number;
   /** 月次配布されるイベントカードの所持数。 */
   eventCards: number;
+  // --- 即効介入 (§v1.4-A) のコスト/クールダウン表示用 ---
+  heckleCost: number;
+  canHeckleInMs: number;
+  testifyCost: number;
+  giftTreatCost: number;
+  giftPoisonCost: number;
+  spotCost: number;
+  fanFlamesCost: number;
 }
 
 export class PlayerState {
@@ -117,6 +144,9 @@ export class PlayerState {
   /** カード介入クールダウン (§v1.3-A): userId → 次に使える時刻 (ms)。未登録はいつでも可。 */
   private readonly cardReadyAt = new Map<string, number>();
   private readonly cardCooldownMs: number; // カード使用クールダウン
+  /** 野次クールダウン (§v1.4-A): userId → 次に野次できる時刻 (ms)。連打防止。 */
+  private readonly heckleReadyAt = new Map<string, number>();
+  private readonly intervene: PlayerStateConfig['intervene']; // 即効介入のコスト/クールダウン
 
   private readonly rate: number; // 毎秒のカルマ加算量
   private readonly max: number; // カルマ上限
@@ -131,6 +161,7 @@ export class PlayerState {
   /** チューニング値を注入する (省略時は既定 = 旧 env 既定と一致)。 */
   constructor(config: PlayerStateConfig = DEFAULT_PLAYER_STATE_CONFIG) {
     this.cardCooldownMs = config.cardCooldownMs;
+    this.intervene = config.intervene;
     this.rate = config.rate;
     this.max = config.max;
     this.inciteCost = config.inciteCost;
@@ -312,6 +343,33 @@ export class PlayerState {
     return Math.max(0, (this.cardReadyAt.get(userId) ?? 0) - now);
   }
 
+  /** 野次が撃てるか (§v1.4-A クールダウン)。未使用 or クールダウン経過で true。 */
+  canHeckle(userId: string, now: number): boolean {
+    return now >= (this.heckleReadyAt.get(userId) ?? 0);
+  }
+
+  /** 野次を 1 回使ったとして次回可能時刻を記録する (§v1.4-A)。 */
+  markHeckle(userId: string, now: number): void {
+    this.heckleReadyAt.set(userId, now + this.intervene.heckleCooldownMs);
+  }
+
+  /** 次に野次できるまでの残りミリ秒 (0 = いま可能, §v1.4-A)。 */
+  heckleCooldownInMs(userId: string, now: number): number {
+    return Math.max(0, (this.heckleReadyAt.get(userId) ?? 0) - now);
+  }
+
+  /** 即効介入 (§v1.4-A) の各コスト (表示/徴収用)。 */
+  get interveneCosts(): { heckle: number; testify: number; giftTreat: number; giftPoison: number; spot: number; fanFlames: number } {
+    return {
+      heckle: this.intervene.heckleCost,
+      testify: this.intervene.testifyCost,
+      giftTreat: this.intervene.giftTreatCost,
+      giftPoison: this.intervene.giftPoisonCost,
+      spot: this.intervene.spotCost,
+      fanFlames: this.intervene.fanFlamesCost,
+    };
+  }
+
   /** カルマを加算する (ベット払い戻し, §3)。下限0。払い戻しは上限 max を超過してよい。 */
   addKarma(userId: string, amount: number): void {
     const e = this.get(userId);
@@ -472,6 +530,13 @@ export class PlayerState {
       championId: e.championId,
       spent: e.spent,
       eventCards: e.eventCards,
+      heckleCost: this.intervene.heckleCost,
+      canHeckleInMs: this.heckleCooldownInMs(userId, now),
+      testifyCost: this.intervene.testifyCost,
+      giftTreatCost: this.intervene.giftTreatCost,
+      giftPoisonCost: this.intervene.giftPoisonCost,
+      spotCost: this.intervene.spotCost,
+      fanFlamesCost: this.intervene.fanFlamesCost,
     };
   }
 }

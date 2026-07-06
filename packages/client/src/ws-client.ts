@@ -1,6 +1,6 @@
 // WS 接続。server からの snapshot/log を受け、扇動/沈静化コマンドを送る。自動再接続。
 
-import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, TrialVoice, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView, LawView, MartialMode, HighlightCard, SeasonWinner, ChatMessage } from '@pagus/sim';
+import type { WireWorld, ServerMessage, ClientMessage, Phase, TrialLine, TrialVoice, LlmInfo, ChronicleEntry, PlayerActionEntry, CostSummary, LeaderboardEntry, AuctionLotView, LawView, MartialMode, HighlightCard, SeasonWinner, ChatMessage, ThemeLexicon, MoralDial } from '@pagus/sim';
 
 /** 裁判ベットのプール状態 (§3 betState 受信ペイロード)。 */
 export interface BetStateView {
@@ -33,8 +33,28 @@ export interface WsHandlers {
   onTrialVoices?(incidentId: string, voices: TrialVoice[]): void;
   onLlm(info: LlmInfo): void;
   onChronicle(entries: ChronicleEntry[]): void;
-  /** その接続ユーザのカルマ/善性状態 (§4.4)。推し (§1)・預金 (§v1.3-B ④)・課金額 (§v1.3-F) を含む。 */
-  onPlayerState?(state: { karma: number; virtue: number; userName: string | null; sanctionCost: number; inciteCost: number; canCheerInMs: number; championId: string | null; championName?: string; spent: number; eventCards: number }): void;
+  /** テーマパック (§v1.4-D)。接続時 + 起動時に届く。 */
+  onTheme?(pack: string, moral: MoralDial, lexicon: ThemeLexicon): void;
+  /** その接続ユーザのカルマ/善性状態 (§4.4)。推し・課金額・カード・即効介入コストを含む。 */
+  onPlayerState?(state: {
+    karma: number;
+    virtue: number;
+    userName: string | null;
+    sanctionCost: number;
+    inciteCost: number;
+    canCheerInMs: number;
+    heckleCost: number;
+    canHeckleInMs: number;
+    testifyCost: number;
+    giftTreatCost: number;
+    giftPoisonCost: number;
+    spotCost: number;
+    fanFlamesCost: number;
+    championId: string | null;
+    championName?: string;
+    spent: number;
+    eventCards: number;
+  }): void;
   /** 別端末ログインで現セッションが追い出された (§v1.3-F)。 */
   onLoggedOut?(reason: string): void;
   /** コマンド却下 (カルマ不足/インターバル中など)。 */
@@ -111,6 +131,7 @@ export function connect(url: string, h: WsHandlers): Conn {
       else if (msg.t === 'trialVoices') h.onTrialVoices?.(msg.incidentId, msg.voices);
       else if (msg.t === 'llm') h.onLlm(msg.info);
       else if (msg.t === 'chronicle') h.onChronicle(msg.entries);
+      else if (msg.t === 'theme') h.onTheme?.(msg.pack, msg.moral, msg.lexicon);
       else if (msg.t === 'playerState') {
         h.onPlayerState?.({
           karma: msg.karma,
@@ -119,6 +140,13 @@ export function connect(url: string, h: WsHandlers): Conn {
           sanctionCost: msg.sanctionCost,
           inciteCost: msg.inciteCost,
           canCheerInMs: msg.canCheerInMs,
+          heckleCost: msg.heckleCost,
+          canHeckleInMs: msg.canHeckleInMs,
+          testifyCost: msg.testifyCost,
+          giftTreatCost: msg.giftTreatCost,
+          giftPoisonCost: msg.giftPoisonCost,
+          spotCost: msg.spotCost,
+          fanFlamesCost: msg.fanFlamesCost,
           championId: msg.championId ?? null,
           ...(msg.championName !== undefined ? { championName: msg.championName } : {}),
           spent: msg.spent,

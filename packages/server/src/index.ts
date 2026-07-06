@@ -6,8 +6,8 @@
 // 例外で env 維持: PAGUS_CONFIG_KEY (マスター鍵) / PAGUS_FRESH (その起動だけ world.json 無視) /
 // PAGUS_BRAIN (stub|llm の起動モード) / PAGUS_DATA_DIR (config 自体の置き場を解決するため)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, rollVillagerGacha, ensureResidentHistory, addVillagerActionLog, KARMA_GACHA_COST, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem, type VillagerGachaKind, type ChatMessage, type TrialState, type TrialVoice } from '@pagus/sim';
-import { loadConfig, loadSeed } from './load-data.js';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, rollVillagerGacha, ensureResidentHistory, addVillagerActionLog, KARMA_GACHA_COST, shouldAdoptRule, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem, type VillagerGachaKind, type ChatMessage, type TrialState, type TrialVoice } from '@pagus/sim';
+import { loadConfig, loadSeed, loadIncidentArcs } from './load-data.js';
 import { loadPagusConfig, type PagusConfig } from './config/pagus-config.js';
 import { TermLoop } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
@@ -23,14 +23,20 @@ import { TrialNarrator } from './trial-narrator.js';
 import { Chronicle } from './chronicle.js';
 import { WorldStore } from './world-store.js';
 import { PushService } from './push-service.js';
+import type { BlackBox } from '@ludiars/blackbox';
+import { makeTrialFateBlackBox } from './llm/fate-blackbox.js';
 import { createRequestListener } from './http-api.js';
+import { loadLexicon, validateMoral, fillName } from './theme/lexicon.js';
+import { DivergenceLog } from './distill/divergence-log.js';
+import { ShadowSampler } from './distill/shadow-sampler.js';
 
-/** 村の歴史に残す「節目」のログか判定する。 */
-function isMilestone(text: string): boolean {
+/** 村の歴史に残す「節目」のログか判定する。verdictPrefix はテーマパックの判決接頭辞 (§v1.4-D)。 */
+function isMilestone(text: string, verdictPrefix = '判決'): boolean {
   return (
     /^[⚡✦💍👶📅📜]/.test(text) ||
-    text.startsWith('—— 審判') ||
+    text.startsWith('—— ') ||
     text.startsWith('判決') ||
+    text.startsWith(verdictPrefix) ||
     text.startsWith('🕊') ||
     text.startsWith('⚖') ||
     text.startsWith('──') ||
@@ -42,7 +48,7 @@ function isMilestone(text: string): boolean {
  * 節目ログの種別を 1 箇所で判定する (§2.2 履歴の構造化)。
  * クライアントの絵文字 startsWith 判定を server 側へ集約し、ChronicleEntry.kind を埋める。
  */
-function classifyKind(text: string): ChronicleKind {
+function classifyKind(text: string, verdictPrefix = '判決'): ChronicleKind {
   const t = text.trimStart();
   if (t.startsWith('⚡')) return 'incident';
   if (t.startsWith('🕊')) return 'reconcile';
@@ -52,8 +58,8 @@ function classifyKind(text: string): ChronicleKind {
   if (t.startsWith('👶')) return 'birth';
   if (t.startsWith('📜')) return 'rule';
   if (t.startsWith('📅')) return 'holiday';
-  if (t.startsWith('—— 審判')) return 'trial';
-  if (t.startsWith('判決')) return 'verdict';
+  if (t.startsWith('—— ')) return 'trial';
+  if (t.startsWith('判決') || t.startsWith(verdictPrefix)) return 'verdict';
   if (t.includes('月がかわった')) return 'month';
   if (t.startsWith('──')) return 'day';
   return 'other';
@@ -65,7 +71,7 @@ function classifyKind(text: string): ChronicleKind {
  * チューニング (triggerAfter / disableCodex) は config から受ける。
  * 不正値は無言フォールバックせず即エラー (RULE_CODE §7.1)。
  */
-function selectBrains(costSink: CostSink, cfg: PagusConfig): {
+function selectBrains(costSink: CostSink, cfg: PagusConfig, fateBlackbox: BlackBox): {
   brain: Brain;
   worldBrain: WorldBrain;
   registry: BackendRegistry | null;
@@ -90,7 +96,7 @@ function selectBrains(costSink: CostSink, cfg: PagusConfig): {
       ? new BackendRegistry({ cast, strong })
       : new BackendRegistry({ cast, strong, assignmentWeights: { gpt: 8, sonnet: 1, haiku: 1 } });
     return {
-      brain: new LlmBrain(registry, { costSink, retries }),
+      brain: new LlmBrain(registry, { costSink, retries, fateBlackbox }),
       worldBrain: new LlmWorldBrain(registry, { costSink, retries }),
       registry,
     };
@@ -143,6 +149,11 @@ function main(): void {
   const cfg = loadPagusConfig(); // 暗号化 config (旧 PAGUS_* env の集約先) を 1 回ロード
   const config = loadConfig();
 
+  // テーマパック + モラルダイヤル (§v1.4-D)。不正値/キー欠落は即エラー。
+  const MORAL = validateMoral(cfg.theme.moral);
+  const lexicon = loadLexicon(cfg.theme.pack, MORAL);
+  console.log(`[pagus] theme=${cfg.theme.pack} (${lexicon.packName}) moral=${MORAL}`);
+
   // world スナップショット (data/runtime/world.json) があれば復元。PAGUS_FRESH=1 で無視して新規開始。
   const store = new WorldStore();
   const fresh = (process.env.PAGUS_FRESH ?? '') === '1';
@@ -164,14 +175,26 @@ function main(): void {
   }
   const villagers = [...world.villagers.values()];
 
+  // 事件アークの派生表 (§v1.4-B)。data/incident-arcs.json があれば注入 (無ければ組込み既定)。
+  const incidentArcs = loadIncidentArcs();
+
   // LLM コストログ (§7)。llm モードのみ計上 (stub は costSink を呼ばない)。
+  // 裁判 fate 投票の判例 (成長型ブラックボックス)。world.json と同じ data/runtime に永続。
+  // stub モードでは発火しないが、蓄積済み判例の閲覧/レビュー (HTTP API) は常に可能。
+  const fateBlackbox = makeTrialFateBlackBox('data/runtime/blackbox.json');
+
   // コスト計上時に sysStatus を速やかに反映する (§2.3 イベント駆動)。実体は後で差し込む。
   const costLog = new CostLog();
   let scheduleSysStatus: () => void = () => {};
   const { brain, worldBrain, registry } = selectBrains((e) => {
     costLog.record(e);
     scheduleSysStatus();
-  }, cfg);
+  }, cfg, fateBlackbox);
+  // 蒸留ループ (§v1.4-C): shadow sampling → 乖離ログ → 日末蒸留。教師は個体 Brain と同じ実装
+  // (llm モードでは cheap tier の LLM、stub では決定的 StubBrain = パイプラインの動作確認用)。
+  const divergence = new DivergenceLog();
+  const shadow = cfg.distill.enabled ? new ShadowSampler(brain, divergence) : null;
+
   const llmInfo = buildLlmInfo(registry, villagers);
   const brainFor = (id: string): string | null => (registry ? registry.assign(id).id : null);
   ensureResidentHistory(world, brainFor);
@@ -187,6 +210,41 @@ function main(): void {
     birthChance: cfg.sim.birthChance, // 日末の出産確率
     rulesMax: cfg.sim.rulesMax, // ふるまいの法則の上限 (§2.1)
     martialSurgeBonus: cfg.sim.martialSurgeBonus, // 戒厳令 surge の事件化閾値ボーナス (§v1.3-C ⑨)
+    // 即効介入 (§v1.4-A) の sim 側効果量。コスト/クールダウンは PlayerState 側。
+    interveneConfig: {
+      heckleDamage: cfg.intervene.heckleDamage,
+      heckleBias: cfg.intervene.heckleBias,
+      giftTreatWealth: cfg.intervene.giftTreatWealth,
+      giftTreatJoy: cfg.intervene.giftTreatJoy,
+      spotAnger: cfg.intervene.spotAnger,
+      spotJoy: cfg.intervene.spotJoy,
+    },
+    // 事件アーク (§v1.4-B): 火種/小騒動/裁判バリエーションのチューニングと派生表。
+    plotConfig: {
+      threadsMax: cfg.arc.threadsMax,
+      heatDecay: cfg.arc.heatDecay,
+      heatOnIncident: cfg.arc.heatOnIncident,
+    },
+    minorConfig: {
+      minorChance: cfg.arc.minorChance,
+      minorResidueChance: cfg.arc.minorResidueChance,
+    },
+    trialComposeConfig: {
+      witnessMax: cfg.arc.witnessMax,
+      witnessWeight: cfg.arc.witnessWeight,
+      revealChance: cfg.arc.revealChance,
+    },
+    ...(incidentArcs ? { incidentArcs } : {}),
+    moral: MORAL, // モラルダイヤル (§v1.4-D): wholesome は死刑無効
+    // shadow sampling (§v1.4-C): 日常決定の一部を教師に影として問う (fire-and-forget)。
+    ...(shadow
+      ? {
+          onDailyDecision: (v, env, d) => {
+            if (Math.random() < cfg.distill.sampleChance) shadow.sample(v, env, d, world.term);
+          },
+        }
+      : {}),
+
     bornCount: restored?.bornCount ?? 0, // 出生 id の通し番号を引き継ぐ
     incidentCount: restored?.incidentCount ?? 0, // 事件用キャラ id の通し番号を引き継ぐ
     ruleCount: restored?.ruleCount ?? 0, // ふるまいの法則 id の通し番号を引き継ぐ
@@ -208,11 +266,15 @@ function main(): void {
   const highlightClient = llmMode
     ? new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: cfg.llm.cliRetries })
     : null;
-  const narrator = new TrialNarrator(
-    llmMode
+  // 糾弾のトーン/種/プールはテーマパックに従う (パック別ファイルでトーン混線を防ぐ, §v1.4-D)。
+  const repertoireFile = cfg.theme.pack === 'classic' ? 'denunciations.json' : `denunciations.${cfg.theme.pack}.json`;
+  const narrator = new TrialNarrator({
+    ...(llmMode
       ? { client: new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: cfg.llm.cliRetries }) }
-      : {},
-  );
+      : {}),
+    tone: lexicon.denounceTone,
+    repertoire: { file: repertoireFile, seeds: lexicon.denounceSeeds },
+  });
 
   // 村の歴史 (節目を記録・永続化)。
   const chronicle = new Chronicle();
@@ -237,6 +299,16 @@ function main(): void {
     championKarmaMult: cfg.karma.championKarmaMult,
     championDeathPenalty: cfg.karma.championDeathPenalty,
     cardCooldownMs: cfg.karma.cardCooldownMs,
+    // 即効介入 (§v1.4-A) のコスト/クールダウン。
+    intervene: {
+      heckleCost: cfg.intervene.heckleCost,
+      heckleCooldownMs: cfg.intervene.heckleCooldownMs,
+      testifyCost: cfg.intervene.testifyCost,
+      giftTreatCost: cfg.intervene.giftTreatCost,
+      giftPoisonCost: cfg.intervene.giftPoisonCost,
+      spotCost: cfg.intervene.spotCost,
+      fanFlamesCost: cfg.intervene.fanFlamesCost,
+    },
   });
   const knownUsers = new Set<string>();
 
@@ -269,6 +341,9 @@ function main(): void {
   const SPIRITAWAY_DAYS = cfg.cards.spiritAwayDays;
   // 天災カードルールの通し番号 (id 衝突回避)。
   let cardRuleCount = 0;
+
+  // 即効介入 (§v1.4-A') の設定。
+  const SPOT_DAYS = cfg.intervene.spotDays;
 
   // 経済パック (§v1.3-B) の設定。
   const INSURE_DAYS = cfg.economy.insureDays; // 推し保険の有効日数 (③)
@@ -320,6 +395,10 @@ function main(): void {
   // 月替わり検知 (MVP集計 / シーズン進行 / 予測リセット) と事件発火検知 (予測判定) の基準。
   let lastMonthKey = tm.world.calendar.year * 12 + tm.world.calendar.month;
   let lastScheduledFired = tm.world.scheduledIncident?.fired ?? false;
+
+  // 蒸留 (§v1.4-C) の日末実行の基準と多重実行ガード。
+  let lastDistillTerm = tm.world.term;
+  let distillBusy = false;
 
   // 政治パック (§v1.3-C) の設定。
   const REVOLT_THRESHOLD = cfg.politics.revoltThreshold; // 蜂起の悪辣しきい値 (⑧)
@@ -578,7 +657,8 @@ function main(): void {
         pushState(uid);
       }
       scheduleLeaderboard();
-      // 弔い (legacy): 死を村のしきたりとして残す (上限内なら)。
+      // 弔い (legacy): 死を村のしきたりとして残す (上限内なら) + 遺恨の火種 (§v1.4-B)。
+      tm.addPlotThread({ kind: 'grudge', actors: [{ id, name }], heat: 0.5, note: `推されていた${name}の死を悼む声が消えない` });
       const rule = addVillageRule(w, `「${name}」の名をみだりに口にしてはならない`, VILLAGE_RULES_MAX);
       if (rule) {
         chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `🕯 弔い: ${name} を悼む掟が生まれた`, 'rule');
@@ -643,7 +723,11 @@ function main(): void {
 
   // HTTP API (push 購読 / 通知経由の投票) と WS を同一ポートに相乗りさせる。
   const httpServer = createServer(
-    createRequestListener({ push, onVote: (pick, userId) => handleVote(pick, userId) }),
+    createRequestListener({
+      push,
+      onVote: (pick, userId) => handleVote(pick, userId),
+      blackbox: fateBlackbox,
+    }),
   );
   ws = new GameWsServer(httpServer, {
     onHello: (userId, userName) => {
@@ -749,7 +833,7 @@ function main(): void {
       if (loop.sanction(targetId)) {
         const cal = tm.world.calendar;
         const name = tm.world.villagers.get(targetId)?.name ?? targetId;
-        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `⚖ 制裁: ${name} がつるし上げられた`, 'sanction');
+        chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, fillName(lexicon.sanctionFeed, name), 'sanction');
         ws.updateChronicle(chronicle.recent());
       } else {
         ws.sendRejected(userId, '制裁対象が不正です');
@@ -782,6 +866,160 @@ function main(): void {
       if (faithChanged) ws.broadcastSnapshot(tm.world);
       pushState(userId);
       scheduleLeaderboard();
+    },
+    // --- 即効介入 (§v1.4-A): 野次 / 証言 / 差し入れ・毒饅頭 ----------------------
+    onHeckle: (side, userId) => {
+      knownUsers.add(userId);
+      if (side !== 'agitate' && side !== 'soothe') {
+        ws.sendRejected(userId, '野次は agitate / soothe のいずれか');
+        return;
+      }
+      const incident = tm.world.incident;
+      if (tm.world.phase !== 'sho' || !incident) {
+        ws.sendRejected(userId, '野次は事件の進行中のみ');
+        return;
+      }
+      const now = Date.now();
+      if (!ps.canHeckle(userId, now)) {
+        ws.sendRejected(userId, '野次はインターバル中');
+        return;
+      }
+      if (!ps.spend(userId, ps.interveneCosts.heckle)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      const r = loop.heckle(side);
+      if (!r) {
+        ps.addKarma(userId, ps.interveneCosts.heckle); // 想定外の失敗は返金 (握り潰さない)
+        ws.sendRejected(userId, '野次を飛ばせなかった');
+        return;
+      }
+      ps.markHeckle(userId, now);
+      const heckleText = side === 'agitate'
+        ? `📣 野次: 観客が ${r.perpetratorName} の騒ぎを煽った (被害${r.damage})`
+        : `📣 野次: 観客が場をなだめた`;
+      ws.broadcastLog('sho', heckleText);
+      sessionLog.line('sho', heckleText);
+      recordAction(userId, 'heckle', incident.perpetrator);
+      pushState(userId);
+      ws.broadcastSnapshot(tm.world);
+    },
+    onTestify: (stance, text, userId) => {
+      knownUsers.add(userId);
+      if (stance !== 'accuse' && stance !== 'defend') {
+        ws.sendRejected(userId, '証言は accuse / defend のいずれか');
+        return;
+      }
+      const trial = tm.world.trial;
+      if (!trial || trial.stage !== 'fate') {
+        ws.sendRejected(userId, '証言は裁判の運命段階のみ');
+        return;
+      }
+      if (!ps.spend(userId, ps.interveneCosts.testify)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      const r = loop.testify(userId, stance, text);
+      if (!r.ok) {
+        ps.addKarma(userId, ps.interveneCosts.testify); // 不成立は返金 (握り潰さない)
+        ws.sendRejected(userId, r.reason);
+        return;
+      }
+      const say = r.record.text ? `「${r.record.text}」` : '';
+      const testifyText = stance === 'accuse'
+        ? `🗣 証言: ${r.defendantName} の有罪を訴える声${say}が法廷に響いた (重み${r.record.weight})`
+        : `🗣 証言: ${r.defendantName} を弁護する声${say}が法廷に響いた (重み${r.record.weight})`;
+      ws.broadcastLog('ten', testifyText);
+      sessionLog.line('ten', testifyText);
+      if (trial.defendant) recordAction(userId, 'testify', trial.defendant);
+      pushState(userId);
+      ws.broadcastSnapshot(tm.world);
+    },
+    onGift: (targetId, kind, userId) => {
+      knownUsers.add(userId);
+      if (kind !== 'treat' && kind !== 'poison') {
+        ws.sendRejected(userId, '贈り物は treat / poison のいずれか');
+        return;
+      }
+      const target = targetId ? tm.world.villagers.get(targetId) : undefined;
+      if (!targetId || !target || !target.alive) {
+        ws.sendRejected(userId, '贈り物の相手が不正 (生存どうぶつのみ)');
+        return;
+      }
+      const cost = kind === 'treat' ? ps.interveneCosts.giftTreat : ps.interveneCosts.giftPoison;
+      if (!ps.spend(userId, cost)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      const r = loop.gift(targetId, kind);
+      if (!r) {
+        ps.addKarma(userId, cost); // 想定外の失敗は返金 (握り潰さない)
+        ws.sendRejected(userId, '贈り物を渡せなかった');
+        return;
+      }
+      const cal = tm.world.calendar;
+      const feed = kind === 'treat'
+        ? `🍬 差し入れ: ${r.villagerName} が贈り物に喜んだ`
+        : `☠ 毒饅頭: ${r.villagerName} の様子がおかしくなった`;
+      ws.broadcastLog('kisho', feed);
+      sessionLog.line('kisho', feed);
+      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, feed, 'other');
+      ws.updateChronicle(chronicle.recent());
+      recordAction(userId, 'gift', targetId);
+      pushState(userId);
+      ws.broadcastSnapshot(tm.world);
+    },
+    onSpot: (place, mode, userId) => {
+      knownUsers.add(userId);
+      if (mode !== 'defile' && mode !== 'bless') {
+        ws.sendRejected(userId, 'spot は defile / bless のいずれか');
+        return;
+      }
+      if (!ps.spend(userId, ps.interveneCosts.spot)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      const r = loop.spot(place, mode, SPOT_DAYS);
+      if (!r) {
+        ps.addKarma(userId, ps.interveneCosts.spot); // 不正な場所は返金 (握り潰さない)
+        ws.sendRejected(userId, '場所が不正 (広場/住宅地/村はずれ)');
+        return;
+      }
+      const feed = r.state === 'defiled'
+        ? `💀 荒らし: ${r.place}が穢された (${r.affected}体が気を立てた)`
+        : `✨ 清め: ${r.place}が清められた (${r.affected}体が和んだ)`;
+      ws.broadcastLog('kisho', feed);
+      sessionLog.line('kisho', feed);
+      const cal = tm.world.calendar;
+      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, feed, 'other');
+      ws.updateChronicle(chronicle.recent());
+      recordAction(userId, 'spot', r.place);
+      pushState(userId);
+      ws.broadcastSnapshot(tm.world);
+    },
+    onFanFlames: (targetId, userId) => {
+      knownUsers.add(userId);
+      const target = targetId ? tm.world.villagers.get(targetId) : undefined;
+      if (!targetId || !target || !target.alive) {
+        ws.sendRejected(userId, '言いふらす相手が不正 (生存どうぶつのみ)');
+        return;
+      }
+      if (!ps.spend(userId, ps.interveneCosts.fanFlames)) {
+        ws.sendRejected(userId, 'カルマが足りない');
+        return;
+      }
+      const r = loop.fanFlames(targetId);
+      if (!r) {
+        ps.addKarma(userId, ps.interveneCosts.fanFlames); // 噂なしは返金 (握り潰さない)
+        ws.sendRejected(userId, '広める噂がない (先に扇動で吹き込む)');
+        return;
+      }
+      const feed = `📢 言いふらし: ${r.targetName} の噂「${r.rumorText}」が ${r.spreadCount}体に広まった`;
+      ws.broadcastLog('kisho', feed);
+      sessionLog.line('kisho', feed);
+      recordAction(userId, 'fanFlames', targetId);
+      pushState(userId);
+      ws.broadcastSnapshot(tm.world);
     },
     onVote: (pick, userId) => handleVote(pick, userId),
     onChampion: (targetId, userId) => {
@@ -865,6 +1103,8 @@ function main(): void {
       }
       // 上限は直前に確認済 → maxRules を渡さず必ず追加 (同期処理なので競合なし)。
       addVillageRule(tm.world, trimmed);
+      // 新しいしきたりは破られる火種 (§v1.4-B) になる。
+      tm.addPlotThread({ kind: 'ruleViolation', actors: [], heat: 0.4, note: `新しい掟「${trimmed}」を破る者が出るかもしれない` });
       ps.bumpStat(userId, 'rulesAdded'); // 実績 (§4.1)
       const cal = tm.world.calendar;
       chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `📜 しきたり: 「${trimmed}」が定められた`, 'rule');
@@ -1296,6 +1536,7 @@ function main(): void {
     },
   });
   ws.setLlmInfo(llmInfo);
+  ws.setTheme(cfg.theme.pack, MORAL, lexicon); // テーマパック (§v1.4-D) を初期配信対象に
   ws.updateChronicle(chronicle.recent()); // 既存の歴史を初期配信対象に。
 
   // オークション (§v1.3-B ②): 固定ロット3種ローテ。落札時のみカルマ徴収し効果付与する。
@@ -1497,6 +1738,45 @@ function main(): void {
         ps.pruneExpiredInsurance(w.term);
         for (const uid of knownUsers) pushState(uid);
       }
+      // 蒸留 (§v1.4-C): 日末に乖離ケースが溜まっていたら蒸留を試みる (fire-and-forget)。
+      if (cfg.distill.enabled && w.term > lastDistillTerm) {
+        lastDistillTerm = w.term;
+        if (!distillBusy && divergence.pendingCount >= cfg.distill.minCases) {
+          distillBusy = true;
+          const cases = divergence.takeCases(cfg.distill.maxCases);
+          void (async () => {
+            try {
+              const proposed = await worldBrain.distillRule({
+                reputation: w.reputation,
+                calendar: w.calendar,
+                existingRules: w.behaviorRules,
+                cases,
+              });
+              // replay ゲート: 教師一致率が改善するルールだけ村に刻む。
+              const gate = shouldAdoptRule(w.behaviorRules, proposed, cases, cfg.distill.acceptGain);
+              const pct = (n: number): string => (n * 100).toFixed(0);
+              if (gate.adopt) {
+                const rule = tm.addDistilledRule(proposed);
+                const text = `🧠 ふるまいの蒸留: 「${rule.description}」が村に刻まれた (教師一致 ${pct(gate.before)}%→${pct(gate.after)}%)`;
+                ws.broadcastLog('kisho', text);
+                sessionLog.line('kisho', text);
+                const cal = w.calendar;
+                chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, text, 'rule');
+                ws.updateChronicle(chronicle.recent());
+                ws.broadcastSnapshot(w);
+              } else {
+                const text = `🧠 蒸留見送り: 提案は教師一致を改善せず (${pct(gate.before)}%→${pct(gate.after)}%)`;
+                ws.broadcastLog('kisho', text);
+                sessionLog.line('kisho', text);
+              }
+            } catch (e) {
+              console.error('[pagus] 蒸留失敗', e);
+            } finally {
+              distillBusy = false;
+            }
+          })();
+        }
+      }
       // 政治パック (§v1.3-C) の日末処理: 戒厳令の期限切れ解除 + 革命の蜂起判定。
       if (w.term > lastGovTerm) {
         lastGovTerm = w.term;
@@ -1558,9 +1838,9 @@ function main(): void {
       } else if (phase !== 'kisho' || isMilestone(text)) {
         dailyLogs.push(text);
       }
-      if (isMilestone(text)) {
+      if (isMilestone(text, lexicon.verdictFeedPrefix)) {
         const cal = tm.world.calendar;
-        const kind = classifyKind(text);
+        const kind = classifyKind(text, lexicon.verdictFeedPrefix);
         chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, text, kind);
         ws.updateChronicle(chronicle.recent());
         // ハイライト (§v1.3-D ㉑): 処刑 (判決) / 和解 を節目カードとして積む。
@@ -1591,6 +1871,10 @@ function main(): void {
     // ふるまいの法則の Haiku 増殖 (§2.1)。config sim.rulegenEnabled で切替 (既定有効)。
     enabled: cfg.sim.rulegenEnabled,
     chance: cfg.sim.rulegenChance,
+  }, {
+    // テーマパック (§v1.4-D) の feed 文言。
+    trialOpen: `—— ${lexicon.trialOpen} ——`,
+    verdictLine: (v) => `${lexicon.verdictFeedPrefix}: ${v === 'death' ? lexicon.verdictDeathResult : lexicon.verdictEducateResult}`,
   });
   loop.start();
 

@@ -10,6 +10,8 @@ import { LogOverlay } from './log-overlay.js';
 import { ChronicleView } from './chronicle-view.js';
 import { StatusPanel } from './status-panel.js';
 import { PlayerControls, type ActionType } from './player-controls.js';
+import { HeckleButtons } from './heckle-buttons.js';
+import { TestifyPanel } from './testify-panel.js';
 import { CardPanel } from './card-panel.js';
 import { EconomyPanel } from './economy-panel.js';
 import { GovernancePanel } from './governance-panel.js';
@@ -117,7 +119,29 @@ async function main(): Promise<void> {
       conn.send({ t: 'vote', pick, userId });
       stage.playerVerdict(pick === 'kill' ? 'guilty' : 'innocent');
     },
-  }, { commands: ['incite', 'sanction', 'cheer', 'champion'], showVerdict: true });
+    // 贈り物 (§v1.4-A): 差し入れ/毒饅頭を手渡す。
+    onGift: (targetId, kind) => {
+      conn.send({ t: 'gift', targetId, kind, userId });
+      stage.reactToAction(targetId, kind === 'treat' ? 'gift-treat' : 'gift-poison');
+    },
+    // 噂の増幅 (§v1.4-A'): 対象の噂を近傍へ言いふらす。
+    onFanFlames: (targetId) => {
+      conn.send({ t: 'fanFlames', targetId, userId });
+      stage.reactToAction(targetId, 'fanFlames');
+    },
+  }, { commands: ['incite', 'sanction', 'cheer', 'champion', 'gift-treat', 'gift-poison', 'fanFlames'], showVerdict: true });
+
+  // 野次 (§v1.4-A): 事件 (承) の進行中だけ中央に出る 煽る/なだめる ボタン。
+  const heckle = new HeckleButtons(el('heckle'), (side) => {
+    conn.send({ t: 'heckle', side, userId });
+    stage.reactToHeckle(side);
+  });
+
+  // 証言 (§v1.4-A): 裁判の運命段階に 1 グループ分の票を上乗せする。
+  const testify = new TestifyPanel(el('testify'), (stance, text) => {
+    conn.send(text !== undefined ? { t: 'testify', stance, text, userId } : { t: 'testify', stance, userId });
+    stage.playerTestify(stance, text);
+  });
 
   // イベントカード: 月次配布カードを1枚消費して server 側でガチャ効果を起こす。
   const cards = new CardPanel(el('cards'), {
@@ -127,6 +151,8 @@ async function main(): Promise<void> {
   // アイテムパネル (§16): 人手でフィールドにアイテム配置 (ランダム/貴金属/薬物)。推しに直送も可。
   const items = new ItemPanel(el('items'), {
     onPlace: (kind, toChampion) => conn.send({ t: 'placeItem', kind, toChampion, userId }),
+    // 場所介入 (§v1.4-A'): 荒らす/清める。
+    onSpot: (place, mode) => conn.send({ t: 'spot', place, mode, userId }),
   });
 
   const residentHandlers: ResidentPanelHandlers = {
@@ -184,6 +210,8 @@ async function main(): Promise<void> {
       governance.setWorld(world); // 村長/世論調査 (§17) は snapshot から
       spectacle.setWorld(world);
       betPanel.update(world);
+      heckle.setWorld(world);
+      testify.setWorld(world);
     },
     onLog: (phase, text) => log.add(phase, text),
     onStatus: (status) => {
@@ -202,9 +230,29 @@ async function main(): Promise<void> {
       chronicle.setEntries(entries);
       villageRules.setEntries(entries);
     },
+    // テーマパック (§v1.4-D): 語彙を各所へ適用し、wholesome では死刑ボタンを隠す。
+    onTheme: (_pack, moral, lexicon) => {
+      stage.setTheme(lexicon);
+      vstatus.setTheme(lexicon);
+      interventionControls.setPoisonLabel(lexicon.giftPoisonLabel);
+      const setBtn = (id: string, ja: string, en: string): void => {
+        const btn = el(id);
+        const jaEl = btn.querySelector('.vb-ja');
+        const enEl = btn.querySelector('.vb-en');
+        if (jaEl) jaEl.textContent = ja;
+        if (enEl) enEl.textContent = en;
+      };
+      setBtn('v-guilty', lexicon.verdictDeathJa, lexicon.verdictDeathEn);
+      setBtn('v-innocent', lexicon.verdictEducateJa, lexicon.verdictEducateEn);
+      // モラルダイヤル: wholesome では死刑 (kill 票) の口を塞ぐ (sim 側でも無効)。
+      (el('v-guilty') as HTMLButtonElement).style.display = moral === 'wholesome' ? 'none' : '';
+    },
     onSysStatus: (s) => statusPanel.setStatus(s),
     onPlayerState: (state) => {
       interventionControls.setState(state);
+      heckle.setState(state.heckleCost, state.canHeckleInMs);
+      testify.setState(state.testifyCost);
+      items.setCosts(state.spotCost);
       cards.setKarma(state.karma);
       cards.setInventory(state.eventCards);
       economy.setState(state.karma);

@@ -154,6 +154,26 @@ export function coerceFate(u: unknown): 'kill' | 'spare' {
   return v;
 }
 
+/** fate 投票 + 判例候補 (blackbox 用)。verdict 以外は任意で、不正でも落とさず捨てる。 */
+export interface FateJudgement {
+  verdict: 'kill' | 'spare';
+  confidence: number;
+  rationale: string;
+  /** 判例候補 (raw)。検証は fate-blackbox.parseProposedFateRule で行う。 */
+  proposedRule: unknown;
+}
+
+export function coerceFateJudgement(u: unknown): FateJudgement {
+  const verdict = coerceFate(u);
+  const o = asObj(u);
+  const confidence =
+    typeof o.confidence === 'number' && !Number.isNaN(o.confidence)
+      ? Math.min(1, Math.max(0, o.confidence))
+      : 0.7;
+  const rationale = typeof o.rationale === 'string' ? o.rationale : 'グループ投票';
+  return { verdict, confidence, rationale, proposedRule: o.proposedRule ?? null };
+}
+
 export function coerceReform(u: unknown, targetId: VillagerId): Reform {
   const o = asObj(u);
   const kind = o.kind;
@@ -336,6 +356,20 @@ function coerceRuleCondition(u: unknown): RuleCondition {
     case 'wealthBelow':
     case 'wealthAbove':
       return { kind, value: Math.max(0, asNumber(o.value, 'when.value')) };
+    case 'placeState': {
+      const st = asString(o.state, 'when.state');
+      if (st !== 'defiled' && st !== 'blessed') throw new Error(`when.state が未知です: ${st}`);
+      return { kind, state: st };
+    }
+    // --- DSL v2 (§v1.4-C) ---
+    case 'infoContains':
+      return { kind, substr: asString(o.substr, 'when.substr') };
+    case 'infoFromPlayer':
+      return { kind };
+    case 'stressAbove':
+      return { kind, value: asNumber(o.value, 'when.value') };
+    case 'emotionBelow':
+      return { kind, emotionAxis: asString(o.emotionAxis, 'when.emotionAxis'), value: clamp(asNumber(o.value, 'when.value'), -1, 1) };
     default:
       throw new Error(`未知のルール条件 kind です: ${String(kind)}`);
   }
@@ -353,6 +387,17 @@ function coerceRuleEffect(u: unknown): RuleEffect {
       return { kind, delta: clamp(asNumber(o.delta, 'then.delta'), -5, 5) };
     case 'actionFlavor':
       return { kind, text: asString(o.text, 'then.text') };
+    // --- DSL v2 (§v1.4-C) ---
+    case 'spreadInfo':
+      return { kind };
+    case 'moveBias': {
+      const t = asString(o.towards, 'then.towards');
+      if (t !== 'partner' && t !== 'admire' && t !== 'awayMadman') throw new Error(`then.towards が未知です: ${t}`);
+      return { kind, towards: t };
+    }
+    case 'wealthDelta':
+      // 暴走防止に所持金の増減幅を抑える。
+      return { kind, delta: clamp(asNumber(o.delta, 'then.delta'), -20, 20) };
     default:
       throw new Error(`未知のルール効果 kind です: ${String(kind)}`);
   }

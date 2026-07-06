@@ -22,6 +22,8 @@ export interface EnvironmentView {
   place: string;
   timeOfDay: TimeOfDay;
   nearby: Array<{ id: string; name: string; pos: GridPos }>;
+  /** いる場所の状態 (§v1.4-A' spot)。荒らされ/清められた場所にいるときだけ値を持つ。 */
+  placeState?: 'defiled' | 'blessed';
 }
 
 // --- 起: 行動決定 ---
@@ -46,6 +48,23 @@ export interface ActionDecision {
   incidentSeed: { description: string; involved: string[] } | null;
   /** 会話・善行・嫌がらせで親密度を動かす対象。変化量は TermMachine が人格から算出する。 */
   relationshipEffects?: Array<{ kind: 'harass' | 'chat' | 'good'; targetIds: VillagerId[] }>;
+  /**
+   * 事件化がプレイヤーの扇動 (forceNext/forceFor) 由来か (§v1.4-B)。
+   * 扇動はカルマを払った操作なので小騒動に流さずフル事件へ直行させる。
+   */
+  forcedTrigger?: boolean;
+  /**
+   * ルール評価が指示した副作用 (DSL v2, §v1.4-C)。DailyEngine は world を知らないため、
+   * 適用は TermMachine.applyDecision が行う。
+   */
+  sideEffects?: {
+    /** 最新の情報を近傍 1 体へ伝える (噂の自然伝播)。 */
+    spreadInfo?: boolean;
+    /** 移動の重み付け (対象へ 1 歩寄る / 狂人から離れる)。 */
+    moveBias?: 'partner' | 'admire' | 'awayMadman';
+    /** 所持金の増減 (下限 0)。 */
+    wealthDelta?: number;
+  };
 }
 
 // --- 感情の初期化/更新 ---

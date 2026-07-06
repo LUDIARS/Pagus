@@ -1,4 +1,5 @@
 import type { Villager, VillagerId, ActivityPattern, GridPos } from './villager.js';
+import type { PlotThread } from './plot.js';
 import type { Incident } from './incident.js';
 import type { TrialState } from './trial.js';
 import type { VirtueVector } from '../virtue.js';
@@ -57,6 +58,12 @@ export interface ScheduledParty {
   fired: boolean;
   incidentPlanted: boolean;
 }
+
+/**
+ * モラルダイヤル (§v1.4-D)。sim のメカニクス (票・改変・火種) は全モードで同一で、
+ * 判定分岐は verdict 適用点と UI のみ: wholesome では死刑が無効 (fate は常に教育)。
+ */
+export type MoralDial = 'dark' | 'balanced' | 'wholesome';
 
 /** ターム内の進行フェーズ (起承転結 + 後処理)。 */
 export type Phase =
@@ -140,6 +147,8 @@ export interface ScheduledIncident {
   fired: boolean;
   /** designed=true 後に確定する詳細デザイン (未デザインなら null)。 */
   design: IncidentDesign | null;
+  /** このスケジュールが拾った火種 id (§v1.4-B)。裁判決着で回収する。無ければ自由テーマ。 */
+  arcThreadId?: string;
 }
 
 /** 村のしきたり (§12.8.1)。適当に用意され、事件の火種になる。 */
@@ -186,6 +195,17 @@ export interface MartialState {
   untilTerm: number;
 }
 
+/** 場所の状態 (§v1.4-A' spot)。defiled=穢れ (荒れやすい) / blessed=清め (和む)。 */
+export type SpotMode = 'defiled' | 'blessed';
+
+/** 場所の状態 1 件 (§v1.4-A')。place は placeAt のラベル (広場/住宅地/村はずれ)。 */
+export interface PlaceStateEntry {
+  place: string;
+  state: SpotMode;
+  /** この term を超えたら失効 (日末に掃除)。term < untilTerm の間だけ有効。 */
+  untilTerm: number;
+}
+
 export interface WorldConfig {
   gridWidth: number;
   gridHeight: number;
@@ -219,6 +239,10 @@ export interface World {
   behaviorRules: BehaviorRule[];
   /** フィールドに落ちているアイテム (§16)。人手で配置し、日末に住民が拾う。 */
   items: FieldItem[];
+  /** 場所の状態 (§v1.4-A' spot)。プレイヤーが場所を荒らす/清めると数日残り、日常行動に効く。 */
+  placeStates: PlaceStateEntry[];
+  /** 火種 (§v1.4-B PlotThread)。事件の結末が残す持ち越し状態。日末に減衰。 */
+  plotThreads: PlotThread[];
   /** 現村長の villager id (§17)。選挙イベントで村人世論により決まる。空位は null。 */
   mayorId: VillagerId | null;
   /** 次の村長選挙までの残りターム数 (§17)。 */

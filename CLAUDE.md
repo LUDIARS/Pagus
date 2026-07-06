@@ -43,3 +43,5 @@ LLM 駆動で村人が自律行動し、事件 → 裁判 → 教育(改変) を
 - 企画正本: Notion「AI村を作ろう」(開発ゼミ 研究テーマ配下)
 - 設計正本: `spec/SPEC.md`
 - LLM 整形: `@ludiars/llm-gateway` (Lapilli)
+- 裁判判例 (kill/spare の LLM 卒業): `@ludiars/blackbox` (Lapilli)、`spec/feature/trial-precedent.md`。
+  判例は `data/runtime/blackbox.json`、レビューは `/api/blackbox/*`

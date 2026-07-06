@@ -1,10 +1,10 @@
 // data/ アンカーから world.config と どうぶつ seed を読む。
 // 設定不備は即エラー (無言フォールバック禁止 — RULE_CODE §7.1)。
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { createVillager, type WorldConfig, type Villager } from '@pagus/sim';
+import { createVillager, validateArcs, type WorldConfig, type Villager, type ArcRule } from '@pagus/sim';
 import type { VillagerSeed } from '@pagus/sim';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -40,6 +40,16 @@ export function loadConfig(): WorldConfig {
     if (typeof cfg[k] !== 'number') throw new Error(`world.config.json の ${k} が不正です`);
   }
   return cfg as WorldConfig;
+}
+
+/**
+ * 事件アークの派生表 (§v1.4-B, data/incident-arcs.json)。ファイルが無ければ null
+ * (= sim の DEFAULT_ARCS を使う正規の既定分岐)。内容不正は throw (無言フォールバック禁止)。
+ */
+export function loadIncidentArcs(): ArcRule[] | null {
+  const path = resolve(dataDir(), 'incident-arcs.json');
+  if (!existsSync(path)) return null;
+  return validateArcs(readJson(path));
 }
 
 export function loadSeed(): Villager[] {

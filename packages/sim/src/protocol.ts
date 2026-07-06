@@ -1,7 +1,7 @@
 // WS 配線契約。World は Map を持ち JSON 化できないので、villagers を配列にした
 // WireWorld を介して server→client へ送る。client もこの型だけ見れば描画できる。
 
-import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, ScheduledParty, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll, ResidentHistoryEntry, VillagerRelationship, UserFaithEntry, VillagerActionEntry, VillagerGachaKind } from './types/index.js';
+import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, ScheduledParty, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll, PlaceStateEntry, PlotThread, MoralDial, ResidentHistoryEntry, VillagerRelationship, UserFaithEntry, VillagerActionEntry, VillagerGachaKind } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 import { defaultBehaviorRules, type BehaviorRule } from './behavior-rules.js';
 
@@ -20,6 +20,10 @@ export interface WireWorld {
   behaviorRules: BehaviorRule[];
   /** フィールドに落ちているアイテム (§16)。 */
   items: FieldItem[];
+  /** 場所の状態 (§v1.4-A' spot)。 */
+  placeStates: PlaceStateEntry[];
+  /** 火種 (§v1.4-B)。 */
+  plotThreads: PlotThread[];
   /** 現村長の villager id (§17)。空位は null。 */
   mayorId: string | null;
   /** 次の村長選挙までの残りターム数 (§17)。 */
@@ -49,6 +53,8 @@ export function toWire(world: World): WireWorld {
     villageRules: world.villageRules,
     behaviorRules: world.behaviorRules,
     items: world.items,
+    placeStates: world.placeStates,
+    plotThreads: world.plotThreads,
     mayorId: world.mayorId,
     mayorTermsLeft: world.mayorTermsLeft,
     mayorPoll: world.mayorPoll,
@@ -78,6 +84,8 @@ export function fromWire(wire: WireWorld): World {
     villageRules: wire.villageRules ?? [],
     behaviorRules: wire.behaviorRules ?? defaultBehaviorRules(),
     items: wire.items ?? [],
+    placeStates: wire.placeStates ?? [],
+    plotThreads: wire.plotThreads ?? [],
     mayorId: wire.mayorId ?? null,
     mayorTermsLeft: wire.mayorTermsLeft ?? 0,
     mayorPoll: wire.mayorPoll ?? null,
@@ -115,6 +123,45 @@ export interface WorldSnapshot {
   incidentCount: number;
   /** TermMachine.ruleCount (ふるまいの法則の通し番号, §2.1)。 */
   ruleCount: number;
+}
+
+/**
+ * テーマパック (§v1.4-D LexiconPack) の語彙。server が data/theme/<pack>/lexicon.json から
+ * ロードし (キー欠落は fail-fast)、theme メッセージで client へ配る。sim は不変。
+ */
+export interface ThemeLexicon {
+  /** パックの表示名 (例: クラシック / 精霊の森)。 */
+  packName: string;
+  /** 開廷の見出し (例: 審判の時 / 禊の儀)。 */
+  trialOpen: string;
+  stageFoolish: string;
+  stageFate: string;
+  stageDecided: string;
+  verdictDeathJa: string;
+  verdictDeathEn: string;
+  verdictEducateJa: string;
+  verdictEducateEn: string;
+  verdictDeathResult: string;
+  verdictEducateResult: string;
+  /** feed の判決行の接頭辞 (例: 判決 / 御宣託)。chronicle の分類にも使う。 */
+  verdictFeedPrefix: string;
+  /** 制裁の feed 行 ({name} を差し込む)。 */
+  sanctionFeed: string;
+  /** プレイヤーの罵倒/擁護、法廷の定型糾弾 ({d}=被告)/やり返し ({t}=相手)、断末魔/安堵。 */
+  taunts: string[];
+  defenses: string[];
+  denounces: string[];
+  retorts: string[];
+  screams: string[];
+  reliefs: string[];
+  /** 狂人の表示名 (例: 狂人 / いたずら妖精)。 */
+  madmanLabel: string;
+  /** 毒饅頭コマンドの表示名。 */
+  giftPoisonLabel: string;
+  /** Haiku 糾弾生成に足すトーン指示。 */
+  denounceTone: string;
+  /** 糾弾レパートリーの種セリフ。 */
+  denounceSeeds: string[];
 }
 
 /** 裁判の糾弾セリフ (server が生成/再利用して配る)。 */
@@ -171,7 +218,12 @@ export interface PlayerActionEntry {
     | 'revolt'
     | 'martial'
     | 'pray'
-    | 'raidStrike';
+    | 'raidStrike'
+    | 'heckle'
+    | 'testify'
+    | 'gift'
+    | 'spot'
+    | 'fanFlames';
   /** 介入対象または公開表示する内容。 */
   target: string;
 }
@@ -182,10 +234,32 @@ export interface PlayerState {
   karma: number;
   /** プレイヤー善性 (応援で上がり、制裁コストを重くする)。 */
   virtue: number;
+  /** 表示名。未設定なら null。 */
+  userName: string | null;
   /** いま制裁に必要なカルマ (善性込みの実コスト)。 */
   sanctionCost: number;
+  /** いま扇動に必要なカルマ (固定コスト)。 */
+  inciteCost: number;
   /** 次に応援できるまでの残りミリ秒 (0 = いま可能)。 */
   canCheerInMs: number;
+  /** 野次の固定コスト。 */
+  heckleCost: number;
+  /** 次に野次できるまでの残りミリ秒。 */
+  canHeckleInMs: number;
+  /** 証言の固定コスト。 */
+  testifyCost: number;
+  /** 差し入れの固定コスト。 */
+  giftTreatCost: number;
+  /** 毒饅頭の固定コスト。 */
+  giftPoisonCost: number;
+  /** 場所介入の固定コスト。 */
+  spotCost: number;
+  /** 噂の増幅の固定コスト。 */
+  fanFlamesCost: number;
+  /** 推し (champion) の villager id。未指名は null。 */
+  championId: string | null;
+  /** 推しの名前。 */
+  championName?: string;
   /** 累計課金額 (§v1.3-F 課金モック)。topup でカルマと共に増える。 */
   spent: number;
   /** 月次配布されるイベントカードの所持数。 */
@@ -346,6 +420,7 @@ export type ServerMessage =
   | { t: 'trialVoices'; incidentId: string; voices: TrialVoice[] } // 他ユーザーの裁判の声と住民の応答
   | { t: 'llm'; info: LlmInfo } // 稼働中の LLM 構成
   | { t: 'chronicle'; entries: ChronicleEntry[] } // 村の歴史
+  | { t: 'theme'; pack: string; moral: MoralDial; lexicon: ThemeLexicon } // テーマパック (§v1.4-D, 接続時+起動時)
   | {
       t: 'playerState'; // その接続ユーザの状態
       karma: number;
@@ -356,6 +431,21 @@ export type ServerMessage =
       /** いま扇動に必要なカルマ (固定コスト, §4 消費カルマ表示用)。 */
       inciteCost: number;
       canCheerInMs: number;
+      // --- 即効介入 (§v1.4-A) のコスト/クールダウン表示用 ---
+      /** 野次の固定コスト。 */
+      heckleCost: number;
+      /** 次に野次できるまでの残りミリ秒 (0 = いま可能)。 */
+      canHeckleInMs: number;
+      /** 証言の固定コスト。 */
+      testifyCost: number;
+      /** 差し入れ (treat) の固定コスト。 */
+      giftTreatCost: number;
+      /** 毒饅頭 (poison) の固定コスト。 */
+      giftPoisonCost: number;
+      /** 場所を荒らす/清める (spot) の固定コスト。 */
+      spotCost: number;
+      /** 噂の増幅 (fanFlames) の固定コスト。 */
+      fanFlamesCost: number;
       /** 推し (champion) の villager id。未指名は null (§1)。 */
       championId?: string | null;
       /** 推しの名前 (index が world から補完)。未指名/不在なら省略。 */
@@ -425,6 +515,12 @@ export type ClientMessage =
   | { t: 'incite'; targetId: string; rumorAboutId?: string; userId?: string } // 対象に偽情報を吹き込み事件化を促す (§4.2)
   | { t: 'sanction'; targetId: string; userId?: string } // 対象を即時つるし上げ裁判にかける (§4.3)
   | { t: 'cheer'; targetId: string; userId?: string } // 対象の気質を後押しする (§4.5)
+  // --- 即効介入 (§v1.4-A): 短期に見えて環境に爪痕を残す操作 ---
+  | { t: 'heckle'; side: 'agitate' | 'soothe'; userId?: string } // 進行中の事件へ野次を飛ばす
+  | { t: 'testify'; stance: 'accuse' | 'defend'; text?: string; userId?: string } // 裁判の fate 段階へ証言を投げ込む
+  | { t: 'gift'; targetId: string; kind: 'treat' | 'poison'; userId?: string } // 差し入れ/毒饅頭を手渡す
+  | { t: 'spot'; place: string; mode: 'defile' | 'bless'; userId?: string } // 場所を荒らす/清める (§v1.4-A')
+  | { t: 'fanFlames'; targetId: string; userId?: string } // 対象の噂を近傍へ言いふらす (§v1.4-A')
   | { t: 'vote'; pick: string; userId?: string } // 裁判への 1 票 (foolish=候補id / fate='kill'|'spare')。userId で接続ユーザを区別 (重み合算)
   | { t: 'champion'; targetId: string; userId?: string } // 推しを 1 体指名 (§1)。再送で差し替え
   | { t: 'villagerGacha'; kind: VillagerGachaKind; userId?: string }

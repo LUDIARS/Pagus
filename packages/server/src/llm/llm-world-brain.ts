@@ -15,6 +15,7 @@ import {
   type IncidentDesign,
   type RuleProposalContext,
   type BehaviorRule,
+  type DistillContext,
 } from '@pagus/sim';
 
 import { estimateTokens } from '@ludiars/llm-gateway';
@@ -24,7 +25,7 @@ import { CliLlmClient, type CliLlmClientOptions } from './cli-llm-client.js';
 import { BackendRegistry } from './backend-registry.js';
 import type { Backend } from './backend-registry.js';
 import type { CostSink } from './cost-log.js';
-import { buildWorldPrompt, buildHolidayPrompt, buildSchedulePrompt, buildDesignPrompt, buildRulePrompt, type PromptParts } from './prompt-build.js';
+import { buildWorldPrompt, buildHolidayPrompt, buildSchedulePrompt, buildDesignPrompt, buildRulePrompt, buildDistillPrompt, type PromptParts } from './prompt-build.js';
 import {
   extractJson,
   coerceDayEvaluation,
@@ -251,6 +252,28 @@ export class LlmWorldBrain implements WorldBrain {
       this.markBackendOffline(backend, parts, e);
       return fallback();
     }
+  }
+
+  /** 乖離ケースを説明するルールを蒸留する (§v1.4-C)。世界エンジン同様 codex fast を使う。 */
+  async distillRule(ctx: DistillContext): Promise<BehaviorRule> {
+    const parts = buildDistillPrompt(ctx);
+    const backend = CODEX_FAST_WORLD_BACKEND;
+    const client = this.clientFor(backend);
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { text } = await client.invoke({
+        system: parts.system,
+        prompt: parts.prompt,
+        model: backend.model,
+      });
+      this.reportCost(parts, backend, text);
+      try {
+        return coerceBehaviorRule(extractJson(text));
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw new Error(`蒸留ルールの parse に失敗 (backend=${backend.id}): ${(lastErr as Error).message}`);
   }
 
   private clientFor(backend: Backend): LlmClient {

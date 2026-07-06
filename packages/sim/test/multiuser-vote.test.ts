@@ -28,6 +28,8 @@ describe('複数ユーザの通知投票 (重み合算 / 投票し直し)', () =
     const w = harshWorld();
     const tm = new TermMachine(w, new StubBrain(), {
       director: new EventDirector({ rng: () => 0, maxRepsPerSegment: 1 }),
+      // ユーザ票の合算だけを検証する: 裁判バリエーション (§v1.4-B) は無効化。
+      trialComposeConfig: { witnessMax: 0, witnessWeight: 0, revealChance: 0 },
     });
     await driveToFoolish(tm, w);
     expect(w.trial?.stage).toBe('foolish');
@@ -42,6 +44,8 @@ describe('複数ユーザの通知投票 (重み合算 / 投票し直し)', () =
     const w = harshWorld();
     const tm = new TermMachine(w, new StubBrain(), {
       director: new EventDirector({ rng: () => 0, maxRepsPerSegment: 1 }),
+      // ユーザ票の合算だけを検証する: 裁判バリエーション (§v1.4-B) は無効化。
+      trialComposeConfig: { witnessMax: 0, witnessWeight: 0, revealChance: 0 },
     });
     await driveToFoolish(tm, w);
 
