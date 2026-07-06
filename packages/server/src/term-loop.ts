@@ -35,6 +35,19 @@ export interface LoopHandlers {
   onVillagerAction?(entry: { villager: string; action: string }): void;
   /** 裁判が開いた (承→転) ときに 1 度だけ呼ぶ。糾弾セリフ生成のフック。 */
   onTrialOpen?(world: World): void;
+  /** 裁判の判決・教育/死刑適用が終わったときに呼ぶ。Haiku サマリー生成用。 */
+  onTrialClosed?(info: TrialCloseInfo): void;
+}
+
+export interface TrialCloseInfo {
+  date: string;
+  incident: string;
+  defendant: string;
+  verdict: 'death' | 'spared';
+  killVotes: number;
+  spareVotes: number;
+  reformText: string | null;
+  testimonies: string[];
 }
 
 /** ふるまいの法則の Haiku 増殖設定 (§2.1)。 */
@@ -264,8 +277,28 @@ export class TermLoop {
         break;
       case 'reform': {
         // どのように「いじられた」かをログに出す。
+        const trial = this.tm.world.trial;
+        const incident = this.tm.world.incident;
+        const defendant = trial?.defendant ? this.tm.world.villagers.get(trial.defendant)?.name ?? trial.defendant : null;
+        const closeInfo = trial && incident && defendant && trial.verdict ? {
+          date: `${this.tm.world.calendar.month}月${this.tm.world.calendar.dayOfMonth}日`,
+          incident: incident.description,
+          defendant,
+          verdict: trial.verdict,
+          killVotes: trial.fateVotes.kill,
+          spareVotes: trial.fateVotes.spare,
+          reformText: null as string | null,
+          testimonies: (trial.testimonies ?? []).map((t) => {
+            const side = t.stance === 'accuse' ? '死刑側' : '教育側';
+            return `${side}: ${t.text ?? t.userId}`;
+          }),
+        } satisfies TrialCloseInfo : null;
         const summary = this.tm.applyReform();
         this.h.onLog('kisho', summary ? `✦ ${summary.text}` : '✦ 改変が適用された');
+        if (closeInfo) {
+          closeInfo.reformText = summary?.text ?? null;
+          this.h.onTrialClosed?.(closeInfo);
+        }
         break;
       }
       case 'advance': {

@@ -54,7 +54,7 @@ async function main(): Promise<void> {
     onRemoveRule: (ruleId: string) => conn.send({ t: 'removeRule', ruleId, userId }),
   };
   const chronicle = new ChronicleView(el('chronicle'), el('chronicle-body'), el('hist-btn'), el('chronicle-close'), undefined, {
-    tabs: ['highlight', 'incidents', 'trial', 'life', 'education', 'calendar', 'rules', 'villagers', 'actions', 'other'],
+    tabs: ['highlight', 'logs', 'trial', 'life', 'rules', 'villagers', 'actions', 'other'],
   });
   const interventionRules = new ChronicleView(null, el('intervention-rules'), null, null, {
     ...ruleHandlers,

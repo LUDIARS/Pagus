@@ -293,78 +293,155 @@ function row(title: string, meta: string, onClick?: () => void): HTMLElement {
 
 function villagerDetails(w: WireWorld, v: Villager): HTMLElement {
   const box = document.createElement('div');
+  box.className = 'resident-detail';
   const names = villagerNameMap(w);
   const alive = new Set(w.villagers.filter((x) => x.alive).map((x) => x.id));
   const profile = lifeProfileFor(v);
   const now = timeOfDayForSegment(w.calendar.segment, w.config.segmentsPerDay);
   const awake = isAwake(v.activity, w.calendar.segment, w.config.segmentsPerDay);
   const latest = latestActionByVillager(w).get(v.id);
+  const routine = awake ? routineTextFor(v, now) : sleepRoutineTextFor(now);
 
-  const title = document.createElement('div');
-  title.className = 'resident-detail-title';
-  title.textContent = `${v.name} (${v.species})`;
-  const meta = document.createElement('div');
-  meta.className = 'resident-detail-meta';
-  meta.textContent = [
-    v.alive ? '生存' : '退場',
-    `出自:${originLabel(v.origin)}`,
-    `活動:${activityLabel(v.activity)}`,
-    awake ? '起床中' : '睡眠中',
-    `職能:${profile.label}`,
-  ].join(' / ');
-  box.append(title, meta);
+  const hero = document.createElement('div');
+  hero.className = 'resident-detail-hero';
+  hero.append(
+    detailIdentity(`${v.name} (${v.species})`, [
+      v.alive ? '生存' : '退場',
+      originLabel(v.origin),
+      activityLabel(v.activity),
+      awake ? '起床中' : '睡眠中',
+      profile.label,
+    ]),
+    statPills([
+      ['LLM', brainLabelFor(w, v.id)],
+      ['気分', v.emotion.label],
+      ['趣味', HOBBY_LABELS[v.hobby]],
+      ['所持', String(Math.round(v.wealth))],
+    ]),
+  );
+  box.appendChild(hero);
 
-  const currentRoutine = awake ? routineTextFor(v, now) : sleepRoutineTextFor(now);
-  box.appendChild(section('現在', [
-    `場所: (${v.position.x}, ${v.position.y})`,
-    `LLM脳: ${brainLabelFor(w, v.id)}`,
-    `日課: ${currentRoutine}`,
-    `気分: ${v.emotion.label}`,
-    `ストレス: ${v.stress}`,
-    `所持金: ${Math.round(v.wealth)} / 趣味:${HOBBY_LABELS[v.hobby]}`,
-    latest ? `最近の行動: ${latest}` : '最近の行動: なし',
-  ]));
-
-  box.appendChild(section('日々のルーティーン', [
-    `朝: ${profile.routine.morning}`,
-    `昼: ${profile.routine.noon}`,
-    `夕: ${profile.routine.evening}`,
-    `夜: ${profile.routine.night}`,
-  ]));
-
-  box.appendChild(section('事件の火種', [
-    profile.incident.description,
-    `発火しやすさ: ${profile.incident.triggerWeight >= 0.7 ? '高' : profile.incident.triggerWeight >= 0.45 ? '中' : '低'}`,
-  ]));
-
-  box.appendChild(section('性格', [
-    `主軸: ${PERSONALITY_LABELS[dominantAxis(v.persona.traits)]}`,
-    ...Object.entries(v.persona.traits).map(([axis, value]) => `${PERSONALITY_LABELS[axis as keyof typeof PERSONALITY_LABELS] ?? axis}: ${value.toFixed(2)}`),
-  ]));
-
-  box.appendChild(section('関係', relationshipLines(w, v, names, alive)));
-  box.appendChild(section('信条と記憶', [
-    `信条: ${v.persona.values.join(' / ') || 'なし'}`,
-    `口調: ${v.persona.speechStyle}`,
-    ...v.information.slice(-4).map((info) => `記憶: ${info.text}`),
-  ]));
+  const grid = document.createElement('div');
+  grid.className = 'resident-detail-grid';
+  grid.append(
+    detailCard('現在', [
+      metric('場所', `${v.position.x}, ${v.position.y}`),
+      metric('日課', routine),
+      metric('直近行動', latest ?? 'なし'),
+      meter('ストレス', Math.min(1, v.stress / 10), String(v.stress)),
+    ]),
+    detailCard('日々のルーティーン', [
+      timeline('朝', profile.routine.morning),
+      timeline('昼', profile.routine.noon),
+      timeline('夕', profile.routine.evening),
+      timeline('夜', profile.routine.night),
+    ]),
+    detailCard('事件の火種', [
+      metric('種', profile.incident.description),
+      meter('発火しやすさ', profile.incident.triggerWeight, triggerLabel(profile.incident.triggerWeight)),
+    ]),
+    detailCard('性格', [
+      metric('主軸', PERSONALITY_LABELS[dominantAxis(v.persona.traits)]),
+      ...Object.entries(v.persona.traits).map(([axis, value]) => meter(PERSONALITY_LABELS[axis as keyof typeof PERSONALITY_LABELS] ?? axis, value, value.toFixed(2))),
+    ]),
+    detailCard('関係', relationshipLines(w, v, names, alive).map((line) => metric('', line))),
+    detailCard('信条と記憶', [
+      metric('信条', v.persona.values.join(' / ') || 'なし'),
+      metric('口調', v.persona.speechStyle),
+      ...v.information.slice(-4).map((info) => metric('記憶', info.text)),
+    ]),
+  );
+  box.appendChild(grid);
   return box;
 }
 
-function section(title: string, lines: string[]): HTMLElement {
+function detailIdentity(name: string, badges: string[]): HTMLElement {
   const box = document.createElement('div');
-  box.className = 'resident-detail-section';
   const h = document.createElement('div');
-  h.className = 'resident-detail-section-title';
-  h.textContent = title;
-  box.appendChild(h);
-  for (const line of lines.length > 0 ? lines : ['なし']) {
-    const row = document.createElement('div');
-    row.className = 'resident-detail-line';
-    row.textContent = line;
-    box.appendChild(row);
+  h.className = 'resident-detail-title';
+  h.textContent = name;
+  const row = document.createElement('div');
+  row.className = 'resident-detail-badges';
+  for (const badge of badges) {
+    const b = document.createElement('span');
+    b.textContent = badge;
+    row.appendChild(b);
+  }
+  box.append(h, row);
+  return box;
+}
+
+function statPills(items: [string, string][]): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'resident-detail-pills';
+  for (const [label, value] of items) {
+    const pill = document.createElement('div');
+    pill.className = 'resident-detail-pill';
+    pill.append(labelEl(label), valueEl(value));
+    box.appendChild(pill);
   }
   return box;
+}
+
+function detailCard(title: string, items: HTMLElement[]): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'resident-detail-card';
+  const h = document.createElement('div');
+  h.className = 'resident-detail-card-title';
+  h.textContent = title;
+  box.appendChild(h);
+  if (items.length === 0) box.appendChild(metric('', 'なし'));
+  else for (const item of items) box.appendChild(item);
+  return box;
+}
+
+function metric(label: string, value: string): HTMLElement {
+  const row = document.createElement('div');
+  row.className = label ? 'resident-detail-metric' : 'resident-detail-metric no-label';
+  if (label) row.appendChild(labelEl(label));
+  row.appendChild(valueEl(value));
+  return row;
+}
+
+function meter(label: string, raw: number, value: string): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'resident-detail-meter';
+  const head = document.createElement('div');
+  head.className = 'resident-detail-meter-head';
+  head.append(labelEl(label), valueEl(value));
+  const track = document.createElement('div');
+  track.className = 'resident-detail-meter-track';
+  const fill = document.createElement('i');
+  fill.style.width = `${Math.round(Math.max(0, Math.min(1, raw)) * 100)}%`;
+  track.appendChild(fill);
+  box.append(head, track);
+  return box;
+}
+
+function timeline(label: string, value: string): HTMLElement {
+  const row = metric(label, value);
+  row.classList.add('resident-detail-timeline');
+  return row;
+}
+
+function labelEl(text: string): HTMLElement {
+  const el = document.createElement('span');
+  el.className = 'resident-detail-label';
+  el.textContent = text;
+  return el;
+}
+
+function valueEl(text: string): HTMLElement {
+  const el = document.createElement('span');
+  el.className = 'resident-detail-value';
+  el.textContent = text;
+  return el;
+}
+
+function triggerLabel(weight: number): string {
+  if (weight >= 0.7) return '高';
+  if (weight >= 0.45) return '中';
+  return '低';
 }
 
 function relationshipLines(w: WireWorld, v: Villager, names: Map<string, string>, alive: Set<string>): string[] {

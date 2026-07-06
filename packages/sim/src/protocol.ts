@@ -179,6 +179,7 @@ export type ChronicleKind =
   | 'trial'
   | 'verdict'
   | 'reform'
+  | 'villager'
   | 'marriage'
   | 'birth'
   | 'reconcile'

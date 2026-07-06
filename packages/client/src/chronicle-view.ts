@@ -1,5 +1,5 @@
 // 村の歴史ビュー (§8)。モーダル/埋め込みの両方で使う。
-// タブで多面化: ハイライト / 事件 / 住民 / 教育 / 村のルール / 人間の行動記録。
+// タブで多面化: ハイライト / ログ / 裁判 / 暮らし / 住民 / 村のルール / 人間の行動記録。
 //   データ源は chronicle (entry.kind で分類) / 最新 snapshot (住民・村のルール) / playerActions。
 //   分類は server が ChronicleEntry.kind を明示する (絵文字接頭辞依存を廃止, §2.2)。
 
@@ -9,11 +9,9 @@ import { villagerDisplayName } from './villager-display.js';
 
 export type ChronicleTab =
   | 'highlight'
-  | 'incidents'
+  | 'logs'
   | 'trial'
   | 'life'
-  | 'education'
-  | 'calendar'
   | 'rules'
   | 'villagers'
   | 'actions'
@@ -21,11 +19,9 @@ export type ChronicleTab =
 
 const TABS: { id: ChronicleTab; label: string }[] = [
   { id: 'highlight', label: 'ハイライト' },
-  { id: 'incidents', label: '事件' },
+  { id: 'logs', label: 'ログ' },
   { id: 'trial', label: '裁判' },
   { id: 'life', label: '暮らし' },
-  { id: 'education', label: '教育' },
-  { id: 'calendar', label: '月日' },
   { id: 'rules', label: '村のルール' },
   { id: 'villagers', label: '住民' },
   { id: 'actions', label: '介入記録' },
@@ -161,20 +157,14 @@ export class ChronicleView {
       case 'highlight':
         this.renderEntryList(host, this.highlightEntries(), 'ハイライトはまだありません。');
         break;
-      case 'incidents':
-        this.renderEntryList(host, this.incidentEntries(), 'まだ事件は起きていません。');
+      case 'logs':
+        this.renderEntryList(host, this.logEntries(), 'まだログはありません。');
         break;
       case 'trial':
         this.renderEntryList(host, this.trialEntries(), 'まだ裁判の記録はありません。');
         break;
       case 'life':
         this.renderEntryList(host, this.lifeEntries(), 'まだ暮らしの記録はありません。');
-        break;
-      case 'education':
-        this.renderEntryList(host, this.educationEntries(), 'まだ教育(改変)は行われていません。');
-        break;
-      case 'calendar':
-        this.renderEntryList(host, this.calendarEntries(), 'まだ月日ごとの記録はありません。');
         break;
       case 'villagers':
         this.renderVillagers(host);
@@ -197,31 +187,22 @@ export class ChronicleView {
   }
 
   private highlightEntries(): ChronicleEntry[] {
-    return this.entriesOf(['day', 'month', 'incident', 'trial', 'verdict', 'marriage', 'birth', 'holiday'])
+    return this.entriesOf(['incident', 'trial', 'verdict', 'villager', 'marriage', 'birth', 'holiday'])
       .slice(-20)
       .reverse();
   }
 
-  /** 事件 = incident(発火/予兆) / reconcile(和解) / sanction(制裁) 種別 (§2.2)。 */
-  private incidentEntries(): ChronicleEntry[] {
-    return this.entriesOf(['incident', 'reconcile', 'sanction']);
+  /** ログ = 事件・和解・制裁・その他の運用ログ。 */
+  private logEntries(): ChronicleEntry[] {
+    return this.entriesOf(['incident', 'reconcile', 'sanction', 'holiday', 'other']);
   }
 
   private trialEntries(): ChronicleEntry[] {
-    return this.entriesOf(['trial', 'verdict']);
+    return this.entriesOf(['trial', 'verdict', 'reform']);
   }
 
   private lifeEntries(): ChronicleEntry[] {
     return this.entriesOf(['marriage', 'birth', 'holiday']);
-  }
-
-  /** 教育 = reform 種別 (§2.2)。 */
-  private educationEntries(): ChronicleEntry[] {
-    return this.entriesOf(['reform']);
-  }
-
-  private calendarEntries(): ChronicleEntry[] {
-    return this.entriesOf(['day', 'month']);
   }
 
   private otherEntries(): ChronicleEntry[] {
@@ -248,6 +229,12 @@ export class ChronicleView {
     if (!w || w.villagers.length === 0) {
       host.appendChild(div('住民の情報がありません。', 'muted'));
       return;
+    }
+    const history = this.entriesOf(['villager']).reverse().slice(0, 40);
+    if (history.length > 0) {
+      host.appendChild(div('追加と削除の記録', 'hist-date'));
+      for (const e of history) host.appendChild(div(e.text, 'hist-line'));
+      host.appendChild(div('現在の住民', 'hist-date'));
     }
     // 生存を先に、退場者を後ろに。
     const sorted = [...w.villagers].sort((a, b) => Number(b.alive) - Number(a.alive));
@@ -299,6 +286,11 @@ export class ChronicleView {
       for (const r of behaviorRules) {
         host.appendChild(div(`・${r.description}`, 'hist-line'));
       }
+    }
+    const history = this.entriesOf(['rule']).reverse().slice(0, 40);
+    if (history.length > 0) {
+      host.appendChild(div('追加と削除の記録', 'hist-date'));
+      for (const e of history) host.appendChild(div(e.text, 'hist-line'));
     }
   }
 

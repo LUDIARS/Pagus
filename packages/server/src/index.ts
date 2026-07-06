@@ -9,7 +9,7 @@
 import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, rollVillagerGacha, ensureResidentHistory, addVillagerActionLog, KARMA_GACHA_COST, shouldAdoptRule, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem, type VillagerGachaKind, type ChatMessage, type TrialState, type TrialVoice } from '@pagus/sim';
 import { loadConfig, loadSeed, loadIncidentArcs } from './load-data.js';
 import { loadPagusConfig, type PagusConfig } from './config/pagus-config.js';
-import { TermLoop } from './term-loop.js';
+import { TermLoop, type TrialCloseInfo } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
 import { PlayerState } from './player-state.js';
 import { AuctionManager } from './auction.js';
@@ -32,14 +32,12 @@ import { ShadowSampler } from './distill/shadow-sampler.js';
 /** 村の歴史に残す「節目」のログか判定する。verdictPrefix はテーマパックの判決接頭辞 (§v1.4-D)。 */
 function isMilestone(text: string, verdictPrefix = '判決'): boolean {
   return (
-    /^[⚡✦💍👶📅📜]/.test(text) ||
+    /^[⚡✦💍👶📅📜👤🎲]/.test(text) ||
     text.startsWith('—— ') ||
     text.startsWith('判決') ||
     text.startsWith(verdictPrefix) ||
     text.startsWith('🕊') ||
-    text.startsWith('⚖') ||
-    text.startsWith('──') ||
-    text.includes('月がかわった')
+    text.startsWith('⚖')
   );
 }
 
@@ -53,6 +51,7 @@ function classifyKind(text: string, verdictPrefix = '判決'): ChronicleKind {
   if (t.startsWith('🕊')) return 'reconcile';
   if (t.startsWith('⚖')) return 'sanction';
   if (t.startsWith('✦')) return 'reform';
+  if (t.startsWith('👤') || t.startsWith('🎲')) return 'villager';
   if (t.startsWith('💍')) return 'marriage';
   if (t.startsWith('👶')) return 'birth';
   if (t.startsWith('📜')) return 'rule';
@@ -140,6 +139,36 @@ async function summarizeDailyHighlight(
   } catch (e) {
     console.error('[pagus] daily highlight summary failed', e);
     return source.slice(-3).join(' / ');
+  }
+}
+
+async function summarizeTrial(
+  client: Pick<CliLlmClient, 'invoke'> | null,
+  info: TrialCloseInfo,
+): Promise<string> {
+  const verdict = info.verdict === 'death' ? '死刑' : '教育';
+  const fallback = `${info.defendant} は「${info.incident}」の裁判で ${verdict} となった。${info.reformText ?? ''}`.trim();
+  if (!client) return fallback.slice(0, 180);
+  try {
+    const testimony = info.testimonies.length > 0 ? info.testimonies.join(' / ') : 'なし';
+    const res = await client.invoke({
+      system: 'あなたは村シミュレーションの裁判記録係です。裁判の経緯、判決、教育または死刑の結末を日本語で120字以内に要約してください。詩ではなく記録文にしてください。',
+      prompt: [
+        `日付: ${info.date}`,
+        `事件: ${info.incident}`,
+        `被告: ${info.defendant}`,
+        `判決: ${verdict}`,
+        `票: 死刑${info.killVotes} / 教育${info.spareVotes}`,
+        `証言: ${testimony}`,
+        `適用結果: ${info.reformText ?? 'なし'}`,
+      ].join('\n'),
+      timeoutMs: 60_000,
+    });
+    const text = res.text.replace(/\s+/g, ' ').trim();
+    return (text || fallback).slice(0, 180);
+  } catch (e) {
+    console.error('[pagus] trial summary failed', e);
+    return fallback.slice(0, 180);
   }
 }
 
@@ -603,9 +632,19 @@ function main(): void {
     }
     let changed = false;
     const cal = w.calendar;
+    for (const id of currentAlive) {
+      if (prevAliveIds.has(id)) continue;
+      const v = w.villagers.get(id);
+      const name = v?.name ?? id;
+      const origin = v?.origin === 'incident' ? '事件由来' : v?.origin === 'born' ? '出生' : '復帰';
+      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `👤 住民追加: ${name} (${origin})`, 'villager');
+      changed = true;
+    }
     for (const id of prevAliveIds) {
       if (currentAlive.has(id)) continue; // まだ生きている
       const name = w.villagers.get(id)?.name ?? id;
+      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `👤 住民削除: ${name} が村からいなくなった`, 'villager');
+      changed = true;
       // 復活候補 (§v1.3-B ⑤): 最近退場した id を積む (重複は末尾へ寄せ直す)。
       const dupe = recentDeadIds.indexOf(id);
       if (dupe >= 0) recentDeadIds.splice(dupe, 1);
@@ -1020,7 +1059,7 @@ function main(): void {
       if (aliveInitialized) prevAliveIds.add(rolled.villager.id);
       const cal = tm.world.calendar;
       const paid = kind === 'karma' ? `カルマ${KARMA_GACHA_COST}` : '無料';
-      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `🎲 ${paid}ガチャ: ${rolled.villager.name} (${rolled.history.archetype ?? '新入り'}) が村に来た`, 'other');
+      chronicle.add(`${cal.month}月${cal.dayOfMonth}日`, `👤 住民追加: ${paid}ガチャで ${rolled.villager.name} (${rolled.history.archetype ?? '新入り'}) が村に来た`, 'villager');
       ws.updateChronicle(chronicle.recent());
       ws.broadcastSnapshot(tm.world);
       recordAction(userId, 'villagerGacha', rolled.villager.name, false);
@@ -1787,6 +1826,19 @@ function main(): void {
           if (lines.length > 0) ws.broadcastTrialLines(incidentId, lines);
         })
         .catch((e) => console.error('[pagus] 糾弾生成エラー', e));
+    },
+    onTrialClosed: (info) => {
+      void summarizeTrial(highlightClient, info)
+        .then((summary) => {
+          const line = `⚖ 裁判サマリー: ${summary}`;
+          ws.broadcastLog('ketsu', line);
+          sessionLog.line('ketsu', line);
+          dailyLogs.push(line);
+          chronicle.add(info.date, line, 'trial');
+          ws.updateChronicle(chronicle.recent());
+          spectacle.recordHighlight(info.date, '裁判サマリー', 'trial', summary);
+        })
+        .catch((e) => console.error('[pagus] 裁判サマリー生成エラー', e));
     },
   }, {
     // ふるまいの法則の Haiku 増殖 (§2.1)。config sim.rulegenEnabled で切替 (既定有効)。
