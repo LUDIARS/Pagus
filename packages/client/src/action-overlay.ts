@@ -41,7 +41,8 @@ export class ActionOverlay {
     private readonly options: ActionOverlayOptions = {},
   ) {
     // data-tab セクションを集め、data-label でタブボタンを生成する。
-    this.sections = Array.from(root.querySelectorAll<HTMLElement>('.ao-tab'));
+    this.sections = Array.from(root.querySelectorAll<HTMLElement>('.ao-tab'))
+      .filter((sec) => !sec.hidden && sec.dataset.hidden !== 'true');
     for (const sec of this.sections) {
       const id = sec.dataset.tab ?? '';
       const btn = document.createElement('button');

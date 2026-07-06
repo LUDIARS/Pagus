@@ -16,6 +16,11 @@ export interface ItemHandlers {
   onSpot(place: string, mode: 'defile' | 'bless'): void;
 }
 
+export interface ItemPanelOptions {
+  /** 場所を荒らす/清める操作を表示するか。機能自体は server に残す。 */
+  showSpot?: boolean;
+}
+
 const KINDS: { value: ItemKind; label: string }[] = [
   { value: 'random', label: '🎲 ランダム' },
   { value: 'precious', label: '💎 貴金属' },
@@ -36,6 +41,7 @@ export class ItemPanel {
   constructor(
     private readonly root: HTMLElement,
     private readonly h: ItemHandlers,
+    private readonly options: ItemPanelOptions = {},
   ) {
     this.root.replaceChildren();
     const head = document.createElement('h3');
@@ -64,28 +70,30 @@ export class ItemPanel {
     this.root.appendChild(this.actionBtn('⭐ 推しに送る', 'item-champion', () => this.h.onPlace(this.kind, true)));
     this.root.appendChild(hint('「推しに送る」は先に推しを指名しておくこと。'));
 
-    // 場所介入 (§v1.4-A'): 荒らす/清める。
-    const head2 = document.createElement('h3');
-    head2.textContent = '🗺 場所';
-    this.root.appendChild(head2);
-    this.root.appendChild(hint('場所そのものを荒らす/清める。その場の住民が即反応し、効果は数日残る。'));
-    this.root.appendChild(subLabel('場所'));
-    const placeRow = document.createElement('div');
-    placeRow.className = 'item-kinds';
-    for (const place of SPOT_PLACES) {
-      const btn = document.createElement('button');
-      btn.className = 'item-kind-btn';
-      btn.textContent = place;
-      btn.addEventListener('click', () => this.selectPlace(place));
-      placeRow.appendChild(btn);
-      this.placeButtons.set(place, btn);
+    if (this.options.showSpot ?? true) {
+      // 場所介入 (§v1.4-A'): 荒らす/清める。
+      const head2 = document.createElement('h3');
+      head2.textContent = '🗺 場所';
+      this.root.appendChild(head2);
+      this.root.appendChild(hint('場所そのものを荒らす/清める。その場の住民が即反応し、効果は数日残る。'));
+      this.root.appendChild(subLabel('場所'));
+      const placeRow = document.createElement('div');
+      placeRow.className = 'item-kinds';
+      for (const place of SPOT_PLACES) {
+        const btn = document.createElement('button');
+        btn.className = 'item-kind-btn';
+        btn.textContent = place;
+        btn.addEventListener('click', () => this.selectPlace(place));
+        placeRow.appendChild(btn);
+        this.placeButtons.set(place, btn);
+      }
+      this.root.appendChild(placeRow);
+      this.defileBtn.className = 'item-btn spot-defile';
+      this.defileBtn.addEventListener('click', () => this.h.onSpot(this.place, 'defile'));
+      this.blessBtn.className = 'item-btn spot-bless';
+      this.blessBtn.addEventListener('click', () => this.h.onSpot(this.place, 'bless'));
+      this.root.append(this.defileBtn, this.blessBtn);
     }
-    this.root.appendChild(placeRow);
-    this.defileBtn.className = 'item-btn spot-defile';
-    this.defileBtn.addEventListener('click', () => this.h.onSpot(this.place, 'defile'));
-    this.blessBtn.className = 'item-btn spot-bless';
-    this.blessBtn.addEventListener('click', () => this.h.onSpot(this.place, 'bless'));
-    this.root.append(this.defileBtn, this.blessBtn);
 
     this.selectKind('random');
     this.selectPlace(SPOT_PLACES[0]);
@@ -95,6 +103,7 @@ export class ItemPanel {
   /** 場所介入のコスト表示を playerState から更新する。 */
   setCosts(spotCost: number): void {
     this.spotCost = spotCost;
+    if (!(this.options.showSpot ?? true)) return;
     this.renderSpot();
   }
 

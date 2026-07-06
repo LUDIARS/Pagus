@@ -153,7 +153,7 @@ async function main(): Promise<void> {
     onPlace: (kind, toChampion) => conn.send({ t: 'placeItem', kind, toChampion, userId }),
     // 場所介入 (§v1.4-A'): 荒らす/清める。
     onSpot: (place, mode) => conn.send({ t: 'spot', place, mode, userId }),
-  });
+  }, { showSpot: false });
 
   const residentHandlers: ResidentPanelHandlers = {
     onGacha: (kind) => conn.send({ t: 'villagerGacha', kind, userId }),
