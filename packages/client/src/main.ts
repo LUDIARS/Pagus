@@ -24,6 +24,9 @@ import { ActionOverlay } from './action-overlay.js';
 import { ChatPanel } from './chat-panel.js';
 import { connect, type Conn } from './ws-client.js';
 import { getUserId, getUserName, setUserId, setUserName, enablePush } from './push-client.js';
+import { lockPageZoom } from './lock-page-zoom.js';
+
+lockPageZoom();
 
 // 既定は同一オリジンの /ws (Vite が game server 4310 へ proxy)。
 // → ローカルでもトンネル (pagus.vtn-game.com) 越しでも繋がる。VITE_WS_URL で上書き可。
@@ -310,7 +313,18 @@ async function main(): Promise<void> {
   const pushBtn = el('push-btn');
   const settingsBtn = el('settings-btn');
   const settingsMenu = el('settings-menu');
-  settingsBtn.addEventListener('click', () => settingsMenu.classList.toggle('show'));
+  const settingsClose = el('settings-close');
+  const setSettingsOpen = (open: boolean): void => {
+    settingsMenu.classList.toggle('show', open);
+  };
+  settingsBtn.addEventListener('click', () => setSettingsOpen(!settingsMenu.classList.contains('show')));
+  settingsClose.addEventListener('click', () => setSettingsOpen(false));
+  settingsMenu.addEventListener('click', (event) => {
+    if (event.target === settingsMenu) setSettingsOpen(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') setSettingsOpen(false);
+  });
   pushBtn.addEventListener('click', () => {
     pushBtn.textContent = '🔔 …';
     enablePush()
