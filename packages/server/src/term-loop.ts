@@ -37,10 +37,20 @@ export interface LoopHandlers {
   onLog(phase: World['phase'], text: string): void;
   onVillagerAction?(entry: { villager: string; action: string }): void;
   onIncidentDesigned?(entry: { design: IncidentDesign; spawned: Villager[]; naming: IncidentNaming[] }): void;
+  onEventStarted?(entry: LoopEventStart): void;
   /** 裁判が開いた (承→転) ときに 1 度だけ呼ぶ。糾弾セリフ生成のフック。 */
   onTrialOpen?(world: World): void;
   /** 裁判の判決・教育/死刑適用が終わったときに呼ぶ。Haiku サマリー生成用。 */
   onTrialClosed?(info: TrialCloseInfo): void;
+}
+
+export interface LoopEventStart {
+  kind: 'mystery' | 'trial' | 'life';
+  eventId: string;
+  title: string;
+  subtitle?: string;
+  replay: string[];
+  participants?: string[];
 }
 
 export interface TrialCloseInfo {
@@ -52,6 +62,12 @@ export interface TrialCloseInfo {
   spareVotes: number;
   reformText: string | null;
   testimonies: string[];
+}
+
+function shortEventTitle(text: string, max = 24): string {
+  const normalized = text.replace(/\s+/g, ' ').replace(/[。.!?].*$/u, '').trim();
+  if (normalized.length <= max) return normalized || '村の出来事';
+  return `${normalized.slice(0, max)}...`;
 }
 
 /** ふるまいの法則の Haiku 増殖設定 (§2.1)。 */
@@ -113,7 +129,11 @@ export class TermLoop {
    */
   sanction(targetId: string): boolean {
     const ok = this.tm.sanction(targetId);
-    if (ok && this.tm.world.phase === 'ten') this.h.onTrialOpen?.(this.tm.world);
+    if (ok && this.tm.world.phase === 'ten') {
+      const event = this.trialEventStart(this.tm.world);
+      if (event) this.h.onEventStarted?.(event);
+      this.h.onTrialOpen?.(this.tm.world);
+    }
     return ok;
   }
 
@@ -209,6 +229,82 @@ export class TermLoop {
     return `${stage} / 残り${pending}組 / 被告=${defendant} / 死刑${t.fateVotes.kill}-教育${t.fateVotes.spare}`;
   }
 
+  private mysteryEventStart(): LoopEventStart | null {
+    const sched = this.tm.world.scheduledIncident;
+    const incident = this.tm.world.incident;
+    const design = sched?.design;
+    if (!incident && !design) return null;
+    const description = design?.description ?? incident?.description ?? '村で不可解な事件が起きた';
+    const involvedIds = design?.involvedIds ?? incident?.involved ?? [];
+    const names = involvedIds.map((id) => this.tm.world.villagers.get(id)?.name ?? id).slice(0, 5);
+    const title = `マーダーミステリー: ${shortEventTitle(sched?.themeSeed ?? description)}`;
+    return {
+      kind: 'mystery',
+      eventId: `mystery:${incident?.id ?? sched?.dayOfMonth ?? Date.now()}`,
+      title,
+      subtitle: description,
+      participants: names,
+      replay: [
+        `司会役: 猫守が現れ、「${shortEventTitle(description)}」の開幕を告げた。`,
+        `導入: ${description}`,
+        names.length > 0 ? `関係者: ${names.join('、')}` : '関係者: LLMが村の証言者を補った',
+        '進行: 証言、疑念、投票の順に村のブラックボックスエンジンが場を進める。',
+      ],
+    };
+  }
+
+  private trialEventStart(world: World): LoopEventStart | null {
+    const incident = world.incident;
+    const trial = world.trial;
+    if (!incident || !trial) return null;
+    const candidates = trial.candidates.map((id) => world.villagers.get(id)?.name ?? id).slice(0, 6);
+    return {
+      kind: 'trial',
+      eventId: `trial:${incident.id}`,
+      title: `公開裁判: ${shortEventTitle(incident.description)}`,
+      subtitle: '3ラウンド制。ユーザー投票は村人同士の親交にも影響する。',
+      participants: candidates,
+      replay: [
+        '司会役: 猫守が証言台を整え、村人を一巡させる。',
+        `争点: ${incident.description}`,
+        candidates.length > 0 ? `候補者: ${candidates.join('、')}` : '候補者: 未確定',
+        '第1ラウンド: 誰を裁くかを選ぶ。',
+        '第2-3ラウンド: 死刑か教育かを選ぶ。',
+      ],
+    };
+  }
+
+  private lightEventStart(title: string, subtitle: string, participants: string[], replay: string[]): LoopEventStart {
+    return {
+      kind: 'life',
+      eventId: `life:${this.tm.world.term}:${title}:${participants.join(',')}`,
+      title,
+      subtitle,
+      participants,
+      replay,
+    };
+  }
+
+  private maybeBirthdayEvent(): LoopEventStart | null {
+    if (this.tm.trialOpenedToday()) return null;
+    if (Math.random() >= 0.18) return null;
+    const alive = [...this.tm.world.villagers.values()].filter((v) => v.alive && !v.madman);
+    if (alive.length === 0) return null;
+    const guest = alive[(this.tm.world.term + this.tm.world.calendar.dayOfMonth) % alive.length]!;
+    const friends = alive.filter((v) => v.id !== guest.id).slice(0, 3).map((v) => v.name);
+    const participants = [guest.name, ...friends];
+    return this.lightEventStart(
+      '誕生日パーティー',
+      `${guest.name}を囲んで小さな祝いが開かれた`,
+      participants,
+      [
+        `司会役: 猫守が${guest.name}の席を用意した。`,
+        friends.length > 0 ? `参加者: ${participants.join('、')}` : `参加者: ${guest.name}`,
+        '結果: 事件のない一日として、村に穏やかな記憶が残った。',
+      ],
+    );
+  }
+
   private async tick(): Promise<void> {
     const w = this.tm.world;
     const cal = w.calendar;
@@ -220,11 +316,23 @@ export class TermLoop {
       case 'kisho': {
         const party = this.tm.fireScheduledParty();
         if (party) {
+          this.h.onEventStarted?.(this.lightEventStart(
+            party.party.title,
+            party.narrative,
+            party.party.participantIds.map((id) => this.tm.world.villagers.get(id)?.name ?? id),
+            [
+              '司会役: 猫守が村人を広場に集めた。',
+              party.narrative,
+              party.incidentDay !== null ? `余韻: ${party.incidentDay}日に事件の予兆が残った。` : '余韻: 村に穏やかな記憶が残った。',
+            ],
+          ));
           this.h.onLog('kisho', `🎉 ${party.narrative}`);
           if (party.incidentDay !== null) this.h.onLog('kisho', `🗓 近日の事件予兆: ${party.incidentDay}日 / ${party.incidentSeed ?? party.party.title}`);
         }
         // 月次事件 (§12.3) は組織的 kishoTick より先に発火させる。発火したら承へ。
         if (this.tm.fireScheduledIncident()) {
+          const event = this.mysteryEventStart();
+          if (event) this.h.onEventStarted?.(event);
           this.h.onLog('sho', `⚡ 事件: ${w.incident?.description ?? ''}`);
           this.h.onSnapshot(w);
           return;
@@ -256,6 +364,8 @@ export class TermLoop {
           for (const wit of this.tm.world.trial?.witnesses ?? []) {
             this.h.onLog('ten', `👁 目撃者 ${wit.name}「${wit.line}」`);
           }
+          const event = this.trialEventStart(this.tm.world);
+          if (event) this.h.onEventStarted?.(event);
           this.h.onTrialOpen?.(this.tm.world);
         }
         break;
@@ -350,8 +460,40 @@ export class TermLoop {
         }
         // 日末の生活イベント (結婚/出産)。
         const life = this.tm.lifeEvents();
-        for (const m of life.marriages) this.h.onLog('kisho', `💍 ${m.aName} と ${m.bName} が結ばれた`);
-        for (const b of life.births) this.h.onLog('kisho', `👶 ${b.parents} に ${b.childName} が生まれた`);
+        for (const m of life.marriages) {
+          this.h.onLog('kisho', `💍 ${m.aName} と ${m.bName} が結ばれた`);
+          if (!this.tm.trialOpenedToday()) {
+            this.h.onEventStarted?.(this.lightEventStart(
+              '結婚式',
+              `${m.aName} と ${m.bName} が結ばれた`,
+              [m.aName, m.bName],
+              [
+                '司会役: 猫守が誓いの場を整えた。',
+                `${m.aName} と ${m.bName} が互いの家を行き来する関係になった。`,
+                '結果: 村の関係図に夫婦として記録された。',
+              ],
+            ));
+          }
+        }
+        for (const b of life.births) {
+          this.h.onLog('kisho', `👶 ${b.parents} に ${b.childName} が生まれた`);
+          if (!this.tm.trialOpenedToday()) {
+            this.h.onEventStarted?.(this.lightEventStart(
+              '出産祝い',
+              `${b.parents} に ${b.childName} が生まれた`,
+              [b.parents, b.childName],
+              [
+                '司会役: 猫守が新しい名を村に告げた。',
+                `${b.parents} は ${b.childName} を迎えた。`,
+                '結果: 村の歴史に新しい家族が記録された。',
+              ],
+            ));
+          }
+        }
+        if (life.marriages.length === 0 && life.births.length === 0) {
+          const birthday = this.maybeBirthdayEvent();
+          if (birthday) this.h.onEventStarted?.(birthday);
+        }
         // 日末の住民経済決済 (§15): 推し送金 / クズ化遷移 / プレイヤーへのたかり を live feed に出す。
         const econ = this.tm.settleEconomy();
         for (const t of econ.transfers) this.h.onLog('kisho', `💸 ${t.fromName} が推しの ${t.toName} に ${t.amount} を送った`);

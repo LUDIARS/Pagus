@@ -1,20 +1,20 @@
-// チャット履歴。神の声/人間のみ/DM を data/runtime/chat.json に永続化する。
-
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ChatChannel, ChatMessage, ChatSpeakerKind } from '@pagus/sim';
 import { dataDir } from './load-data.js';
+import { runtimeDb } from './runtime-db.js';
 
 const CHAT_CAP = 500;
 const CHANNELS = new Set<ChatChannel>(['god', 'human', 'dm']);
 const SPEAKERS = new Set<ChatSpeakerKind>(['human', 'villager', 'system']);
 
 export class ChatStore {
-  private readonly path: string;
+  private readonly legacyPath: string;
+  private readonly db = runtimeDb();
   private messages: ChatMessage[];
 
   constructor() {
-    this.path = resolve(dataDir(), 'runtime', 'chat.json');
+    this.legacyPath = resolve(dataDir(), 'runtime', 'chat.json');
     this.messages = this.load();
   }
 
@@ -25,14 +25,14 @@ export class ChatStore {
   add(message: ChatMessage): ChatMessage[] {
     this.messages.push(message);
     if (this.messages.length > CHAT_CAP) this.messages = this.messages.slice(-CHAT_CAP);
-    this.save();
+    this.db.addChat(message);
     return this.all();
   }
 
   addMany(messages: ChatMessage[]): ChatMessage[] {
     this.messages.push(...messages);
     if (this.messages.length > CHAT_CAP) this.messages = this.messages.slice(-CHAT_CAP);
-    this.save();
+    this.db.addChats(messages);
     return this.all();
   }
 
@@ -43,26 +43,26 @@ export class ChatStore {
       msg.userName = userName;
       changed = true;
     }
-    if (changed) this.save();
+    if (changed) this.db.replaceChat(this.messages);
     return this.all();
   }
 
   private load(): ChatMessage[] {
+    const stored = this.db.recentChat(CHAT_CAP);
+    if (stored.length > 0 || this.db.chatCount() > 0) return stored;
+
+    const legacy = this.loadLegacyJson();
+    if (legacy.length > 0) this.db.replaceChat(legacy);
+    return legacy;
+  }
+
+  private loadLegacyJson(): ChatMessage[] {
     try {
-      const raw = JSON.parse(readFileSync(this.path, 'utf8')) as unknown;
+      const raw = JSON.parse(readFileSync(this.legacyPath, 'utf8')) as unknown;
       if (!Array.isArray(raw)) return [];
       return raw.map(coerceChatMessage).filter((msg): msg is ChatMessage => msg !== null).slice(-CHAT_CAP);
     } catch {
       return [];
-    }
-  }
-
-  private save(): void {
-    try {
-      mkdirSync(dirname(this.path), { recursive: true });
-      writeFileSync(this.path, JSON.stringify(this.messages, null, 2), 'utf8');
-    } catch {
-      /* チャット永続化失敗はゲーム進行を止めない */
     }
   }
 }

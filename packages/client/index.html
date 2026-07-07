@@ -396,6 +396,23 @@
         transition: opacity 0.2s ease, transform 0.2s ease; }
       #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+      #event-title-call {
+        position: fixed; inset: 0; z-index: 74; display: flex; align-items: center; justify-content: center;
+        padding: 24px; pointer-events: none; opacity: 0; transform: scale(0.98);
+        transition: opacity 0.24s ease, transform 0.24s ease;
+      }
+      #event-title-call.show { opacity: 1; transform: scale(1); }
+      .event-title-inner {
+        width: min(720px, 92vw); border-top: 2px solid #f2c94c; border-bottom: 2px solid #f2c94c;
+        background: rgba(8,10,16,0.82); box-shadow: 0 22px 64px rgba(0,0,0,0.55);
+        padding: 22px 28px; text-align: center; backdrop-filter: blur(3px);
+      }
+      #event-title-call.trial .event-title-inner { border-color: #eb5757; }
+      #event-title-call.life .event-title-inner { border-color: #6fcf97; }
+      .event-title-kicker { font-size: 12px; color: #9be3ff; letter-spacing: 0; margin-bottom: 8px; }
+      .event-title-main { font-size: clamp(26px, 5vh, 48px); line-height: 1.12; font-weight: 800; color: #f7f0d0; }
+      .event-title-sub { margin-top: 9px; font-size: 14px; line-height: 1.45; color: #cdd6e4; }
+
       #chronicle {
         display: none; position: fixed; inset: 0; z-index: 75;
         background: rgba(0,0,0,0.62); align-items: center; justify-content: center; padding: 18px;
@@ -426,6 +443,9 @@
       .hist-villager.gone { opacity: 0.5; }
       .hist-villager-name { font-size: 13px; font-weight: bold; }
       .hist-villager-meta { font-size: 11px; color: #8b96ad; }
+      .hist-event { border: 1px solid #2a3346; border-radius: 8px; padding: 10px 12px; margin: 7px 0; background: #11151f; }
+      .hist-event-title { font-size: 14px; font-weight: 800; color: #f2c94c; margin-bottom: 4px; }
+      .hist-event-meta { font-size: 11px; color: #9be3ff; margin-bottom: 5px; }
       #village-rules, #intervention-rules { background: #11151f; border: 1px solid #2a3346; border-radius: 8px; overflow: hidden; min-height: 320px; display: flex; flex-direction: column; }
       #village-rules { min-height: 260px; }
       #intervention-rules { margin-top: 10px; min-height: 0; }
@@ -617,6 +637,13 @@
       </div>
       <div id="center">
         <div id="stage"></div>
+        <div id="event-title-call" aria-live="polite" aria-hidden="true">
+          <div class="event-title-inner">
+            <div class="event-title-kicker">EVENT</div>
+            <div id="event-title-main" class="event-title-main"></div>
+            <div id="event-title-sub" class="event-title-sub"></div>
+          </div>
+        </div>
         <div id="heckle"></div>
         <div id="testify"></div>
         <div id="trial"></div>

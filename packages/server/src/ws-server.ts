@@ -148,6 +148,16 @@ export class GameWsServer {
     this.fanout(JSON.stringify({ t: 'chronicle', entries } satisfies ServerMessage));
   }
 
+  connectedUserIds(): string[] {
+    return [...new Set(this.connUser.values())].sort((a, b) => a.localeCompare(b));
+  }
+
+  broadcastEventTitle(title: string, kind: 'mystery' | 'trial' | 'life', subtitle?: string): void {
+    const msg: Extract<ServerMessage, { t: 'eventTitle' }> =
+      subtitle === undefined ? { t: 'eventTitle', title, kind, at: Date.now() } : { t: 'eventTitle', title, subtitle, kind, at: Date.now() };
+    this.fanout(JSON.stringify(msg));
+  }
+
   private onConnection(ws: WebSocket): void {
     // 接続直後に最新スナップショット・接続人数・LLM 構成・村の歴史・人間の行動記録を送る。
     if (this.lastSnapshot) ws.send(this.lastSnapshot);

@@ -45,7 +45,7 @@
 | `PAGUS_MARRIAGE` | 0.12 | 日末の結婚確率 |
 | `PAGUS_BIRTH` | 0.1 | 日末の出産確率 |
 | `PAGUS_WS_PORT` | 4310 | game server WS ポート |
-| `PAGUS_FRESH` | (off) | `1` で `data/runtime/world.json` を無視し新規開始 |
+| `PAGUS_FRESH` | (off) | `1` で DB 内の world state を無視し新規開始 |
 | `PAGUS_PUSH` | (off) | `1` で WebPush 通知を有効化 (要 VAPID 鍵) |
 | `PAGUS_VAPID_PUBLIC` / `PAGUS_VAPID_PRIVATE` / `PAGUS_VAPID_SUBJECT` | — | VAPID 鍵 (秘密)。生成 `npx web-push generate-vapid-keys` |
 | `PAGUS_ACCEL` / `PAGUS_MIN_MS` / `PAGUS_INCIDENT_MS` / `PAGUS_REPS` | — | dev のペース/負荷調整 |
@@ -57,6 +57,5 @@ client は Vite 4320 (Memoria 5180 と分離)、WS は同一オリジン `/ws` �
 
 - `logs/pagus-*.jsonl` — セッションログ (節目+スナップショット要約)
 - `data/runtime/denunciations.json` — 糾弾レパートリー (成長)
-- `data/runtime/chronicle.json` — 村の歴史 (上限500件)
-- `data/runtime/world.json` — **world スナップショット** (どうぶつ状態・評判・暦・進行中の事件/裁判)。起動時に復元、tick で間引き保存 + 終了時に確実に書き出し。`PAGUS_FRESH=1` で無視して新規開始。実装 `server/world-store.ts` (`toWire`/`fromWire`)。
+- `data/runtime/pagus.sqlite` — **ゲームデータDB**。world スナップショット、村の歴史、チャット、イベントリプレイ、シーズン履歴を保存する。既存 `world.json` / `chronicle.json` / `chat.json` / `seasons.json` は初回移行元として読む。
 - `data/runtime/push-subscriptions.json` — **WebPush 購読** (endpoint で重複排除)。失効購読は送信時に除去。実装 `server/push-service.ts`。

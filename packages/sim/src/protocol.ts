@@ -175,6 +175,7 @@ export interface TrialLine {
 
 /** 村の歴史エントリの種別 (§8 タブ分類)。絵文字接頭辞でなく生成元が明示する。 */
 export type ChronicleKind =
+  | 'event'
   | 'incident'
   | 'trial'
   | 'verdict'
@@ -197,6 +198,14 @@ export interface ChronicleEntry {
   text: string;
   /** 種別 (§8 タブ分類)。旧データは未設定 = 'other' 相当に扱う。 */
   kind?: ChronicleKind;
+  /** ユーザー参加型イベントの再生用ID。 */
+  eventId?: string;
+  /** イベントタイトル。 */
+  title?: string;
+  /** 村の歴史から読み返すための進行記録。 */
+  replay?: string[];
+  /** 人間参加者とLLM操作BOT。 */
+  participants?: string[];
 }
 
 /** 人間の行動記録の 1 エントリ (§8 村の歴史「人間の行動記録」)。 */
@@ -437,6 +446,7 @@ export type ServerMessage =
   | { t: 'trialVoices'; incidentId: string; voices: TrialVoice[] } // 他ユーザーの裁判の声と住民の応答
   | { t: 'llm'; info: LlmInfo } // 稼働中の LLM 構成
   | { t: 'chronicle'; entries: ChronicleEntry[] } // 村の歴史
+  | { t: 'eventTitle'; title: string; subtitle?: string; kind: 'mystery' | 'trial' | 'life'; at: number }
   | { t: 'theme'; pack: string; moral: MoralDial; lexicon: ThemeLexicon } // テーマパック (§v1.4-D, 接続時+起動時)
   | {
       t: 'playerState'; // その接続ユーザの状態

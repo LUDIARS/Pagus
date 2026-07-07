@@ -42,6 +42,24 @@ function el(id: string): HTMLElement {
   return node;
 }
 
+let eventTitleTimer: number | null = null;
+
+function showEventTitle(title: string, subtitle: string | undefined, kind: 'mystery' | 'trial' | 'life'): void {
+  const root = document.getElementById('event-title-call');
+  const titleEl = document.getElementById('event-title-main');
+  const subEl = document.getElementById('event-title-sub');
+  if (!root || !titleEl || !subEl) return;
+  titleEl.textContent = title;
+  subEl.textContent = subtitle ?? (kind === 'trial' ? '公開裁判' : kind === 'life' ? '村の祝い' : '事件の幕開け');
+  root.classList.remove('mystery', 'trial', 'life');
+  root.classList.add(kind, 'show');
+  if (eventTitleTimer !== null) window.clearTimeout(eventTitleTimer);
+  eventTitleTimer = window.setTimeout(() => {
+    root.classList.remove('show');
+    eventTitleTimer = null;
+  }, 3200);
+}
+
 async function main(): Promise<void> {
   const stage = new StageView();
   await stage.mount(el('stage'));
@@ -57,7 +75,7 @@ async function main(): Promise<void> {
     onRemoveRule: (ruleId: string) => conn.send({ t: 'removeRule', ruleId, userId }),
   };
   const chronicle = new ChronicleView(el('chronicle'), el('chronicle-body'), el('hist-btn'), el('chronicle-close'), undefined, {
-    tabs: ['highlight', 'logs', 'trial', 'life', 'rules', 'villagers', 'actions', 'other'],
+    tabs: ['highlight', 'events', 'logs', 'trial', 'life', 'rules', 'villagers', 'actions', 'other'],
   });
   const interventionRules = new ChronicleView(null, el('intervention-rules'), null, null, {
     ...ruleHandlers,
@@ -251,6 +269,7 @@ async function main(): Promise<void> {
       chronicle.setEntries(entries);
       villageRules.setEntries(entries);
     },
+    onEventTitle: (title, subtitle, kind) => showEventTitle(title, subtitle, kind),
     // テーマパック (§v1.4-D): 語彙を各所へ適用し、wholesome では死刑ボタンを隠す。
     onTheme: (_pack, _moral, lexicon) => {
       stage.setTheme(lexicon);

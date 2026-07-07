@@ -9,7 +9,7 @@
 import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, rollVillagerGacha, ensureResidentHistory, nameExistingGenericIncidentVillagers, addVillagerActionLog, KARMA_GACHA_COST, shouldAdoptRule, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem, type VillagerGachaKind, type ChatMessage, type ChatChannel, type TrialState, type TrialVoice } from '@pagus/sim';
 import { loadConfig, loadSeed, loadIncidentArcs } from './load-data.js';
 import { loadPagusConfig, type PagusConfig } from './config/pagus-config.js';
-import { TermLoop, type TrialCloseInfo } from './term-loop.js';
+import { TermLoop, type LoopEventStart, type TrialCloseInfo } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
 import { PlayerState } from './player-state.js';
 import { AuctionManager } from './auction.js';
@@ -425,6 +425,31 @@ function main(): void {
   let governance: Governance;
   let spectacle: SpectacleManager;
   let raid: RaidManager;
+  const recordedEventIds = new Set(chronicle.recent(500).map((e) => e.eventId).filter((id): id is string => typeof id === 'string'));
+  const botNames = ['LLM BOT A', 'LLM BOT B', 'LLM BOT C', 'LLM BOT D'];
+  const recordEvent = (entry: LoopEventStart): void => {
+    if (recordedEventIds.has(entry.eventId)) return;
+    recordedEventIds.add(entry.eventId);
+    const humans = ws.connectedUserIds().slice(0, 4).map((uid) => ps.getUserName(uid) ?? `人間:${uid.slice(0, 8)}`);
+    const bots = botNames.slice(0, Math.max(0, 4 - humans.length));
+    const villagersInScene = (entry.participants ?? []).map((name) => `村人:${name}`);
+    const participants = [...humans, ...bots, ...villagersInScene];
+    const date = dateLabel(tm.world);
+    const replay = [
+      `参加者: ${participants.length > 0 ? participants.join('、') : 'LLMのみ'}`,
+      ...entry.replay,
+    ];
+    const text = entry.subtitle ? `🎭 ${entry.title}: ${entry.subtitle}` : `🎭 ${entry.title}`;
+    chronicle.add(date, text, 'event', {
+      eventId: entry.eventId,
+      title: entry.title,
+      replay,
+      participants,
+    });
+    ws.broadcastEventTitle(entry.title, entry.kind, entry.subtitle);
+    ws.updateChronicle(chronicle.recent());
+    spectacle.recordHighlight(date, entry.title, 'event', entry.subtitle ?? entry.replay[0] ?? entry.title);
+  };
 
   // 演出・協力パック (§v1.3-D) の設定。
   const RAID_CHANCE = cfg.spectacle.raidChance; // 日末にレイドが出現する確率 (㉙)
@@ -1869,6 +1894,9 @@ function main(): void {
         changed = true;
       }
       if (changed) ws.updateChronicle(chronicle.recent());
+    },
+    onEventStarted: (entry) => {
+      recordEvent(entry);
     },
     onLog: (phase, text) => {
       ws.broadcastLog(phase, text);
