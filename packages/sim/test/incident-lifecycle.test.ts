@@ -64,15 +64,32 @@ describe('事件ライフサイクル (§12.3)', () => {
 
     const result = await tm.designScheduledIncident();
     expect(result).not.toBeNull();
-    const { design, spawned } = result!;
+    const { design, spawned, naming } = result!;
 
     // 事件用キャラが村に投入される。
     expect(spawned).toHaveLength(1);
     const culprit = spawned[0]!;
     expect(culprit.origin).toBe('incident');
     expect(culprit.id).toBe('incident_1');
+    expect(culprit.name).not.toBe('仮面の訪問者');
     expect(world.villagers.get('incident_1')).toBe(culprit);
     expect(tm.getIncidentCount()).toBe(1);
+
+    expect(naming).toHaveLength(1);
+    expect(naming[0]).toMatchObject({
+      villagerId: 'incident_1',
+      originalName: '仮面の訪問者',
+      assignedName: culprit.name,
+    });
+    expect(world.villagers.get(naming[0]!.namedById)?.name).toBe(naming[0]!.namedByName);
+    const history = world.residentHistory.find((h) => h.id === 'incident_1');
+    expect(history).toMatchObject({
+      name: culprit.name,
+      origin: 'incident',
+      originalName: '仮面の訪問者',
+      namedById: naming[0]!.namedById,
+      namedByName: naming[0]!.namedByName,
+    });
 
     // 加害者が解決される (Stub は perpetratorId=null + 新規キャラ perpetrator:true)。
     expect(design.perpetratorId).toBe('incident_1');

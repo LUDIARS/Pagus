@@ -13,6 +13,9 @@ import type {
   FanFlamesResult,
   PlayerStatementResolution,
   TrialRepairResult,
+  IncidentDesign,
+  IncidentNaming,
+  Villager,
 } from '@pagus/sim';
 import { pacedSegmentMs, type PaceOptions } from './clock.js';
 
@@ -33,6 +36,7 @@ export interface LoopHandlers {
   onSnapshot(world: World): void;
   onLog(phase: World['phase'], text: string): void;
   onVillagerAction?(entry: { villager: string; action: string }): void;
+  onIncidentDesigned?(entry: { design: IncidentDesign; spawned: Villager[]; naming: IncidentNaming[] }): void;
   /** 裁判が開いた (承→転) ときに 1 度だけ呼ぶ。糾弾セリフ生成のフック。 */
   onTrialOpen?(world: World): void;
   /** 裁判の判決・教育/死刑適用が終わったときに呼ぶ。Haiku サマリー生成用。 */
@@ -159,6 +163,7 @@ export class TermLoop {
   private async designScheduled(): Promise<void> {
     const result = await this.tm.designScheduledIncident();
     if (!result) return;
+    this.h.onIncidentDesigned?.(result);
     const names = result.spawned.map((s) => s.name).join('・') || '(新規キャラなし)';
     this.h.onLog('kisho', `⚡(予兆) ${names} が現れた — ${result.design.description}`);
   }

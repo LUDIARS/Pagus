@@ -17,6 +17,12 @@ export interface ResidentHistoryEntry {
   joinedTerm: number;
   llmBrain: string | null;
   archetype: string | null;
+  /** LLM が出した元の仮称。仮面の訪問者など、村で名付け直した場合だけ入る。 */
+  originalName?: string;
+  /** 名付けた住民の id。 */
+  namedById?: VillagerId;
+  /** 名付けた住民の名前。退場後も表示できるよう文字列も保持する。 */
+  namedByName?: string;
 }
 
 export interface VillagerRelationship {

@@ -69,7 +69,7 @@ import {
   type RecallResult,
 } from './mayor.js';
 import type { EventDirector } from './event-director.js';
-import { addResidentHistory, connectNewVillager, generateUniqueVillagerName } from './villager-gacha.js';
+import { addResidentHistory, assignVillageName, connectNewVillager, generateUniqueVillagerName, pickVillageNamer, type VillagerNamingRecord } from './villager-gacha.js';
 import { relationshipRoutineFor, type LifeRelationshipKind } from './life-profile.js';
 
 export type IdGen = () => string;
@@ -227,6 +227,8 @@ export interface AdvanceDayResult {
   /** 村長選挙イベント (§17, 起きた時のみ)。server がログ。 */
   mayor: MayorEvent | null;
 }
+
+export interface IncidentNaming extends VillagerNamingRecord {}
 
 export class TermMachine {
   private pendingReform: Reform | null = null;
@@ -842,7 +844,7 @@ export class TermMachine {
    * scheduledIncident が無い/デザイン済み/worldBrain 無しなら null。
    * 加害者が解決できなければ throw (無言フォールバック禁止)。
    */
-  async designScheduledIncident(): Promise<{ design: IncidentDesign; spawned: Villager[] } | null> {
+  async designScheduledIncident(): Promise<{ design: IncidentDesign; spawned: Villager[]; naming: IncidentNaming[] } | null> {
     const sched = this.world.scheduledIncident;
     if (!sched || sched.designed || !this.worldBrain) return null;
 
@@ -860,11 +862,27 @@ export class TermMachine {
 
     // 事件用キャラを spawn して村に追加する。
     const spawned: Villager[] = [];
+    const naming: IncidentNaming[] = [];
+    const finalCharacters = design.newCharacters.map((c) => ({ ...c }));
     for (const spec of design.newCharacters) {
       this.incidentCount += 1;
+      const id = `incident_${this.incidentCount}`;
+      const originalName = spec.name.trim();
+      const assignedName = assignVillageName(this.world, spec.name, this.rng);
+      const namedBy = assignedName !== originalName ? pickVillageNamer(this.world, id, this.rng) : null;
+      if (namedBy) {
+        naming.push({
+          villagerId: id,
+          originalName,
+          assignedName,
+          namedById: namedBy.id,
+          namedByName: namedBy.name,
+        });
+      }
+      finalCharacters[spawned.length]!.name = assignedName;
       const seed: Parameters<typeof createVillager>[0] = {
-        id: `incident_${this.incidentCount}`,
-        name: spec.name,
+        id,
+        name: assignedName,
         position: {
           x: Math.floor(this.rng() * this.world.config.gridWidth),
           y: Math.floor(this.rng() * this.world.config.gridHeight),
@@ -879,6 +897,13 @@ export class TermMachine {
       if (spec.body !== undefined) seed.body = spec.body;
       const v = createVillager(seed);
       this.world.villagers.set(v.id, v);
+      const named = naming.find((n) => n.villagerId === v.id);
+      addResidentHistory(this.world, v, {
+        origin: 'incident',
+        archetype: spec.role,
+        ...(named ? { originalName: named.originalName, namedById: named.namedById, namedByName: named.namedByName } : {}),
+      });
+      connectNewVillager(this.world, v, this.rng);
       spawned.push(v);
     }
 
@@ -899,7 +924,7 @@ export class TermMachine {
 
     const finalDesign: IncidentDesign = {
       description: design.description,
-      newCharacters: design.newCharacters,
+      newCharacters: finalCharacters,
       involvedIds,
       perpetratorId,
       scapegoat: design.scapegoat,
@@ -907,7 +932,7 @@ export class TermMachine {
     };
     sched.design = finalDesign;
     sched.designed = true;
-    return { design: finalDesign, spawned };
+    return { design: finalDesign, spawned, naming };
   }
 
   /**

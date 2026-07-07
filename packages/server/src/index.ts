@@ -6,7 +6,7 @@
 // 例外で env 維持: PAGUS_CONFIG_KEY (マスター鍵) / PAGUS_FRESH (その起動だけ world.json 無視) /
 // PAGUS_BRAIN (stub|llm の起動モード) / PAGUS_DATA_DIR (config 自体の置き場を解決するため)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, rollVillagerGacha, ensureResidentHistory, addVillagerActionLog, KARMA_GACHA_COST, shouldAdoptRule, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem, type VillagerGachaKind, type ChatMessage, type ChatChannel, type TrialState, type TrialVoice } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, rollVillagerGacha, ensureResidentHistory, nameExistingGenericIncidentVillagers, addVillagerActionLog, KARMA_GACHA_COST, shouldAdoptRule, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem, type VillagerGachaKind, type ChatMessage, type ChatChannel, type TrialState, type TrialVoice } from '@pagus/sim';
 import { loadConfig, loadSeed, loadIncidentArcs } from './load-data.js';
 import { loadPagusConfig, type PagusConfig } from './config/pagus-config.js';
 import { TermLoop, type TrialCloseInfo } from './term-loop.js';
@@ -308,6 +308,15 @@ function main(): void {
 
   // 村の歴史 (節目を記録・永続化)。
   const chronicle = new Chronicle();
+  const restoredNamings = nameExistingGenericIncidentVillagers(world, { resolveBrain: brainFor });
+  if (restoredNamings.length > 0) {
+    const date = dateLabel(world);
+    for (const naming of restoredNamings) {
+      chronicle.add(date, `👤 命名: ${naming.namedByName} が ${naming.originalName} を「${naming.assignedName}」と名付け、村はその名で記録した`, 'villager');
+    }
+    console.log(`[pagus] unnamed incident visitors named: ${restoredNamings.length}`);
+    store.save(world, tm.getBornCount(), tm.getIncidentCount(), tm.getRuleCount());
+  }
 
   // WebPush 通知 (§4.8)。VAPID 未設定なら無効 (config push.enabled=true + 鍵で有効化)。
   const push = new PushService({
@@ -1842,6 +1851,24 @@ function main(): void {
     },
     onVillagerAction: (entry) => {
       recordVillagerAction(entry.villager, entry.action);
+    },
+    onIncidentDesigned: (entry) => {
+      const date = dateLabel(tm.world);
+      let changed = false;
+      const namingById = new Map(entry.naming.map((n) => [n.villagerId, n]));
+      for (const villager of entry.spawned) {
+        if (aliveInitialized) prevAliveIds.add(villager.id);
+        const history = tm.world.residentHistory.find((h) => h.id === villager.id);
+        if (history) history.llmBrain = brainFor(villager.id);
+        const naming = namingById.get(villager.id);
+        if (naming) {
+          chronicle.add(date, `👤 命名: ${naming.namedByName} が ${naming.originalName} を「${naming.assignedName}」と名付け、村はその名で記録した`, 'villager');
+        } else {
+          chronicle.add(date, `👤 住民追加: ${villager.name} (事件由来)`, 'villager');
+        }
+        changed = true;
+      }
+      if (changed) ws.updateChronicle(chronicle.recent());
     },
     onLog: (phase, text) => {
       ws.broadcastLog(phase, text);

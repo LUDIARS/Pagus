@@ -166,7 +166,8 @@ export class ResidentPanel {
 
     for (const h of [...(w.residentHistory ?? [])].reverse().slice(0, 10)) {
       const brain = h.llmBrain ? `脳:${h.llmBrain}` : '脳:stub';
-      this.historyBox.appendChild(row(`${residentHistoryDisplayName(w, h)} (${h.species})`, `${originLabel(h.origin)} / ${h.archetype ?? '通常'} / ${brain}`));
+      const namedBy = h.namedByName ? `命名:${h.namedByName}` : null;
+      this.historyBox.appendChild(row(`${residentHistoryDisplayName(w, h)} (${h.species})`, [originLabel(h.origin), h.archetype ?? '通常', brain, namedBy].filter((s): s is string => s !== null).join(' / ')));
     }
 
     for (const a of [...(w.villagerActionLog ?? [])].reverse().slice(0, 14)) {
