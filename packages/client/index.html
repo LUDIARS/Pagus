@@ -67,15 +67,29 @@
         background: rgba(8, 10, 16, 0.62); border: 1px solid #2a3346; border-radius: 10px;
         padding: 0; backdrop-filter: blur(2px); pointer-events: auto;
       }
+      #log.log-dragging { box-shadow: 0 14px 32px rgba(0,0,0,0.45); }
+      #log.log-closed {
+        width: auto !important; height: auto !important; min-height: 0;
+      }
+      #log.log-closed .log-tab-panel { display: none !important; }
+      #log.log-closed .log-tab-btn { display: none; }
+      #log.log-closed .log-tabs { border-top: 0; padding: 0 6px; }
       .log-tab-panel {
         flex: 1 1 auto; min-height: 0; overflow-y: auto;
         display: flex; flex-direction: column; gap: 3px; padding: 10px 14px 8px;
+        cursor: grab;
       }
+      #log.log-dragging .log-tab-panel { cursor: grabbing; }
       .log-tab-panel[hidden] { display: none; }
       .log-tabs {
         display: flex; gap: 2px; flex: 0 0 auto; padding: 0 8px;
         background: rgba(17,21,31,0.92); border-top: 1px solid #2a3346;
       }
+      .log-toggle {
+        flex: 0 0 34px; min-width: 34px; border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+        background: transparent; color: #9be3ff; padding: 8px 0; font-size: 13px; font-weight: 700;
+      }
+      .log-toggle:hover { background: rgba(86,204,242,0.08); }
       .log-tab-btn {
         flex: 1; min-width: 0; border: 0; border-bottom: 2px solid transparent; border-radius: 0;
         background: transparent; color: #8b96ad; padding: 8px 4px; font-size: 12px;
@@ -592,6 +606,7 @@
           <div id="human-chat" class="log-tab-panel" data-log-panel="human" hidden></div>
           <div id="dm-chat" class="log-tab-panel" data-log-panel="dm" hidden></div>
           <div id="log-tabs" class="log-tabs">
+            <button id="log-toggle" class="log-toggle" type="button" title="チャットを閉じる" aria-label="チャットを閉じる">×</button>
             <button class="log-tab-btn active" data-log-tab="village">村の様子</button>
             <button class="log-tab-btn" data-log-tab="god">神の声チャット</button>
             <button class="log-tab-btn" data-log-tab="human">人間のみ</button>

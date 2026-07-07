@@ -394,15 +394,89 @@ function setupRightTabs(): void {
 /** 中央下ログの「村の様子 / チャット」タブを切り替える。 */
 function setupLogTabs(): void {
   const root = el('log');
+  const toggle = el('log-toggle') as HTMLButtonElement;
   const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-log-tab]'));
   const panels = Array.from(root.querySelectorAll<HTMLElement>('[data-log-panel]'));
+  let closed = false;
+  let drag:
+    | {
+        pointerId: number;
+        startX: number;
+        startY: number;
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+      }
+    | null = null;
+  let previousUserSelect = '';
+
+  const setClosed = (next: boolean): void => {
+    closed = next;
+    root.classList.toggle('log-closed', closed);
+    toggle.textContent = closed ? '開' : '×';
+    const label = closed ? 'チャットを開く' : 'チャットを閉じる';
+    toggle.title = label;
+    toggle.setAttribute('aria-label', label);
+  };
+
   const select = (id: string): void => {
     for (const button of buttons) button.classList.toggle('active', button.dataset.logTab === id);
     for (const panel of panels) panel.hidden = panel.dataset.logPanel !== id;
   };
+  const canDrag = (target: EventTarget | null): boolean => {
+    if (!(target instanceof Element)) return false;
+    if (target.closest('button,input,textarea,select,a')) return false;
+    return Boolean(target.closest('[data-log-panel]'));
+  };
+  const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), Math.max(min, max));
+
+  root.addEventListener('pointerdown', (event) => {
+    if (closed || event.button !== 0 || !canDrag(event.target)) return;
+    const rootRect = root.getBoundingClientRect();
+    const centerRect = el('center').getBoundingClientRect();
+    drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      left: rootRect.left - centerRect.left,
+      top: rootRect.top - centerRect.top,
+      width: rootRect.width,
+      height: rootRect.height,
+    };
+    root.style.left = `${drag.left}px`;
+    root.style.top = `${drag.top}px`;
+    root.style.width = `${drag.width}px`;
+    root.style.height = `${drag.height}px`;
+    root.style.bottom = 'auto';
+    root.style.transform = 'none';
+    previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+    root.classList.add('log-dragging');
+    root.setPointerCapture(event.pointerId);
+  });
+  root.addEventListener('pointermove', (event) => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const centerRect = el('center').getBoundingClientRect();
+    const nextLeft = clamp(drag.left + event.clientX - drag.startX, 8, centerRect.width - drag.width - 8);
+    const nextTop = clamp(drag.top + event.clientY - drag.startY, 8, centerRect.height - drag.height - 8);
+    root.style.left = `${nextLeft}px`;
+    root.style.top = `${nextTop}px`;
+  });
+  const stopDrag = (event: PointerEvent): void => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (root.hasPointerCapture(event.pointerId)) root.releasePointerCapture(event.pointerId);
+    root.classList.remove('log-dragging');
+    document.body.style.userSelect = previousUserSelect;
+    drag = null;
+  };
+  root.addEventListener('pointerup', stopDrag);
+  root.addEventListener('pointercancel', stopDrag);
+  toggle.addEventListener('click', () => setClosed(!closed));
   for (const button of buttons) {
     button.addEventListener('click', () => select(button.dataset.logTab ?? 'village'));
   }
+  setClosed(false);
   select(buttons.find((button) => button.classList.contains('active'))?.dataset.logTab ?? 'village');
 }
 
