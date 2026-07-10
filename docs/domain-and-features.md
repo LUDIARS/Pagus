@@ -109,7 +109,7 @@ userId ごとのカルマ (時間経過で自動蓄積) と善性 (virtue)。操
 
 ### D13. LLM 基盤
 
-LLM は **CLI のみ** (LUDIARS 規約、API 不使用): Claude = `claude -p`、GPT-5.5 = `codex exec`。マルチ LLM 分散 (Discutere 方式) = どうぶつごとに思考 backend を準固定割当。tier: 事件/裁判/教育 = strong (Sonnet/Opus/GPT-5.5)、糾弾/ルール生成 = cheap (Haiku)。一過性エラーは CLI レベルリトライで吸収。コストログ (用途/モデル/トークン/概算)。**設定不備の無言フォールバック禁止 = 即エラー**。
+LLM は **CLI のみ** (LUDIARS 規約、API 不使用): Claude = `claude -p`、GPT-5.6 family = `codex exec`。通常脳は Sol 2 / Terra 4 / Luna 2 / Sonnet 2 の10枠ウェイトで準固定割当。事件デザイナ・首謀者・イベントファシリテーターとstrong tierはSol固定。一過性エラーは CLI レベルリトライで吸収。コストログ (用途/モデル/トークン/概算)。**設定不備の無言フォールバック禁止 = 即エラー**。
 
 - 実装: `server/src/llm/` (backend-registry, cli-llm-client, llm-brain, llm-world-brain, cost-log, prompt-build)
 - spec: SPEC §5, `spec/interface/brain-backends.md`
@@ -164,7 +164,7 @@ WS で snapshot/patch を push (server=4310, client=4320, 同一オリジン `/w
 | F28 | 演出協力パック (ハイライト / 予測 / MVP / 祈り / レイド / シーズン) | D11 | ✅ v1.3-D | SPEC §14.D |
 | F29 | 課金モック + ユーザコード認証 | D11 | ✅ v1.3-F | SPEC §14.F |
 | F30 | WebPush 通知投票 (離席端末を裁判へ呼び戻す) | D12 | ✅ v0.6 | SPEC §4.8 |
-| F31 | マルチ LLM 分散 (Claude 各 tier + GPT-5.5、個体↔backend 割当) | D13 | ✅ v0.2 | SPEC §5.2 |
+| F31 | マルチ LLM 分散 (GPT-5.6 family + Sonnet、個体↔backend 割当) | D13 | ✅ v0.2 | SPEC §5.2 |
 | F32 | LLM コストログ / 状態パネル | D13 | ✅ v1.0 | SPEC §12.7 |
 | F33 | world スナップショット永続化 + 村の歴史 (Chronicle) | D14 | ✅ v0.6 | SPEC §8B.8 |
 | F34 | 暗号化 config への設定集約 (env ~70 個を統合) | D14 | ✅ | CLAUDE.md |

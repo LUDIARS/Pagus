@@ -12,7 +12,7 @@ import type {
 import type { PersonalityAxis } from './personality.js';
 
 export const KARMA_GACHA_COST = 35;
-const ACTION_LOG_CAP = 300;
+const ACTION_LOG_CAP = 100;
 const REL_HATE_THRESHOLD = -35;
 const REL_LIKE_THRESHOLD = 45;
 
@@ -90,6 +90,14 @@ export interface GachaResult {
   cost: number;
 }
 
+export interface VillagerNamingRecord {
+  villagerId: VillagerId;
+  originalName: string;
+  assignedName: string;
+  namedById: VillagerId;
+  namedByName: string;
+}
+
 export function rollVillagerGacha(
   world: World,
   kind: VillagerGachaKind,
@@ -129,10 +137,32 @@ export function generateUniqueVillagerName(world: World, rng: () => number = Mat
   return uniqueVillagerName(world, rng);
 }
 
+export function needsVillageName(name: string): boolean {
+  const trimmed = name.trim();
+  if (trimmed.length === 0 || trimmed === '???') return true;
+  if (/^仮面.*訪問者$/.test(trimmed) || /^覆面.*訪問者$/.test(trimmed)) return true;
+  if (/^masked visitor$/i.test(trimmed)) return true;
+  return trimmed.includes('名もなき') || trimmed.includes('名無し');
+}
+
+export function assignVillageName(world: World, originalName: string, rng: () => number = Math.random): string {
+  const name = originalName.trim();
+  if (!needsVillageName(name)) return name;
+  return uniqueVillagerName(world, rng);
+}
+
+export function pickVillageNamer(world: World, targetId: VillagerId | null = null, rng: () => number = Math.random): Villager | null {
+  const alive = [...world.villagers.values()].filter((v) => v.alive && v.id !== targetId);
+  const named = alive.filter((v) => !needsVillageName(v.name));
+  const candidates = named.length > 0 ? named : alive;
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(rng() * candidates.length)] ?? null;
+}
+
 export function addResidentHistory(
   world: World,
   villager: Villager,
-  meta: Partial<Pick<ResidentHistoryEntry, 'origin' | 'llmBrain' | 'archetype' | 'joinedTerm'>> = {},
+  meta: Partial<Pick<ResidentHistoryEntry, 'origin' | 'llmBrain' | 'archetype' | 'joinedTerm' | 'originalName' | 'namedById' | 'namedByName'>> = {},
 ): ResidentHistoryEntry {
   const existing = world.residentHistory.find((h) => h.id === villager.id);
   if (existing) {
@@ -142,6 +172,9 @@ export function addResidentHistory(
     if (meta.joinedTerm !== undefined) existing.joinedTerm = meta.joinedTerm;
     if (meta.llmBrain !== undefined) existing.llmBrain = meta.llmBrain;
     if (meta.archetype !== undefined) existing.archetype = meta.archetype;
+    if (meta.originalName !== undefined) existing.originalName = meta.originalName;
+    if (meta.namedById !== undefined) existing.namedById = meta.namedById;
+    if (meta.namedByName !== undefined) existing.namedByName = meta.namedByName;
     return existing;
   }
   const entry: ResidentHistoryEntry = {
@@ -153,6 +186,9 @@ export function addResidentHistory(
     llmBrain: meta.llmBrain ?? null,
     archetype: meta.archetype ?? null,
   };
+  if (meta.originalName !== undefined) entry.originalName = meta.originalName;
+  if (meta.namedById !== undefined) entry.namedById = meta.namedById;
+  if (meta.namedByName !== undefined) entry.namedByName = meta.namedByName;
   world.residentHistory.push(entry);
   return entry;
 }
@@ -162,6 +198,46 @@ export function ensureResidentHistory(world: World, resolveBrain?: (id: Villager
   for (const v of world.villagers.values()) {
     addResidentHistory(world, v, { joinedTerm: 0, llmBrain: resolveBrain?.(v.id) ?? null });
   }
+}
+
+export function nameExistingGenericIncidentVillagers(
+  world: World,
+  opts: { rng?: () => number; resolveBrain?: (id: VillagerId) => string | null } = {},
+): VillagerNamingRecord[] {
+  const rng = opts.rng ?? Math.random;
+  const records: VillagerNamingRecord[] = [];
+  for (const villager of world.villagers.values()) {
+    const history = world.residentHistory.find((h) => h.id === villager.id);
+    const origin = history?.origin ?? villager.origin;
+    if (origin !== 'incident') continue;
+    if (history?.originalName !== undefined) continue;
+    if (!needsVillageName(villager.name)) continue;
+
+    const namedBy = pickVillageNamer(world, villager.id, rng);
+    if (!namedBy) continue;
+    const originalName = villager.name;
+    const assignedName = assignVillageName(world, originalName, rng);
+    if (assignedName === originalName) continue;
+
+    villager.name = assignedName;
+    addResidentHistory(world, villager, {
+      origin: 'incident',
+      joinedTerm: history?.joinedTerm ?? world.term,
+      llmBrain: opts.resolveBrain?.(villager.id) ?? history?.llmBrain ?? null,
+      archetype: history?.archetype ?? '訪問者',
+      originalName,
+      namedById: namedBy.id,
+      namedByName: namedBy.name,
+    });
+    records.push({
+      villagerId: villager.id,
+      originalName,
+      assignedName,
+      namedById: namedBy.id,
+      namedByName: namedBy.name,
+    });
+  }
+  return records;
 }
 
 export function connectNewVillager(world: World, villager: Villager, rng: () => number = Math.random): VillagerRelationship[] {

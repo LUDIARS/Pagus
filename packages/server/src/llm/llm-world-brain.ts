@@ -1,5 +1,5 @@
 // 実 LLM 駆動の WorldBrain 実装。
-// その日の裁判結果から村全体を評価する。重い局面なので strong tier (opus/gpt-5.5) 固定。
+// その日の裁判結果から村全体を評価する。重い局面なので strong tier (opus/GPT-5.6 Sol) 固定。
 // parse/CLI 失敗は 1 回リトライ→なお失敗なら StubWorldBrain にフォールバックする。
 
 import {
@@ -22,7 +22,7 @@ import { estimateTokens } from '@ludiars/llm-gateway';
 
 import type { LlmClient } from './llm-client.js';
 import { CliLlmClient, type CliLlmClientOptions } from './cli-llm-client.js';
-import { BackendRegistry } from './backend-registry.js';
+import { BackendRegistry, GPT_SOL_MODEL } from './backend-registry.js';
 import type { Backend } from './backend-registry.js';
 import type { CostSink } from './cost-log.js';
 import { buildWorldPrompt, buildHolidayPrompt, buildSchedulePrompt, buildDesignPrompt, buildRulePrompt, buildDistillPrompt, type PromptParts } from './prompt-build.js';
@@ -36,10 +36,10 @@ import {
 } from './json-coerce.js';
 
 /**
- * 世界イベント提案/ルール化は codex の fast service tier を使う。
- * Codex CLI 側の service_tier=fast 設定を前提に、read-only exec で JSON だけを返させる。
+ * 事件デザインとイベント進行は GPT-5.6 Sol に固定する。
+ * Codex CLI の read-only exec で JSON だけを返させる。
  */
-const CODEX_FAST_WORLD_BACKEND: Backend = { id: 'codex-fast-world', provider: 'codex', model: 'gpt-5.5' };
+const CODEX_SOL_WORLD_BACKEND: Backend = { id: 'codex-sol-world', provider: 'codex', model: GPT_SOL_MODEL };
 
 export interface LlmWorldBrainOptions {
   createClient?: (backend: Backend) => LlmClient;
@@ -143,8 +143,8 @@ export class LlmWorldBrain implements WorldBrain {
 
   async scheduleMonthlyIncident(ctx: MonthlyScheduleContext): Promise<MonthlySchedule> {
     const parts = buildSchedulePrompt(ctx);
-    // 月初の発生日/テーマ提案は codex fast のブラックボックス世界エンジンへ寄せる。
-    const backend = CODEX_FAST_WORLD_BACKEND;
+    // イベントのファシリテーターは Sol 固定で、月初の発生日とテーマを決める。
+    const backend = CODEX_SOL_WORLD_BACKEND;
     return this.withFallback(
       backend,
       parts,
@@ -172,8 +172,8 @@ export class LlmWorldBrain implements WorldBrain {
 
   async designIncident(ctx: IncidentDesignContext): Promise<IncidentDesign> {
     const parts = buildDesignPrompt(ctx);
-    // 事件の詳細デザインも codex fast に寄せ、マーダーミステリー/人狼風の提案を軽く回す。
-    const backend = CODEX_FAST_WORLD_BACKEND;
+    // 事件のデザイナは Sol 固定で、マーダーミステリー/人狼風の筋書きを作る。
+    const backend = CODEX_SOL_WORLD_BACKEND;
     return this.withFallback(
       backend,
       parts,
@@ -201,8 +201,8 @@ export class LlmWorldBrain implements WorldBrain {
 
   async proposeRule(ctx: RuleProposalContext): Promise<BehaviorRule> {
     const parts = buildRulePrompt(ctx);
-    // ルール起案はイベント提案と同じ codex fast で、事件テーマを日常ルールへ落とす。
-    const backend = CODEX_FAST_WORLD_BACKEND;
+    // ルール起案も同じ Sol 世界脳で、事件テーマを日常ルールへ落とす。
+    const backend = CODEX_SOL_WORLD_BACKEND;
     return this.withFallback(
       backend,
       parts,
@@ -254,10 +254,10 @@ export class LlmWorldBrain implements WorldBrain {
     }
   }
 
-  /** 乖離ケースを説明するルールを蒸留する (§v1.4-C)。世界エンジン同様 codex fast を使う。 */
+  /** 乖離ケースを説明するルールを蒸留する (§v1.4-C)。世界エンジンと同じ Sol を使う。 */
   async distillRule(ctx: DistillContext): Promise<BehaviorRule> {
     const parts = buildDistillPrompt(ctx);
-    const backend = CODEX_FAST_WORLD_BACKEND;
+    const backend = CODEX_SOL_WORLD_BACKEND;
     const client = this.clientFor(backend);
     let lastErr: unknown;
     for (let attempt = 0; attempt < 2; attempt++) {

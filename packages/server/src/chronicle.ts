@@ -1,57 +1,49 @@
-// 村の歴史。節目の出来事 (事件/判決/改変/結婚/出産/日替わり/月替わり) を
-// ゲーム内日付つきで記録し、data/runtime/chronicle.json に永続化する (gitignore)。
-// 後から村の歩みをたどるための台帳。
-
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ChronicleEntry, ChronicleKind } from '@pagus/sim';
 import { dataDir } from './load-data.js';
+import { runtimeDb, type RuntimeDb } from './runtime-db.js';
 
 const CAP = 500;
 
 export class Chronicle {
-  private readonly path: string;
-  private entries: ChronicleEntry[];
+  private readonly legacyPath: string;
+  private readonly db: RuntimeDb;
 
-  constructor() {
-    this.path = resolve(dataDir(), 'runtime', 'chronicle.json');
-    this.entries = this.load();
+  constructor(db: RuntimeDb = runtimeDb(), legacyPath = resolve(dataDir(), 'runtime', 'chronicle.json')) {
+    this.db = db;
+    this.legacyPath = legacyPath;
+    this.migrateLegacy();
   }
 
-  /** 節目を 1 件追加して永続化。kind は生成元が明示する (§2.2 履歴の構造化)。 */
-  add(date: string, text: string, kind?: ChronicleKind): void {
-    // exactOptionalPropertyTypes: kind は値があるときだけキーを足す。
-    this.entries.push(kind === undefined ? { date, text } : { date, text, kind });
-    if (this.entries.length > CAP) this.entries = this.entries.slice(-CAP);
-    this.save();
+  add(date: string, text: string, kind?: ChronicleKind, extra: Omit<ChronicleEntry, 'date' | 'text' | 'kind'> = {}): void {
+    const entry: ChronicleEntry = kind === undefined ? { date, text, ...extra } : { date, text, kind, ...extra };
+    this.db.addChronicle(entry);
   }
 
-  /** 直近 n 件。 */
   recent(n = 200): ChronicleEntry[] {
-    return this.entries.slice(-n);
+    return this.db.recentChronicle(Math.min(n, CAP));
   }
 
-  private load(): ChronicleEntry[] {
-    try {
-      const raw = JSON.parse(readFileSync(this.path, 'utf8')) as unknown;
-      if (Array.isArray(raw)) {
-        return raw.filter(
-          (e): e is ChronicleEntry =>
-            typeof e === 'object' && e !== null && typeof (e as ChronicleEntry).text === 'string',
-        );
-      }
-    } catch {
-      /* 無ければ空で始める */
-    }
-    return [];
+  hasEvent(eventId: string): boolean {
+    return this.db.hasChronicleEvent(eventId);
   }
 
-  private save(): void {
+  private migrateLegacy(): void {
+    if (this.db.chronicleCount() > 0) return;
+    const legacy = this.loadLegacyJson();
+    if (legacy.length > 0) this.db.replaceChronicle(legacy);
+  }
+
+  private loadLegacyJson(): ChronicleEntry[] {
     try {
-      mkdirSync(dirname(this.path), { recursive: true });
-      writeFileSync(this.path, JSON.stringify(this.entries, null, 2), 'utf8');
+      const raw = JSON.parse(readFileSync(this.legacyPath, 'utf8')) as unknown;
+      if (!Array.isArray(raw)) return [];
+      return raw
+        .filter((e): e is ChronicleEntry => typeof e === 'object' && e !== null && typeof (e as ChronicleEntry).text === 'string')
+        .slice(-CAP);
     } catch {
-      /* 永続化失敗は致命でない */
+      return [];
     }
   }
 }

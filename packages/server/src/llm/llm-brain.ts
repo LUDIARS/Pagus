@@ -2,7 +2,7 @@
 //
 // 各メソッドで backend (provider+model) を選び、CLI クライアントで invoke → JSON parse →
 // sim 型で返す。tier ルーティング (routeTier) で軽い局面は per-villager 割当、重い局面
-// (承GANs/裁判/教育) は strong (opus/gpt-5.5) へ寄せる。
+// (承GANs/裁判/教育) は strong (opus/GPT-5.6 Sol) へ寄せる。
 // parse/CLI 失敗は 1 回リトライ→なお失敗なら StubBrain にフォールバックする。
 
 import {
@@ -130,7 +130,8 @@ export class LlmBrain implements Brain {
 
   async advanceIncident(ctx: IncidentContext): Promise<IncidentStep> {
     const parts = buildIncidentPrompt(ctx);
-    const backend = this.select(parts, ctx.perpetrator.id, ctx.perpetrator.id);
+    // 事件の首謀者は通常の住民配備に左右されず strong (= GPT-5.6 Sol) で進行する。
+    const backend = this.registry.strong(ctx.perpetrator.id);
     return this.invokeJsonOrFallback(backend, parts, coerceIncidentStep, () => this.fallback.advanceIncident(ctx));
   }
 

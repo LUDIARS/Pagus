@@ -26,6 +26,7 @@ export interface WsHandlers {
   onTrialVoices?(incidentId: string, voices: TrialVoice[]): void;
   onLlm(info: LlmInfo): void;
   onChronicle(entries: ChronicleEntry[]): void;
+  onEventTitle?(title: string, subtitle: string | undefined, kind: 'mystery' | 'trial' | 'life'): void;
   /** テーマパック (§v1.4-D)。接続時 + 起動時に届く。 */
   onTheme?(pack: string, moral: MoralDial, lexicon: ThemeLexicon): void;
   /** その接続ユーザのカルマ/善性状態 (§4.4)。推し・課金額・カード・即効介入コストを含む。 */
@@ -123,6 +124,7 @@ export function connect(url: string, h: WsHandlers): Conn {
       else if (msg.t === 'trialVoices') h.onTrialVoices?.(msg.incidentId, msg.voices);
       else if (msg.t === 'llm') h.onLlm(msg.info);
       else if (msg.t === 'chronicle') h.onChronicle(msg.entries);
+      else if (msg.t === 'eventTitle') h.onEventTitle?.(msg.title, msg.subtitle, msg.kind);
       else if (msg.t === 'theme') h.onTheme?.(msg.pack, msg.moral, msg.lexicon);
       else if (msg.t === 'playerState') {
         h.onPlayerState?.({

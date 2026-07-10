@@ -69,10 +69,13 @@ import {
   type RecallResult,
 } from './mayor.js';
 import type { EventDirector } from './event-director.js';
-import { addResidentHistory, connectNewVillager, generateUniqueVillagerName } from './villager-gacha.js';
+import { addResidentHistory, assignVillageName, connectNewVillager, generateUniqueVillagerName, pickVillageNamer, type VillagerNamingRecord } from './villager-gacha.js';
 import { relationshipRoutineFor, type LifeRelationshipKind } from './life-profile.js';
 
 export type IdGen = () => string;
+
+const TRIAL_FOOLISH_ROUNDS = 1;
+const TRIAL_FATE_ROUNDS = 2;
 
 function counterIdGen(prefix: string): IdGen {
   let n = 0;
@@ -227,6 +230,8 @@ export interface AdvanceDayResult {
   /** 村長選挙イベント (§17, 起きた時のみ)。server がログ。 */
   mayor: MayorEvent | null;
 }
+
+export interface IncidentNaming extends VillagerNamingRecord {}
 
 export class TermMachine {
   private pendingReform: Reform | null = null;
@@ -483,7 +488,7 @@ export class TermMachine {
       judge: { kind: 'nekomori' },
       candidates: [defendantId],
       stage: 'fate',
-      pendingGroups: this.groupAxes(),
+      pendingGroups: this.trialRoundGroups(TRIAL_FATE_ROUNDS),
       foolishVotes: {},
       defendant: defendantId,
       fateVotes: { kill: 0, spare: 0 },
@@ -842,7 +847,7 @@ export class TermMachine {
    * scheduledIncident が無い/デザイン済み/worldBrain 無しなら null。
    * 加害者が解決できなければ throw (無言フォールバック禁止)。
    */
-  async designScheduledIncident(): Promise<{ design: IncidentDesign; spawned: Villager[] } | null> {
+  async designScheduledIncident(): Promise<{ design: IncidentDesign; spawned: Villager[]; naming: IncidentNaming[] } | null> {
     const sched = this.world.scheduledIncident;
     if (!sched || sched.designed || !this.worldBrain) return null;
 
@@ -860,11 +865,27 @@ export class TermMachine {
 
     // 事件用キャラを spawn して村に追加する。
     const spawned: Villager[] = [];
+    const naming: IncidentNaming[] = [];
+    const finalCharacters = design.newCharacters.map((c) => ({ ...c }));
     for (const spec of design.newCharacters) {
       this.incidentCount += 1;
+      const id = `incident_${this.incidentCount}`;
+      const originalName = spec.name.trim();
+      const assignedName = assignVillageName(this.world, spec.name, this.rng);
+      const namedBy = assignedName !== originalName ? pickVillageNamer(this.world, id, this.rng) : null;
+      if (namedBy) {
+        naming.push({
+          villagerId: id,
+          originalName,
+          assignedName,
+          namedById: namedBy.id,
+          namedByName: namedBy.name,
+        });
+      }
+      finalCharacters[spawned.length]!.name = assignedName;
       const seed: Parameters<typeof createVillager>[0] = {
-        id: `incident_${this.incidentCount}`,
-        name: spec.name,
+        id,
+        name: assignedName,
         position: {
           x: Math.floor(this.rng() * this.world.config.gridWidth),
           y: Math.floor(this.rng() * this.world.config.gridHeight),
@@ -879,6 +900,13 @@ export class TermMachine {
       if (spec.body !== undefined) seed.body = spec.body;
       const v = createVillager(seed);
       this.world.villagers.set(v.id, v);
+      const named = naming.find((n) => n.villagerId === v.id);
+      addResidentHistory(this.world, v, {
+        origin: 'incident',
+        archetype: spec.role,
+        ...(named ? { originalName: named.originalName, namedById: named.namedById, namedByName: named.namedByName } : {}),
+      });
+      connectNewVillager(this.world, v, this.rng);
       spawned.push(v);
     }
 
@@ -899,7 +927,7 @@ export class TermMachine {
 
     const finalDesign: IncidentDesign = {
       description: design.description,
-      newCharacters: design.newCharacters,
+      newCharacters: finalCharacters,
       involvedIds,
       perpetratorId,
       scapegoat: design.scapegoat,
@@ -907,7 +935,7 @@ export class TermMachine {
     };
     sched.design = finalDesign;
     sched.designed = true;
-    return { design: finalDesign, spawned };
+    return { design: finalDesign, spawned, naming };
   }
 
   /**
@@ -1534,6 +1562,10 @@ export class TermMachine {
     return [...groupByDominant(aliveVillagers(this.world), (v) => v.persona.traits).keys()];
   }
 
+  private trialRoundGroups(rounds: number): PersonalityAxis[] {
+    return this.groupAxes().slice(0, Math.max(1, rounds));
+  }
+
   private votersOf(axis: PersonalityAxis): Villager[] {
     return aliveVillagers(this.world).filter((v) => dominantAxis(v.persona.traits) === axis);
   }
@@ -1598,7 +1630,7 @@ export class TermMachine {
       judge: { kind: 'nekomori' },
       candidates: [incident.perpetrator, ...incident.involved],
       stage: 'foolish',
-      pendingGroups: this.groupAxes(),
+      pendingGroups: this.trialRoundGroups(TRIAL_FOOLISH_ROUNDS),
       foolishVotes: {},
       defendant: null,
       fateVotes: { kill: 0, spare: 0 },
@@ -1640,7 +1672,31 @@ export class TermMachine {
     if (trial.stage === 'foolish') trial.foolishVotes[pick] = (trial.foolishVotes[pick] ?? 0) + 1;
     else if (pick === 'kill') trial.fateVotes.kill += 1;
     else if (pick === 'spare') trial.fateVotes.spare += 1;
+    this.applyUserVoteRelationshipEffect(trial, pick);
     this.userVotes.set(userId, { stage: trial.stage, pick });
+  }
+
+  private applyUserVoteRelationshipEffect(trial: TrialState, pick: string): void {
+    const incident = this.world.incident;
+    if (!incident) return;
+    if (trial.stage === 'foolish') {
+      const target = this.world.villagers.get(pick as VillagerId);
+      if (!target?.alive) return;
+      const related = this.incidentRelatedIds(incident);
+      for (const observer of aliveVillagers(this.world).filter((v) => v.id !== target.id && related.has(v.id)).slice(0, 4)) {
+        this.adjustRelationship(observer, target, -1, `裁判投票で${target.name}への疑いが増えた`);
+      }
+      return;
+    }
+    if (trial.stage !== 'fate' || !trial.defendant) return;
+    const defendant = this.world.villagers.get(trial.defendant);
+    if (!defendant?.alive || (pick !== 'kill' && pick !== 'spare')) return;
+    const delta = pick === 'spare' ? 2 : -2;
+    const note = pick === 'spare' ? `裁判投票で${defendant.name}への同情が増えた` : `裁判投票で${defendant.name}への敵意が増えた`;
+    for (const observer of this.trialStatementSpeakers(trial)) {
+      this.adjustRelationship(observer, defendant, delta, note);
+      this.adjustRelationship(defendant, observer, Math.trunc(delta / 2), note);
+    }
   }
 
   repairTrialState(reason = 'unknown'): TrialRepairResult {
@@ -1705,7 +1761,7 @@ export class TermMachine {
     }
 
     if (!Array.isArray(trial.pendingGroups)) {
-      trial.pendingGroups = this.groupAxes();
+      trial.pendingGroups = this.trialRoundGroups(trial.stage === 'fate' ? TRIAL_FATE_ROUNDS : TRIAL_FOOLISH_ROUNDS);
       messages.push('裁判の発言順を再生成しました');
     }
 
@@ -1871,7 +1927,7 @@ export class TermMachine {
       trial.defendant = this.argmaxCandidate(trial);
     }
     trial.stage = 'fate';
-    trial.pendingGroups = this.groupAxes();
+    trial.pendingGroups = this.trialRoundGroups(TRIAL_FATE_ROUNDS);
     return maybeReveal(this.world, incident, trial, this.rng, this.trialComposeConfig);
   }
 

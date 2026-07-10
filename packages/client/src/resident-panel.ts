@@ -166,7 +166,8 @@ export class ResidentPanel {
 
     for (const h of [...(w.residentHistory ?? [])].reverse().slice(0, 10)) {
       const brain = h.llmBrain ? `脳:${h.llmBrain}` : '脳:stub';
-      this.historyBox.appendChild(row(`${residentHistoryDisplayName(w, h)} (${h.species})`, `${originLabel(h.origin)} / ${h.archetype ?? '通常'} / ${brain}`));
+      const namedBy = h.namedByName ? `命名:${h.namedByName}` : null;
+      this.historyBox.appendChild(row(`${residentHistoryDisplayName(w, h)} (${h.species})`, [originLabel(h.origin), h.archetype ?? '通常', brain, namedBy].filter((s): s is string => s !== null).join(' / ')));
     }
 
     for (const a of [...(w.villagerActionLog ?? [])].reverse().slice(0, 14)) {
@@ -444,18 +445,150 @@ function triggerLabel(weight: number): string {
   return '低';
 }
 
+const RELATION_GROUP_LIMIT = 6;
+const RELATION_NAMED_LIMIT = 3;
+
+type RelationGroupKey =
+  | 'spouse'
+  | 'romance'
+  | 'envy'
+  | 'grudge'
+  | 'enemy'
+  | 'trust'
+  | 'like'
+  | 'faithWorship'
+  | 'faithBelief'
+  | 'faithRecognition'
+  | 'neutral';
+
+interface RelationGroup {
+  key: RelationGroupKey;
+  priority: number;
+  countNoun: '村人' | '神';
+  strength: number;
+  targets: Map<string, string>;
+}
+
 function relationshipLines(w: WireWorld, v: Villager, names: Map<string, string>, alive: Set<string>): string[] {
-  const lines: string[] = [];
-  if (v.partnerId && alive.has(v.partnerId)) lines.push(`配偶者: ${names.get(v.partnerId) ?? v.partnerId}`);
+  const groups = new Map<RelationGroupKey, RelationGroup>();
+  if (v.partnerId && alive.has(v.partnerId)) {
+    addRelationGroup(groups, 'spouse', v.partnerId, names.get(v.partnerId) ?? v.partnerId, 100);
+  }
   for (const rel of (w.relationships ?? []).filter((r) => r.from === v.id && alive.has(r.to))) {
     if (rel.kind === 'spouse' && rel.to === v.partnerId) continue;
-    const kind = rel.kind === 'spouse' ? '夫婦' : rel.kind === 'romance' ? '恋愛' : '関係';
-    lines.push(`${kind}: ${names.get(rel.to) ?? rel.to} / ${rel.affinity} / ${rel.note}`);
+    const key = relationGroupKey(rel);
+    addRelationGroup(groups, key, rel.to, names.get(rel.to) ?? rel.to, Math.abs(rel.affinity));
   }
   for (const faith of (w.userFaith ?? []).filter((f) => f.villagerId === v.id && f.faith >= 25)) {
-    lines.push(`信仰: ${faith.title} ${faith.faith} / ${faith.note}`);
+    const key = faith.title === '崇拝' ? 'faithWorship' : faith.title === '信仰' ? 'faithBelief' : 'faithRecognition';
+    addRelationGroup(groups, key, faith.userId, userFaithLabel(faith.userId), faith.faith);
   }
-  return lines;
+  return [...groups.values()]
+    .sort((a, b) => a.priority - b.priority || b.strength - a.strength || a.key.localeCompare(b.key))
+    .slice(0, RELATION_GROUP_LIMIT)
+    .map(formatRelationGroup);
+}
+
+function addRelationGroup(
+  groups: Map<RelationGroupKey, RelationGroup>,
+  key: RelationGroupKey,
+  targetId: string,
+  targetName: string,
+  strength: number,
+): void {
+  let group = groups.get(key);
+  if (!group) {
+    group = {
+      key,
+      priority: relationGroupPriority(key),
+      countNoun: key.startsWith('faith') ? '神' : '村人',
+      strength,
+      targets: new Map(),
+    };
+    groups.set(key, group);
+  }
+  group.targets.set(targetId, targetName);
+  group.strength = Math.max(group.strength, strength);
+}
+
+function relationGroupKey(rel: WireWorld['relationships'][number]): RelationGroupKey {
+  if (rel.kind === 'spouse') return 'spouse';
+  if (rel.kind === 'romance') return 'romance';
+  const note = rel.note;
+  if (/妬|嫉妬/.test(note)) return 'envy';
+  if (/恨|遺恨|忘れない|冤罪|偽証|処刑/.test(note)) return 'grudge';
+  if (rel.hates || rel.affinity <= REL_HATE_THRESHOLD || /敵|警戒|嫌/.test(note)) return 'enemy';
+  if (rel.affinity >= 70 || /心を許|大切/.test(note)) return 'trust';
+  if (rel.affinity >= REL_LIKE_THRESHOLD || /好意/.test(note)) return 'like';
+  return 'neutral';
+}
+
+function relationGroupPriority(key: RelationGroupKey): number {
+  switch (key) {
+    case 'spouse':
+      return 0;
+    case 'romance':
+      return 1;
+    case 'envy':
+      return 2;
+    case 'grudge':
+      return 3;
+    case 'enemy':
+      return 4;
+    case 'trust':
+      return 5;
+    case 'like':
+      return 6;
+    case 'faithWorship':
+      return 7;
+    case 'faithBelief':
+      return 8;
+    case 'faithRecognition':
+      return 9;
+    case 'neutral':
+      return 10;
+  }
+}
+
+function formatRelationGroup(group: RelationGroup): string {
+  const names = [...group.targets.values()];
+  const target = names.length <= RELATION_NAMED_LIMIT
+    ? joinJapaneseNames(names)
+    : `${names.length}人の${group.countNoun}`;
+  switch (group.key) {
+    case 'spouse':
+      return names.length <= RELATION_NAMED_LIMIT ? `${target}と夫婦である` : `${target}と夫婦関係にある`;
+    case 'romance':
+      return `${target}に恋愛感情を持っている`;
+    case 'envy':
+      return `${target}を妬んでいる`;
+    case 'grudge':
+      return `${target}を恨んでいる`;
+    case 'enemy':
+      return `${target}に敵意を持っている`;
+    case 'trust':
+      return `${target}に心を許している`;
+    case 'like':
+      return `${target}に好意を持っている`;
+    case 'faithWorship':
+      return `${target}を崇拝している`;
+    case 'faithBelief':
+      return `${target}を信仰している`;
+    case 'faithRecognition':
+      return `${target}を神として認識している`;
+    case 'neutral':
+      return `${target}の様子を見ている`;
+  }
+}
+
+function joinJapaneseNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  if (names.length === 2) return `${names[0]}と${names[1]}`;
+  return names.join('、');
+}
+
+function userFaithLabel(userId: string): string {
+  return userId.length > 6 ? `神:${userId.slice(0, 6)}` : `神:${userId}`;
 }
 
 function brainLabelFor(w: WireWorld, villagerId: string): string {

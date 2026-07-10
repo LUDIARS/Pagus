@@ -6,10 +6,11 @@
 // 無言フォールバック禁止 (RULE_CODE §7.1): 不正/受付外のコマンドは reason 付きで reject する。
 // シーズン保存 (seasons.json) は try/catch で握り潰さず console.error する。
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { HighlightCard, LeaderboardEntry, SeasonWinner, ChronicleKind } from '@pagus/sim';
 import { dataDir } from './load-data.js';
+import { runtimeDb, type RuntimeDb } from './runtime-db.js';
 
 /** コマンドの受理/却下 (握り潰さず理由を返す)。 */
 export type SpectacleResult = { ok: true } | { ok: false; reason: string };
@@ -423,30 +424,36 @@ export class RaidManager {
  * 失敗は握り潰さず console.error する (無言フォールバック禁止)。
  */
 export class SeasonStore {
-  private readonly path: string;
+  private readonly db: RuntimeDb;
+  private readonly legacyPath = resolve(dataDir(), 'runtime', 'seasons.json');
 
-  constructor() {
-    this.path = resolve(dataDir(), 'runtime', 'seasons.json');
+  constructor(db: RuntimeDb = runtimeDb()) {
+    this.db = db;
+    this.migrateLegacy();
   }
 
   append(record: SeasonRecord): void {
     try {
-      mkdirSync(dirname(this.path), { recursive: true });
-      const records = this.load();
-      records.push(record);
-      writeFileSync(this.path, JSON.stringify(records, null, 2), 'utf8');
+      this.db.addSeasonRecord(record);
     } catch (e) {
-      console.error('[pagus] seasons.json 保存失敗', e);
+      console.error('[pagus] season history db save failed', e);
     }
   }
 
-  private load(): SeasonRecord[] {
-    try {
-      const raw = JSON.parse(readFileSync(this.path, 'utf8')) as unknown;
-      if (Array.isArray(raw)) return raw as SeasonRecord[];
-    } catch {
-      /* 無ければ空配列で始める (保存なし扱い、無言フォールバックではない) */
+  private migrateLegacy(): void {
+    if (this.db.seasonRecordCount() > 0) return;
+    const stored = this.db.getState<SeasonRecord[]>('seasons');
+    if (stored) {
+      this.db.replaceSeasonRecords(stored);
+      return;
     }
-    return [];
+    try {
+      const raw = JSON.parse(readFileSync(this.legacyPath, 'utf8')) as unknown;
+      if (Array.isArray(raw)) {
+        this.db.replaceSeasonRecords(raw as SeasonRecord[]);
+      }
+    } catch {
+      /* no legacy season history */
+    }
   }
 }

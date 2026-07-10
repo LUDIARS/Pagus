@@ -24,6 +24,9 @@ import { ActionOverlay } from './action-overlay.js';
 import { ChatPanel } from './chat-panel.js';
 import { connect, type Conn } from './ws-client.js';
 import { getUserId, getUserName, setUserId, setUserName, enablePush } from './push-client.js';
+import { lockPageZoom } from './lock-page-zoom.js';
+
+lockPageZoom();
 
 // 既定は同一オリジンの /ws (Vite が game server 4310 へ proxy)。
 // → ローカルでもトンネル (pagus.vtn-game.com) 越しでも繋がる。VITE_WS_URL で上書き可。
@@ -39,13 +42,31 @@ function el(id: string): HTMLElement {
   return node;
 }
 
+let eventTitleTimer: number | null = null;
+
+function showEventTitle(title: string, subtitle: string | undefined, kind: 'mystery' | 'trial' | 'life'): void {
+  const root = document.getElementById('event-title-call');
+  const titleEl = document.getElementById('event-title-main');
+  const subEl = document.getElementById('event-title-sub');
+  if (!root || !titleEl || !subEl) return;
+  titleEl.textContent = title;
+  subEl.textContent = subtitle ?? (kind === 'trial' ? '公開裁判' : kind === 'life' ? '村の祝い' : '事件の幕開け');
+  root.classList.remove('mystery', 'trial', 'life');
+  root.classList.add(kind, 'show');
+  if (eventTitleTimer !== null) window.clearTimeout(eventTitleTimer);
+  eventTitleTimer = window.setTimeout(() => {
+    root.classList.remove('show');
+    eventTitleTimer = null;
+  }, 3200);
+}
+
 async function main(): Promise<void> {
   const stage = new StageView();
   await stage.mount(el('stage'));
 
   const radar = new Radar(el('radar') as HTMLCanvasElement);
   const hud = new Hud(el('hud'), el('status'));
-  const log = new LogOverlay(el('log'));
+  const log = new LogOverlay(el('village-log'));
   const incident = new IncidentPanel(el('incident-info'));
   const vstatus = new VillageStatus(el('vstatus'));
   const ruleHandlers = {
@@ -54,7 +75,7 @@ async function main(): Promise<void> {
     onRemoveRule: (ruleId: string) => conn.send({ t: 'removeRule', ruleId, userId }),
   };
   const chronicle = new ChronicleView(el('chronicle'), el('chronicle-body'), el('hist-btn'), el('chronicle-close'), undefined, {
-    tabs: ['highlight', 'logs', 'trial', 'life', 'rules', 'villagers', 'actions', 'other'],
+    tabs: ['highlight', 'events', 'logs', 'trial', 'life', 'rules', 'villagers', 'actions', 'other'],
   });
   const interventionRules = new ChronicleView(null, el('intervention-rules'), null, null, {
     ...ruleHandlers,
@@ -186,10 +207,27 @@ async function main(): Promise<void> {
     onRaidStrike: (amount) => conn.send({ t: 'raidStrike', amount, userId }),
   }, { readOnly: true });
 
-  const chat = new ChatPanel(el('chat'), userId, (text) => conn.send({ t: 'chat', text, userId }));
+  const godChat = new ChatPanel(
+    el('god-chat'),
+    userId,
+    (text) => conn.send({ t: 'chat', text, userId, channel: 'god' }),
+    { title: null, placeholder: '神の声を落とす', emptyText: 'まだ神の声はありません。' },
+  );
+  const humanChat = new ChatPanel(
+    el('human-chat'),
+    userId,
+    (text) => conn.send({ t: 'chat', text, userId, channel: 'human' }),
+    { title: null, placeholder: '人間だけに送る', emptyText: 'まだ人間同士の会話はありません。' },
+  );
+  const dmChat = new ChatPanel(
+    el('dm-chat'),
+    userId,
+    () => undefined,
+    { title: null, readOnly: true, emptyText: '住民とのDMは未配線です。' },
+  );
 
   // 統合アクションオーバーレイ (§v1.3-E): 左ペインに埋め込む介入パネル。
-  // 課金以外の操作群 (介入/カード/村/裁判/経済/チャット) をタブ式に集約する。
+  // 課金以外の操作群 (介入/カード/村のしきたり) をタブ式に集約する。
   const overlay = new ActionOverlay(el('action-overlay'), el('ao-header'), el('ao-tabs'), null, el('ao-backdrop'), { embedded: true });
 
   conn = connect(WS_URL, {
@@ -231,6 +269,7 @@ async function main(): Promise<void> {
       chronicle.setEntries(entries);
       villageRules.setEntries(entries);
     },
+    onEventTitle: (title, subtitle, kind) => showEventTitle(title, subtitle, kind),
     // テーマパック (§v1.4-D): 語彙を各所へ適用し、wholesome では死刑ボタンを隠す。
     onTheme: (_pack, _moral, lexicon) => {
       stage.setTheme(lexicon);
@@ -279,7 +318,11 @@ async function main(): Promise<void> {
     onMartial: (mode) => governance.setMartial(mode),
     onFund: (amount, threshold) => governance.setFund(amount, threshold),
     onHighlights: (cards) => spectacle.setHighlights(cards),
-    onChat: (messages) => chat.setMessages(messages),
+    onChat: (messages) => {
+      godChat.setMessages(messages.filter((msg) => msg.channel === 'god'));
+      humanChat.setMessages(messages.filter((msg) => msg.channel === 'human'));
+      dmChat.setMessages(messages.filter((msg) => msg.channel === 'dm'));
+    },
     onMvp: (villagerId, name) => spectacle.setMvp(villagerId, name),
     onRaid: (active, villainName, hp, hpMax, endsInMs) => spectacle.setRaid(active, villainName, hp, hpMax, endsInMs),
     onSeason: (num, winner, leaderboard) => spectacle.setSeason(num, winner, leaderboard),
@@ -289,7 +332,18 @@ async function main(): Promise<void> {
   const pushBtn = el('push-btn');
   const settingsBtn = el('settings-btn');
   const settingsMenu = el('settings-menu');
-  settingsBtn.addEventListener('click', () => settingsMenu.classList.toggle('show'));
+  const settingsClose = el('settings-close');
+  const setSettingsOpen = (open: boolean): void => {
+    settingsMenu.classList.toggle('show', open);
+  };
+  settingsBtn.addEventListener('click', () => setSettingsOpen(!settingsMenu.classList.contains('show')));
+  settingsClose.addEventListener('click', () => setSettingsOpen(false));
+  settingsMenu.addEventListener('click', (event) => {
+    if (event.target === settingsMenu) setSettingsOpen(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') setSettingsOpen(false);
+  });
   pushBtn.addEventListener('click', () => {
     pushBtn.textContent = '🔔 …';
     enablePush()
@@ -304,6 +358,7 @@ async function main(): Promise<void> {
   });
 
   setupAccountOverlay();
+  setupLogTabs();
   setupRightTabs();
   setupDrawers();
 }
@@ -367,6 +422,95 @@ function setupRightTabs(): void {
     button.addEventListener('click', () => select(button.dataset.rightTab ?? 'village'));
   }
   select(buttons.find((button) => button.classList.contains('active'))?.dataset.rightTab ?? 'village');
+}
+
+/** 中央下ログの「村の様子 / チャット」タブを切り替える。 */
+function setupLogTabs(): void {
+  const root = el('log');
+  const toggle = el('log-toggle') as HTMLButtonElement;
+  const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-log-tab]'));
+  const panels = Array.from(root.querySelectorAll<HTMLElement>('[data-log-panel]'));
+  let closed = false;
+  let drag:
+    | {
+        pointerId: number;
+        startX: number;
+        startY: number;
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+      }
+    | null = null;
+  let previousUserSelect = '';
+
+  const setClosed = (next: boolean): void => {
+    closed = next;
+    root.classList.toggle('log-closed', closed);
+    toggle.textContent = closed ? '開' : '×';
+    const label = closed ? 'チャットを開く' : 'チャットを閉じる';
+    toggle.title = label;
+    toggle.setAttribute('aria-label', label);
+  };
+
+  const select = (id: string): void => {
+    for (const button of buttons) button.classList.toggle('active', button.dataset.logTab === id);
+    for (const panel of panels) panel.hidden = panel.dataset.logPanel !== id;
+  };
+  const canDrag = (target: EventTarget | null): boolean => {
+    if (!(target instanceof Element)) return false;
+    if (target.closest('button,input,textarea,select,a')) return false;
+    return Boolean(target.closest('[data-log-panel]'));
+  };
+  const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), Math.max(min, max));
+
+  root.addEventListener('pointerdown', (event) => {
+    if (closed || event.button !== 0 || !canDrag(event.target)) return;
+    const rootRect = root.getBoundingClientRect();
+    const centerRect = el('center').getBoundingClientRect();
+    drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      left: rootRect.left - centerRect.left,
+      top: rootRect.top - centerRect.top,
+      width: rootRect.width,
+      height: rootRect.height,
+    };
+    root.style.left = `${drag.left}px`;
+    root.style.top = `${drag.top}px`;
+    root.style.width = `${drag.width}px`;
+    root.style.height = `${drag.height}px`;
+    root.style.bottom = 'auto';
+    root.style.transform = 'none';
+    previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+    root.classList.add('log-dragging');
+    root.setPointerCapture(event.pointerId);
+  });
+  root.addEventListener('pointermove', (event) => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const centerRect = el('center').getBoundingClientRect();
+    const nextLeft = clamp(drag.left + event.clientX - drag.startX, 8, centerRect.width - drag.width - 8);
+    const nextTop = clamp(drag.top + event.clientY - drag.startY, 8, centerRect.height - drag.height - 8);
+    root.style.left = `${nextLeft}px`;
+    root.style.top = `${nextTop}px`;
+  });
+  const stopDrag = (event: PointerEvent): void => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (root.hasPointerCapture(event.pointerId)) root.releasePointerCapture(event.pointerId);
+    root.classList.remove('log-dragging');
+    document.body.style.userSelect = previousUserSelect;
+    drag = null;
+  };
+  root.addEventListener('pointerup', stopDrag);
+  root.addEventListener('pointercancel', stopDrag);
+  toggle.addEventListener('click', () => setClosed(!closed));
+  for (const button of buttons) {
+    button.addEventListener('click', () => select(button.dataset.logTab ?? 'village'));
+  }
+  setClosed(false);
+  select(buttons.find((button) => button.classList.contains('active'))?.dataset.logTab ?? 'village');
 }
 
 /** モバイル: 左右パネルをドロワーとして開閉する。 */

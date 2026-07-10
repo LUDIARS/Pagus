@@ -2,7 +2,7 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Pagus — AI村</title>
     <style>
       :root { color-scheme: dark; --dock-h: 0px; }
@@ -21,14 +21,26 @@
       .topbar-actions { flex-wrap: wrap; }
       #hud { font-size: 14px; }
       #status { font-size: 12px; color: #7f8aa3; margin-left: auto; }
-      #settings-wrap { position: relative; }
+      #settings-wrap { position: static; }
       #settings-menu {
-        display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 100;
-        width: 360px; max-width: calc(100vw - 24px); padding: 10px; background: #11151f; border: 1px solid #38405a; border-radius: 8px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+        display: none; position: fixed; inset: 0; z-index: 110; align-items: center; justify-content: center;
+        padding: 16px; background: rgba(0,0,0,0.62);
       }
-      #settings-menu.show { display: block; }
-      #settings-menu > button { width: 100%; }
+      #settings-menu.show { display: flex; }
+      .settings-menu-box {
+        width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: hidden;
+        display: flex; flex-direction: column;
+        background: #11151f; border: 1px solid #38405a; border-radius: 8px;
+        box-shadow: 0 18px 48px rgba(0,0,0,0.55);
+      }
+      .settings-menu-head {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 10px 12px; border-bottom: 1px solid #2a3346;
+      }
+      .settings-menu-title { color: #f2c94c; font-size: 15px; font-weight: bold; }
+      .settings-menu-close { padding: 2px 10px; font-size: 18px; }
+      .settings-menu-body { overflow-y: auto; padding: 12px; }
+      .settings-menu-body > button { width: 100%; }
       .settings-section-title { font-size: 13px; font-weight: bold; color: #f2c94c; margin-bottom: 4px; }
       .settings-menu-action { margin-top: 10px; border-color: #56ccf2; color: #cdeeff; }
       button { background: #1e2533; color: #cdd6e4; border: 1px solid #38405a; border-radius: 6px; padding: 7px 14px; cursor: pointer; }
@@ -62,11 +74,41 @@
       #stage canvas { display: block; width: 100%; height: 100%; }
       #log {
         position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%);
-        width: 72%; max-height: 38%; overflow: hidden;
-        display: flex; flex-direction: column; gap: 3px;
+        width: 76%; height: min(42%, 320px); min-height: 210px; overflow: hidden;
+        display: flex; flex-direction: column;
         background: rgba(8, 10, 16, 0.62); border: 1px solid #2a3346; border-radius: 10px;
-        padding: 10px 14px; backdrop-filter: blur(2px); pointer-events: none;
+        padding: 0; backdrop-filter: blur(2px); pointer-events: auto;
       }
+      #log.log-dragging { box-shadow: 0 14px 32px rgba(0,0,0,0.45); }
+      #log.log-closed {
+        width: auto !important; height: auto !important; min-height: 0;
+      }
+      #log.log-closed .log-tab-panel { display: none !important; }
+      #log.log-closed .log-tab-btn { display: none; }
+      #log.log-closed .log-tabs { border-top: 0; padding: 0 6px; }
+      .log-tab-panel {
+        flex: 1 1 auto; min-height: 0; overflow-y: auto;
+        display: flex; flex-direction: column; gap: 3px; padding: 10px 14px 8px;
+        cursor: grab;
+      }
+      #log.log-dragging .log-tab-panel { cursor: grabbing; }
+      .log-tab-panel[hidden] { display: none; }
+      .log-tabs {
+        display: flex; gap: 2px; flex: 0 0 auto; padding: 0 8px;
+        background: rgba(17,21,31,0.92); border-top: 1px solid #2a3346;
+      }
+      .log-toggle {
+        flex: 0 0 34px; min-width: 34px; border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+        background: transparent; color: #9be3ff; padding: 8px 0; font-size: 13px; font-weight: 700;
+      }
+      .log-toggle:hover { background: rgba(86,204,242,0.08); }
+      .log-tab-btn {
+        flex: 1; min-width: 0; border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+        background: transparent; color: #8b96ad; padding: 8px 4px; font-size: 12px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .log-tab-btn:hover { background: rgba(86,204,242,0.08); color: #e6ebf5; }
+      .log-tab-btn.active { color: #9be3ff; border-bottom-color: #56ccf2; font-weight: 700; }
       .ov-line { font-size: 16px; line-height: 1.45; color: #e6ebf5; text-shadow: 0 1px 2px #000; }
 
       /* パネル共通 */
@@ -354,6 +396,23 @@
         transition: opacity 0.2s ease, transform 0.2s ease; }
       #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+      #event-title-call {
+        position: fixed; inset: 0; z-index: 74; display: flex; align-items: center; justify-content: center;
+        padding: 24px; pointer-events: none; opacity: 0; transform: scale(0.98);
+        transition: opacity 0.24s ease, transform 0.24s ease;
+      }
+      #event-title-call.show { opacity: 1; transform: scale(1); }
+      .event-title-inner {
+        width: min(720px, 92vw); border-top: 2px solid #f2c94c; border-bottom: 2px solid #f2c94c;
+        background: rgba(8,10,16,0.82); box-shadow: 0 22px 64px rgba(0,0,0,0.55);
+        padding: 22px 28px; text-align: center; backdrop-filter: blur(3px);
+      }
+      #event-title-call.trial .event-title-inner { border-color: #eb5757; }
+      #event-title-call.life .event-title-inner { border-color: #6fcf97; }
+      .event-title-kicker { font-size: 12px; color: #9be3ff; letter-spacing: 0; margin-bottom: 8px; }
+      .event-title-main { font-size: clamp(26px, 5vh, 48px); line-height: 1.12; font-weight: 800; color: #f7f0d0; }
+      .event-title-sub { margin-top: 9px; font-size: 14px; line-height: 1.45; color: #cdd6e4; }
+
       #chronicle {
         display: none; position: fixed; inset: 0; z-index: 75;
         background: rgba(0,0,0,0.62); align-items: center; justify-content: center; padding: 18px;
@@ -384,6 +443,9 @@
       .hist-villager.gone { opacity: 0.5; }
       .hist-villager-name { font-size: 13px; font-weight: bold; }
       .hist-villager-meta { font-size: 11px; color: #8b96ad; }
+      .hist-event { border: 1px solid #2a3346; border-radius: 8px; padding: 10px 12px; margin: 7px 0; background: #11151f; }
+      .hist-event-title { font-size: 14px; font-weight: 800; color: #f2c94c; margin-bottom: 4px; }
+      .hist-event-meta { font-size: 11px; color: #9be3ff; margin-bottom: 5px; }
       #village-rules, #intervention-rules { background: #11151f; border: 1px solid #2a3346; border-radius: 8px; overflow: hidden; min-height: 320px; display: flex; flex-direction: column; }
       #village-rules { min-height: 260px; }
       #intervention-rules { margin-top: 10px; min-height: 0; }
@@ -452,12 +514,16 @@
       #chat h3 { color: #9be3ff; }
       .chat-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; margin-bottom: 8px; }
       .chat-row { padding: 6px 8px; background: #0d121a; border: 1px solid #1d2a3c; border-radius: 6px; }
+      .chat-row-villager { border-color: #31545a; background: rgba(13,20,23,0.85); }
+      .chat-row-self { border-color: #4a4566; background: rgba(20,18,31,0.85); }
       .chat-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: #8b96ad; margin-bottom: 2px; }
       .chat-name { color: #9be3ff; font-weight: bold; }
       .chat-text { font-size: 13px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
       .chat-form { display: flex; gap: 6px; }
       .chat-input { flex: 1; min-width: 0; background: #0e121b; color: #cdd6e4; border: 1px solid #38405a; border-radius: 6px; padding: 7px 8px; font-size: 13px; }
       .chat-send { white-space: nowrap; border-color: #56ccf2; color: #cdeeff; }
+      #log .chat-list { flex: 1 1 auto; min-height: 0; max-height: none; margin-bottom: 8px; }
+      #log .chat-form { flex: 0 0 auto; }
 
       /* モバイル: 中央を全画面、左右はスライドインのドロワー。 */
       .drawer-toggle { display: none; }
@@ -518,8 +584,16 @@
         <div id="settings-wrap">
           <button id="settings-btn">⚙ 設定</button>
           <div id="settings-menu">
-            <div id="account-settings"></div>
-            <button id="push-btn" class="settings-menu-action">🔔 通知</button>
+            <div class="settings-menu-box">
+              <div class="settings-menu-head">
+                <span class="settings-menu-title">設定</span>
+                <button id="settings-close" class="settings-menu-close" type="button" aria-label="設定を閉じる">×</button>
+              </div>
+              <div class="settings-menu-body">
+                <div id="account-settings"></div>
+                <button id="push-btn" class="settings-menu-action">🔔 通知</button>
+              </div>
+            </div>
           </div>
         </div>
         <button id="btn-right" class="drawer-toggle">📊 情報</button>
@@ -558,21 +632,34 @@
               <div id="governance" hidden></div>
               <div id="intervention-rules"></div>
             </section>
-            <section class="ao-tab" data-tab="econ" data-label="💰 経済" hidden data-hidden="true">
-              <div id="economy"></div>
-            </section>
-            <section class="ao-tab" data-tab="chat" data-label="💬 チャット">
-              <div id="chat"></div>
-            </section>
           </div>
         </div>
       </div>
       <div id="center">
         <div id="stage"></div>
+        <div id="event-title-call" aria-live="polite" aria-hidden="true">
+          <div class="event-title-inner">
+            <div class="event-title-kicker">EVENT</div>
+            <div id="event-title-main" class="event-title-main"></div>
+            <div id="event-title-sub" class="event-title-sub"></div>
+          </div>
+        </div>
         <div id="heckle"></div>
         <div id="testify"></div>
         <div id="trial"></div>
-        <div id="log"></div>
+        <div id="log">
+          <div id="village-log" class="log-tab-panel" data-log-panel="village"></div>
+          <div id="god-chat" class="log-tab-panel" data-log-panel="god" hidden></div>
+          <div id="human-chat" class="log-tab-panel" data-log-panel="human" hidden></div>
+          <div id="dm-chat" class="log-tab-panel" data-log-panel="dm" hidden></div>
+          <div id="log-tabs" class="log-tabs">
+            <button id="log-toggle" class="log-toggle" type="button" title="チャットを閉じる" aria-label="チャットを閉じる">×</button>
+            <button class="log-tab-btn active" data-log-tab="village">村の様子</button>
+            <button class="log-tab-btn" data-log-tab="god">神の声チャット</button>
+            <button class="log-tab-btn" data-log-tab="human">人間のみ</button>
+            <button class="log-tab-btn" data-log-tab="dm">住民とのDM</button>
+          </div>
+        </div>
       </div>
       <div id="right" class="col">
         <div class="side-tabs">
@@ -604,6 +691,7 @@
       <div id="backdrop"></div>
     </div>
     <div id="ao-backdrop"></div>
+    <div id="economy" hidden></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

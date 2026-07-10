@@ -12,14 +12,16 @@ describe('CostLog (LLM コストログ §7)', () => {
     expect(s.byKind.world?.usd).toBeCloseTo(30, 6);
   });
 
-  it('codex/gpt は GPT 単価、不明モデルは $0 (トークンは数える)', () => {
+  it('GPT-5.6 family は各tierの公式単価、不明モデルは $0', () => {
     const log = new CostLog();
-    log.record({ kind: 'action', provider: 'codex', model: 'gpt-5.5', inTokens: 1_000_000, outTokens: 0 });
+    log.record({ kind: 'action', provider: 'codex', model: 'gpt-5.6-sol', inTokens: 1_000_000, outTokens: 1_000_000 });
+    log.record({ kind: 'action', provider: 'codex', model: 'gpt-5.6-terra', inTokens: 1_000_000, outTokens: 1_000_000 });
+    log.record({ kind: 'action', provider: 'codex', model: 'gpt-5.6-luna', inTokens: 1_000_000, outTokens: 1_000_000 });
     log.record({ kind: 'action', provider: 'x', model: 'mystery', inTokens: 1_000_000, outTokens: 1_000_000 });
     const s = log.summary();
-    expect(s.calls).toBe(2);
-    expect(s.totalUsd).toBeCloseTo(2, 6); // gpt in=2 + unknown=0
-    expect(s.byKind.action?.inTokens).toBe(2_000_000);
+    expect(s.calls).toBe(4);
+    expect(s.totalUsd).toBeCloseTo(59.5, 6); // Sol=35 + Terra=17.5 + Luna=7
+    expect(s.byKind.action?.inTokens).toBe(4_000_000);
   });
 
   it('recent は新しい順で最大 30 件', () => {

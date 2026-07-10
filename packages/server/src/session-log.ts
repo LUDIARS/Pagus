@@ -10,6 +10,7 @@ import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import type { World } from '@pagus/sim';
+import { runtimeDb, type RuntimeDb } from './runtime-db.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -60,9 +61,11 @@ export class SessionLog {
   private readonly toStdout: boolean;
   private readonly stream: WriteStream | null;
   private readonly path: string | null;
+  private readonly db: RuntimeDb;
   private lastPhase: World['phase'] | null = null;
 
-  constructor(config: SessionLogConfig = DEFAULT_SESSION_LOG_CONFIG) {
+  constructor(config: SessionLogConfig = DEFAULT_SESSION_LOG_CONFIG, db: RuntimeDb = runtimeDb()) {
+    this.db = db;
     this.toStdout = config.logStdout;
     if (config.logFile) {
       const dir = resolveLogDir(config.logDir);
@@ -115,6 +118,7 @@ export class SessionLog {
   }
 
   private write(record: Record<string, unknown>): void {
+    this.db.addSessionLog(record);
     this.stream?.write(`${JSON.stringify(record)}\n`);
   }
 }

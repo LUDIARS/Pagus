@@ -6,28 +6,33 @@
 // 例外で env 維持: PAGUS_CONFIG_KEY (マスター鍵) / PAGUS_FRESH (その起動だけ world.json 無視) /
 // PAGUS_BRAIN (stub|llm の起動モード) / PAGUS_DATA_DIR (config 自体の置き場を解決するため)。
 
-import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, rollVillagerGacha, ensureResidentHistory, addVillagerActionLog, KARMA_GACHA_COST, shouldAdoptRule, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem, type VillagerGachaKind, type ChatMessage, type TrialState, type TrialVoice } from '@pagus/sim';
+import { createWorld, TermMachine, StubBrain, StubWorldBrain, EventDirector, pickVillageRules, addVillageRule, removeVillageRule, makeDisasterRule, aliveVillagers, PERSONALITY_LABELS, ITEM_LABELS, rollVillagerGacha, ensureResidentHistory, nameExistingGenericIncidentVillagers, addVillagerActionLog, KARMA_GACHA_COST, shouldAdoptRule, type Brain, type WorldBrain, type LlmInfo, type PlayerActionEntry, type ChronicleKind, type World, type CardName, type DisasterKind, type MarketItem, type VillagerGachaKind, type ChatMessage, type ChatChannel, type TrialState, type TrialVoice } from '@pagus/sim';
 import { loadConfig, loadSeed, loadIncidentArcs } from './load-data.js';
 import { loadPagusConfig, type PagusConfig } from './config/pagus-config.js';
-import { TermLoop, type TrialCloseInfo } from './term-loop.js';
+import { TermLoop, type LoopEventStart, type TrialCloseInfo } from './term-loop.js';
 import { GameWsServer } from './ws-server.js';
 import { PlayerState } from './player-state.js';
 import { AuctionManager } from './auction.js';
 import { Governance } from './governance.js';
 import { SpectacleManager, RaidManager, SeasonStore } from './spectacle.js';
-import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, CostLog, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND, type CostSink } from './llm/index.js';
+import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, CostLog, DEFAULT_CAST, DEFAULT_STRONG, GPT56_CAST, GPT56_STRONG, GPT56_ASSIGNMENT_WEIGHTS, type CostSink } from './llm/index.js';
 import { createServer } from 'node:http';
 import { SessionLog } from './session-log.js';
 import { TrialNarrator } from './trial-narrator.js';
 import { Chronicle } from './chronicle.js';
 import { WorldStore } from './world-store.js';
 import { PushService } from './push-service.js';
+import { ChatStore } from './chat-store.js';
+import { GodChatResponder } from './god-chat.js';
 import type { BlackBox } from '@ludiars/blackbox';
 import { makeTrialFateBlackBox } from './llm/fate-blackbox.js';
 import { createRequestListener } from './http-api.js';
 import { loadLexicon, validateMoral, fillName } from './theme/lexicon.js';
 import { DivergenceLog } from './distill/divergence-log.js';
 import { ShadowSampler } from './distill/shadow-sampler.js';
+import { closeRuntimeDb, runtimeDb } from './runtime-db.js';
+import { InactiveResidentStore } from './inactive-resident-store.js';
+import { TermUserSet } from './term-user-set.js';
 
 /** 村の歴史に残す「節目」のログか判定する。verdictPrefix はテーマパックの判決接頭辞 (§v1.4-D)。 */
 function isMilestone(text: string, verdictPrefix = '判決'): boolean {
@@ -84,15 +89,15 @@ function selectBrains(costSink: CostSink, cfg: PagusConfig, fateBlackbox: BlackB
     };
   }
   if (mode === 'llm') {
-    // codex(gpt-5.5) は既定キャストに合流済。config.llm.disableCodex=true で外せる。
+    // 通常脳は Sol 2 / Terra 4 / Luna 2 / Sonnet 2。config.llm.disableCodex=true で Claude のみに戻す。
     const disableCodex = cfg.llm.disableCodex;
     // 村の進行はLLM停止時に詰まらせない。失敗後はLlmBrain側の短期オフライン扱いで再試行を抑制する。
     const retries = 0;
-    const cast = disableCodex ? DEFAULT_CAST : [...DEFAULT_CAST.filter((b) => b.id !== 'opus'), GPT_BACKEND];
-    const strong = disableCodex ? DEFAULT_STRONG : [GPT_BACKEND];
+    const cast = disableCodex ? DEFAULT_CAST : GPT56_CAST;
+    const strong = disableCodex ? DEFAULT_STRONG : GPT56_STRONG;
     const registry = disableCodex
       ? new BackendRegistry({ cast, strong })
-      : new BackendRegistry({ cast, strong, assignmentWeights: { gpt: 8, sonnet: 1, haiku: 1 } });
+      : new BackendRegistry({ cast, strong, assignmentWeights: GPT56_ASSIGNMENT_WEIGHTS });
     return {
       brain: new LlmBrain(registry, { costSink, retries, fateBlackbox }),
       worldBrain: new LlmWorldBrain(registry, { costSink, retries }),
@@ -183,7 +188,8 @@ function main(): void {
   console.log(`[pagus] theme=${cfg.theme.pack} (${lexicon.packName}) moral=${MORAL}`);
 
   // world スナップショット (data/runtime/world.json) があれば復元。PAGUS_FRESH=1 で無視して新規開始。
-  const store = new WorldStore();
+  const db = runtimeDb();
+  const store = new WorldStore({ db });
   const fresh = (process.env.PAGUS_FRESH ?? '') === '1';
   const restored = fresh ? null : store.load();
 
@@ -201,6 +207,8 @@ function main(): void {
       pickVillageRules(Math.random, 4),
     );
   }
+  const inactiveResidents = new InactiveResidentStore(db);
+  inactiveResidents.archiveInactive(world);
   const villagers = [...world.villagers.values()];
 
   // 事件アークの派生表 (§v1.4-B)。data/incident-arcs.json があれば注入 (無ければ組込み既定)。
@@ -226,6 +234,7 @@ function main(): void {
   const llmInfo = buildLlmInfo(registry, villagers);
   const brainFor = (id: string): string | null => (registry ? registry.assign(id).id : null);
   ensureResidentHistory(world, brainFor);
+  registry?.pruneAssignments(new Set([...world.villagers.values()].filter((v) => v.alive).map((v) => v.id)));
   const director = new EventDirector({ maxRepsPerSegment: cfg.sim.reps });
   const tm = new TermMachine(world, brain, {
     director,
@@ -287,7 +296,7 @@ function main(): void {
     logStdout: cfg.server.logStdout,
     logFile: cfg.server.logFile,
     logDir: cfg.server.logDir,
-  });
+  }, db);
 
   // 裁判の糾弾セリフ: llm モードでは Haiku 生成 (65%) + レパートリー蓄積。
   const llmMode = (process.env.PAGUS_BRAIN ?? 'stub') === 'llm';
@@ -305,7 +314,16 @@ function main(): void {
   });
 
   // 村の歴史 (節目を記録・永続化)。
-  const chronicle = new Chronicle();
+  const chronicle = new Chronicle(db);
+  const restoredNamings = nameExistingGenericIncidentVillagers(world, { resolveBrain: brainFor });
+  if (restoredNamings.length > 0) {
+    const date = dateLabel(world);
+    for (const naming of restoredNamings) {
+      chronicle.add(date, `👤 命名: ${naming.namedByName} が ${naming.originalName} を「${naming.assignedName}」と名付け、村はその名で記録した`, 'villager');
+    }
+    console.log(`[pagus] unnamed incident visitors named: ${restoredNamings.length}`);
+    store.save(world, tm.getBornCount(), tm.getIncidentCount(), tm.getRuleCount());
+  }
 
   // WebPush 通知 (§4.8)。VAPID 未設定なら無効 (config push.enabled=true + 鍵で有効化)。
   const push = new PushService({
@@ -338,7 +356,14 @@ function main(): void {
       fanFlamesCost: cfg.intervene.fanFlamesCost,
     },
   });
-  const knownUsers = new Set<string>();
+  const knownUsers = {
+    add(userId: string): void {
+      ps.get(userId);
+    },
+    [Symbol.iterator](): Iterator<string> {
+      return ps.userIds()[Symbol.iterator]();
+    },
+  };
 
   // 課金モック (§v1.3-F): 許可する固定パック値 (config economy.topupPacks 既定 [100,500,1000])。
   // 不正値 (非正/非整数) は無言フォールバックせず即エラー (RULE_CODE §7.1)。
@@ -391,18 +416,21 @@ function main(): void {
   // 推しの死の検知 (§1): 前回 alive だった villager id 集合。初回 snapshot で現状を seed する。
   const prevAliveIds = new Set<string>();
   let aliveInitialized = false;
-  // 人間の行動記録のリングバッファ (§8, 上限 200)。
+  // 人間の行動記録はDBを権威とし、配信時だけ直近200件を読む (§8)。
   const PLAYER_ACTIONS_CAP = 200;
-  const playerActions: PlayerActionEntry[] = [];
-  // ユーザー間チャットのリングバッファ。
-  const CHAT_CAP = 100;
-  const chatMessages: ChatMessage[] = [];
+  // チャット履歴。神の声/人間のみ/DM を永続化する。
+  const chatStore = new ChatStore(db);
+  let chatSeq = 0;
+  const godChat = new GodChatResponder({
+    client: new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: 0 }),
+    costSink: (e) => costLog.record(e),
+  });
   let dailyHighlightDate = dateLabel(tm.world);
   let dailyHighlightPending = false;
   let dailyHighlightDoneTerm = -1;
   const dailyLogs: string[] = [];
   const dailyActions: string[] = [];
-  const interventionByUser = new Map<string, number>();
+  const interventionByUser = new TermUserSet();
 
   let loop: TermLoop;
   let ws: GameWsServer;
@@ -410,6 +438,29 @@ function main(): void {
   let governance: Governance;
   let spectacle: SpectacleManager;
   let raid: RaidManager;
+  const botNames = ['LLM BOT A', 'LLM BOT B', 'LLM BOT C', 'LLM BOT D'];
+  const recordEvent = (entry: LoopEventStart): void => {
+    if (chronicle.hasEvent(entry.eventId)) return;
+    const humans = ws.connectedUserIds().slice(0, 4).map((uid) => ps.getUserName(uid) ?? `人間:${uid.slice(0, 8)}`);
+    const bots = botNames.slice(0, Math.max(0, 4 - humans.length));
+    const villagersInScene = (entry.participants ?? []).map((name) => `村人:${name}`);
+    const participants = [...humans, ...bots, ...villagersInScene];
+    const date = dateLabel(tm.world);
+    const replay = [
+      `参加者: ${participants.length > 0 ? participants.join('、') : 'LLMのみ'}`,
+      ...entry.replay,
+    ];
+    const text = entry.subtitle ? `🎭 ${entry.title}: ${entry.subtitle}` : `🎭 ${entry.title}`;
+    chronicle.add(date, text, 'event', {
+      eventId: entry.eventId,
+      title: entry.title,
+      replay,
+      participants,
+    });
+    ws.broadcastEventTitle(entry.title, entry.kind, entry.subtitle);
+    ws.updateChronicle(chronicle.recent());
+    spectacle.recordHighlight(date, entry.title, 'event', entry.subtitle ?? entry.replay[0] ?? entry.title);
+  };
 
   // 演出・協力パック (§v1.3-D) の設定。
   const RAID_CHANCE = cfg.spectacle.raidChance; // 日末にレイドが出現する確率 (㉙)
@@ -431,7 +482,7 @@ function main(): void {
   /** その userId の現状態を本人の全接続へ push (推し名は world から補完, §1)。 */
   const pushState = (userId: string): void => {
     const snap = ps.snapshot(userId, Date.now());
-    const state = { ...snap, canIntervene: interventionByUser.get(userId) !== tm.world.term };
+    const state = { ...snap, canIntervene: !interventionByUser.has(tm.world.term, userId) };
     const name = snap.championId ? tm.world.villagers.get(snap.championId)?.name : undefined;
     ws.sendPlayerState(userId, state, name);
   };
@@ -481,6 +532,7 @@ function main(): void {
   let trialVoiceSeq = 0;
   const trialVoices: TrialVoice[] = [];
   const trialParticipants = new Set<string>();
+  let trialParticipantsIncident: string | null = null;
 
   const faithfulResponder = (userId: string): { villagerId: string; faith: number } | null => {
     const candidates = tm.world.userFaith
@@ -538,9 +590,12 @@ function main(): void {
     const resolvesFate = trial?.stage === 'fate' && (pick === 'kill' || pick === 'spare');
     loop.vote(pick, userId);
     recordTrialVoice(trial, pick, userId);
-    const participantKey = `${trial.incidentId}:${userId}`;
-    if (!trialParticipants.has(participantKey)) {
-      trialParticipants.add(participantKey);
+    if (trialParticipantsIncident !== trial.incidentId) {
+      trialParticipantsIncident = trial.incidentId;
+      trialParticipants.clear();
+    }
+    if (!trialParticipants.has(userId)) {
+      trialParticipants.add(userId);
       ps.bumpStat(userId, 'trialVotes');
     }
     if (resolvesFate) loop.resolveTrialAfterPlayerStatement(pick as 'kill' | 'spare');
@@ -682,7 +737,7 @@ function main(): void {
   const tryIntervention = (userId: string): boolean => {
     const term = tm.world.term;
     const date = dateLabel(tm.world);
-    if (interventionByUser.get(userId) === term) {
+    if (interventionByUser.has(term, userId)) {
       ws.sendRejected(userId, `介入はゲーム内時間で1日1回までです (${date})`);
       pushState(userId);
       return false;
@@ -699,10 +754,9 @@ function main(): void {
   ): void => {
     const date = dateLabel(tm.world);
     const name = targetIsVillagerId ? (tm.world.villagers.get(target)?.name ?? target) : target;
-    interventionByUser.set(userId, tm.world.term);
-    playerActions.push({ date, userId, type, target: name });
-    if (playerActions.length > PLAYER_ACTIONS_CAP) playerActions.shift();
-    ws.broadcastPlayerActions(playerActions);
+    interventionByUser.add(tm.world.term, userId);
+    db.addPlayerAction({ date, userId, type, target: name });
+    ws.broadcastPlayerActions(db.recentPlayerActions(PLAYER_ACTIONS_CAP));
     pushState(userId);
   };
 
@@ -710,8 +764,67 @@ function main(): void {
     const v = tm.world.villagers.get(villagerId);
     const villagerName = v?.name ?? villagerId;
     const date = dateLabel(tm.world);
-    addVillagerActionLog(tm.world, { date, term: tm.world.term, villagerId, villagerName, text });
+    const entry = { date, term: tm.world.term, villagerId, villagerName, text };
+    addVillagerActionLog(tm.world, entry);
+    db.addVillagerAction(entry);
     dailyActions.push(`${villagerName}: ${text}`);
+  };
+
+  const nextChatId = (prefix: string): string => {
+    chatSeq += 1;
+    return `${prefix}-${Date.now().toString(36)}-${chatSeq.toString(36)}`;
+  };
+
+  const broadcastChat = (): void => {
+    ws.broadcastChat(chatStore.all());
+  };
+
+  const addHumanChat = (
+    channel: ChatChannel,
+    userId: string,
+    text: string,
+    dmWithVillagerId: string | undefined,
+  ): ChatMessage => {
+    const msg: ChatMessage = {
+      id: nextChatId(channel),
+      channel,
+      speakerKind: 'human',
+      userId,
+      userName: ps.getUserName(userId),
+      text,
+      at: Date.now(),
+    };
+    if (channel === 'dm' && dmWithVillagerId !== undefined) msg.dmWithVillagerId = dmWithVillagerId;
+    chatStore.add(msg);
+    broadcastChat();
+    return msg;
+  };
+
+  const appendGodChatReactions = (text: string): void => {
+    void godChat.respond(text, tm.world)
+      .then((reactions) => {
+        if (reactions.length === 0) return;
+        const at = Date.now();
+        const messages = reactions.map((r, i) => {
+          const msg: ChatMessage = {
+            id: nextChatId('villager'),
+            channel: 'god',
+            speakerKind: 'villager',
+            userId: `villager:${r.villagerId}`,
+            userName: r.villagerName,
+            text: r.text,
+            at: at + i,
+            villagerId: r.villagerId,
+          };
+          if (r.keywords.length > 0) msg.keywords = r.keywords;
+          return msg;
+        });
+        chatStore.addMany(messages);
+        broadcastChat();
+      })
+      .catch((err) => {
+        console.warn(`[pagus] 神の声チャット応答に失敗: ${(err as Error).message}`);
+      });
   };
 
   const finalizeDailyHighlight = (): void => {
@@ -773,29 +886,20 @@ function main(): void {
     onSetUserName: (name, userId) => {
       knownUsers.add(userId);
       const normalized = ps.setUserName(userId, name);
-      for (const msg of chatMessages) {
-        if (msg.userId === userId) msg.userName = normalized;
-      }
+      const messages = chatStore.updateUserName(userId, normalized);
       pushState(userId);
       scheduleLeaderboard();
-      if (chatMessages.length > 0) ws.broadcastChat(chatMessages);
+      if (messages.length > 0) ws.broadcastChat(messages);
     },
-    onChat: (text, userId) => {
+    onChat: (text, userId, channel, dmWithVillagerId) => {
       knownUsers.add(userId);
       const trimmed = text.trim().replace(/\s+/g, ' ').slice(0, 160);
       if (trimmed.length === 0) {
         ws.sendRejected(userId, 'チャット本文が空です');
         return;
       }
-      chatMessages.push({
-        id: `${Date.now().toString(36)}-${chatMessages.length.toString(36)}`,
-        userId,
-        userName: ps.getUserName(userId),
-        text: trimmed,
-        at: Date.now(),
-      });
-      if (chatMessages.length > CHAT_CAP) chatMessages.shift();
-      ws.broadcastChat(chatMessages);
+      addHumanChat(channel, userId, trimmed, dmWithVillagerId);
+      if (channel === 'god') appendGodChatReactions(trimmed);
     },
     onIncite: (targetId, rumorAboutId, userId) => {
       knownUsers.add(userId);
@@ -1330,6 +1434,7 @@ function main(): void {
           ws.sendRejected(userId, '復活に失敗した');
           return;
         }
+        inactiveResidents.restoreForRevivedResident(w, reviveId);
         const di = recentDeadIds.indexOf(reviveId);
         if (di >= 0) recentDeadIds.splice(di, 1);
         // 復活で次回の死亡検知が誤発火しないよう生存集合に戻す。
@@ -1505,6 +1610,7 @@ function main(): void {
   ws.setLlmInfo(llmInfo);
   ws.setTheme(cfg.theme.pack, MORAL, lexicon); // テーマパック (§v1.4-D) を初期配信対象に
   ws.updateChronicle(chronicle.recent()); // 既存の歴史を初期配信対象に。
+  ws.broadcastChat(chatStore.all()); // 永続化済みチャットを初期配信対象に。
 
   // オークション (§v1.3-B ②): 固定ロット3種ローテ。落札時のみカルマ徴収し効果付与する。
   auction = new AuctionManager(
@@ -1592,7 +1698,7 @@ function main(): void {
   governance.broadcastAll(Date.now()); // 初回 (接続前の現値を ws に保持させる)
 
   // 演出・協力パック (§v1.3-D): ハイライト/予測/MVP/祈り/シーズン。状態と集計は SpectacleManager。
-  const seasonStore = new SeasonStore();
+  const seasonStore = new SeasonStore(db);
   spectacle = new SpectacleManager(
     {
       predictReward: cfg.spectacle.predictReward,
@@ -1698,6 +1804,8 @@ function main(): void {
 
   loop = new TermLoop(tm, pace, incidentStepMs, {
     onSnapshot: (w) => {
+      inactiveResidents.archiveInactive(w);
+      registry?.pruneAssignments(new Set([...w.villagers.values()].filter((v) => v.alive).map((v) => v.id)));
       // 日末 (term 進行) を検知して保険の期限切れ掃除 (§v1.3-B ③)。
       if (w.term > lastEconomyTerm) {
         finalizeDailyHighlight();
@@ -1788,6 +1896,27 @@ function main(): void {
     onVillagerAction: (entry) => {
       recordVillagerAction(entry.villager, entry.action);
     },
+    onIncidentDesigned: (entry) => {
+      const date = dateLabel(tm.world);
+      let changed = false;
+      const namingById = new Map(entry.naming.map((n) => [n.villagerId, n]));
+      for (const villager of entry.spawned) {
+        if (aliveInitialized) prevAliveIds.add(villager.id);
+        const history = tm.world.residentHistory.find((h) => h.id === villager.id);
+        if (history) history.llmBrain = brainFor(villager.id);
+        const naming = namingById.get(villager.id);
+        if (naming) {
+          chronicle.add(date, `👤 命名: ${naming.namedByName} が ${naming.originalName} を「${naming.assignedName}」と名付け、村はその名で記録した`, 'villager');
+        } else {
+          chronicle.add(date, `👤 住民追加: ${villager.name} (事件由来)`, 'villager');
+        }
+        changed = true;
+      }
+      if (changed) ws.updateChronicle(chronicle.recent());
+    },
+    onEventStarted: (entry) => {
+      recordEvent(entry);
+    },
     onLog: (phase, text) => {
       ws.broadcastLog(phase, text);
       sessionLog.line(phase, text);
@@ -1869,6 +1998,7 @@ function main(): void {
     const lb0 = buildLeaderboard();
     ws.broadcastLeaderboard(lb0.players, lb0.factions);
   }
+  ws.broadcastPlayerActions(db.recentPlayerActions(PLAYER_ACTIONS_CAP));
 
   // sysStatus はイベント駆動 (§2.3): スナップショット送信時・コスト計上時・接続時に送る。
   // ただし最短間隔 1.5s でデバウンスし、無駄打ちを抑える。タイマーは 30s heartbeat に降格。
@@ -1923,6 +2053,7 @@ function main(): void {
     loop.stop();
     store.save(tm.world, tm.getBornCount(), tm.getIncidentCount(), tm.getRuleCount()); // 終了時は確実に最新を書き出す
     sessionLog.close();
+    closeRuntimeDb();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);

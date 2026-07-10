@@ -175,6 +175,7 @@ export interface TrialLine {
 
 /** 村の歴史エントリの種別 (§8 タブ分類)。絵文字接頭辞でなく生成元が明示する。 */
 export type ChronicleKind =
+  | 'event'
   | 'incident'
   | 'trial'
   | 'verdict'
@@ -197,6 +198,14 @@ export interface ChronicleEntry {
   text: string;
   /** 種別 (§8 タブ分類)。旧データは未設定 = 'other' 相当に扱う。 */
   kind?: ChronicleKind;
+  /** ユーザー参加型イベントの再生用ID。 */
+  eventId?: string;
+  /** イベントタイトル。 */
+  title?: string;
+  /** 村の歴史から読み返すための進行記録。 */
+  replay?: string[];
+  /** 人間参加者とLLM操作BOT。 */
+  participants?: string[];
 }
 
 /** 人間の行動記録の 1 エントリ (§8 村の歴史「人間の行動記録」)。 */
@@ -350,13 +359,24 @@ export interface LeaderboardEntry {
   championId: string | null;
 }
 
-/** ユーザー間チャットの 1 件。 */
+/** チャットチャンネル。村ログは WS chat ではなくクライアント側ログとして扱う。 */
+export type ChatChannel = 'god' | 'human' | 'dm';
+
+/** チャット発言者の種別。 */
+export type ChatSpeakerKind = 'human' | 'villager' | 'system';
+
+/** ユーザー間/神の声/DM チャットの 1 件。 */
 export interface ChatMessage {
   id: string;
+  channel: ChatChannel;
+  speakerKind: ChatSpeakerKind;
   userId: string;
   userName: string | null;
   text: string;
   at: number;
+  villagerId?: string;
+  dmWithVillagerId?: string;
+  keywords?: string[];
 }
 
 /** 他ユーザーの裁判の声。住民が信仰しているユーザーには応答が付く。 */
@@ -426,6 +446,7 @@ export type ServerMessage =
   | { t: 'trialVoices'; incidentId: string; voices: TrialVoice[] } // 他ユーザーの裁判の声と住民の応答
   | { t: 'llm'; info: LlmInfo } // 稼働中の LLM 構成
   | { t: 'chronicle'; entries: ChronicleEntry[] } // 村の歴史
+  | { t: 'eventTitle'; title: string; subtitle?: string; kind: 'mystery' | 'trial' | 'life'; at: number }
   | { t: 'theme'; pack: string; moral: MoralDial; lexicon: ThemeLexicon } // テーマパック (§v1.4-D, 接続時+起動時)
   | {
       t: 'playerState'; // その接続ユーザの状態
@@ -510,7 +531,7 @@ export type ClientMessage =
   | { t: 'hello'; userId: string; userName?: string } // 接続とユーザを紐付け (per-user カルマ push 用)
   | { t: 'login'; code: string } // 別端末のユーザーコード (=userId UUIDv4) で現接続を束ね直す (§v1.3-F)
   | { t: 'setUserName'; name: string; userId?: string } // ユーザー名を設定する (§v1.3-F)
-  | { t: 'chat'; text: string; userId?: string } // ユーザー間チャット
+  | { t: 'chat'; text: string; userId?: string; channel?: ChatChannel; dmWithVillagerId?: string } // ユーザー間/神の声/DM チャット
   | { t: 'topup'; amount: number; userId?: string } // 課金モック (§v1.3-F): 固定パックでカルマ+課金額を増やす
   | { t: 'incite'; targetId: string; rumorAboutId?: string; userId?: string } // 対象に偽情報を吹き込み事件化を促す (§4.2)
   | { t: 'sanction'; targetId: string; userId?: string } // 対象を即時つるし上げ裁判にかける (§4.3)

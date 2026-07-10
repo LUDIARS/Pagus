@@ -9,6 +9,7 @@ import { villagerDisplayName } from './villager-display.js';
 
 export type ChronicleTab =
   | 'highlight'
+  | 'events'
   | 'logs'
   | 'trial'
   | 'life'
@@ -19,6 +20,7 @@ export type ChronicleTab =
 
 const TABS: { id: ChronicleTab; label: string }[] = [
   { id: 'highlight', label: 'ハイライト' },
+  { id: 'events', label: 'イベント' },
   { id: 'logs', label: 'ログ' },
   { id: 'trial', label: '裁判' },
   { id: 'life', label: '暮らし' },
@@ -157,6 +159,9 @@ export class ChronicleView {
       case 'highlight':
         this.renderEntryList(host, this.highlightEntries(), 'ハイライトはまだありません。');
         break;
+      case 'events':
+        this.renderEventList(host, this.eventEntries(), 'イベントの記録はまだありません。');
+        break;
       case 'logs':
         this.renderEntryList(host, this.logEntries(), 'まだログはありません。');
         break;
@@ -187,9 +192,13 @@ export class ChronicleView {
   }
 
   private highlightEntries(): ChronicleEntry[] {
-    return this.entriesOf(['incident', 'trial', 'verdict', 'villager', 'marriage', 'birth', 'holiday'])
+    return this.entriesOf(['event', 'incident', 'trial', 'verdict', 'villager', 'marriage', 'birth', 'holiday'])
       .slice(-20)
       .reverse();
+  }
+
+  private eventEntries(): ChronicleEntry[] {
+    return this.entriesOf(['event']).reverse();
   }
 
   /** ログ = 事件・和解・制裁・その他の運用ログ。 */
@@ -221,6 +230,25 @@ export class ChronicleView {
         lastDate = e.date;
       }
       host.appendChild(div(e.text, 'hist-line'));
+    }
+  }
+
+  private renderEventList(host: HTMLElement, list: ChronicleEntry[], emptyMsg: string): void {
+    if (list.length === 0) {
+      host.appendChild(div(emptyMsg, 'muted'));
+      return;
+    }
+    let lastDate = '';
+    for (const e of list) {
+      if (e.date !== lastDate) {
+        host.appendChild(div(e.date, 'hist-date'));
+        lastDate = e.date;
+      }
+      const box = div('', 'hist-event');
+      box.appendChild(div(e.title ?? e.text, 'hist-event-title'));
+      if (e.participants?.length) box.appendChild(div(`参加者: ${e.participants.join('、')}`, 'hist-event-meta'));
+      for (const line of e.replay ?? [e.text]) box.appendChild(div(line, 'hist-line'));
+      host.appendChild(box);
     }
   }
 

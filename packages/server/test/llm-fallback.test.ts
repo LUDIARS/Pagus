@@ -1,6 +1,13 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { createVillager, makeCalendar, makeVirtueVector } from '@pagus/sim';
-import { BackendRegistry, LlmBrain, LlmWorldBrain, type LlmClient } from '../src/llm/index.js';
+import {
+  BackendRegistry,
+  GPT_SOL_BACKEND,
+  GPT_TERRA_BACKEND,
+  LlmBrain,
+  LlmWorldBrain,
+  type LlmClient,
+} from '../src/llm/index.js';
 
 const backend = { id: 'test', provider: 'claude' as const, model: 'test-model' };
 
@@ -45,11 +52,49 @@ describe('LLM fallback', () => {
     expect(calls.calls).toBe(1);
   });
 
+  it('事件の首謀者は通常配備に関係なくSolを使う', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const calls = { calls: 0 };
+    const models: string[] = [];
+    const brain = new LlmBrain(
+      new BackendRegistry({ cast: [GPT_TERRA_BACKEND, GPT_SOL_BACKEND], strong: [GPT_SOL_BACKEND] }),
+      {
+        createClient: (selected) => {
+          models.push(selected.model);
+          return failingClient(calls);
+        },
+      },
+    );
+    const perpetrator = createVillager({ id: 'culprit', name: 'クロ', position: { x: 1, y: 1 } });
+    const victim = createVillager({ id: 'victim', name: 'シロ', position: { x: 2, y: 1 } });
+
+    await brain.advanceIncident({
+      incident: {
+        id: 'incident-1',
+        perpetrator: perpetrator.id,
+        involved: [victim.id],
+        description: '広場の騒動',
+        damage: 0,
+        steps: [],
+        resolved: false,
+      },
+      perspective: 'perpetrator',
+      perpetrator,
+      victims: [victim],
+    });
+
+    expect(models).toEqual(['gpt-5.6-sol']);
+  });
+
   it('世界脳はLLM失敗時にStubWorldBrainへ落ちる', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const calls = { calls: 0 };
+    const models: string[] = [];
     const brain = new LlmWorldBrain(new BackendRegistry({ cast: [backend], strong: [backend] }), {
-      createClient: () => failingClient(calls),
+      createClient: (selected) => {
+        models.push(selected.model);
+        return failingClient(calls);
+      },
       offlineCooldownMs: 60_000,
     });
     const schedule = await brain.scheduleMonthlyIncident({
@@ -68,5 +113,30 @@ describe('LLM fallback', () => {
     expect(schedule.dayOfMonth).toBe(15);
     expect(again.dayOfMonth).toBe(15);
     expect(calls.calls).toBe(1);
+    expect(models).toEqual(['gpt-5.6-sol']);
+  });
+
+  it('事件のデザイナはSolを使う', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const calls = { calls: 0 };
+    const models: string[] = [];
+    const brain = new LlmWorldBrain(new BackendRegistry({ cast: [backend], strong: [backend] }), {
+      createClient: (selected) => {
+        models.push(selected.model);
+        return failingClient(calls);
+      },
+    });
+
+    await brain.designIncident({
+      calendar: makeCalendar({ year: 2026, month: 7 }),
+      reputation: makeVirtueVector(),
+      villagers: [],
+      villageRules: [],
+      themeSeed: '消えた祭具',
+      survivingCulprits: [],
+      plotThreads: [],
+    });
+
+    expect(models).toEqual(['gpt-5.6-sol']);
   });
 });
