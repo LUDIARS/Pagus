@@ -109,6 +109,16 @@ export class BackendRegistry {
     return picked;
   }
 
+  pruneAssignments(activeVillagerIds: ReadonlySet<string>): number {
+    let removed = 0;
+    for (const villagerId of this.assigned.keys()) {
+      if (activeVillagerIds.has(villagerId)) continue;
+      this.assigned.delete(villagerId);
+      removed += 1;
+    }
+    return removed;
+  }
+
   /**
    * 重い局面の strong バックエンド。
    * key (villagerId など) を与えると strong 母集合から決定的に 1 つ選ぶ。

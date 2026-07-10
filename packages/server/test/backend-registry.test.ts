@@ -28,4 +28,13 @@ describe('BackendRegistry', () => {
         }),
     ).toThrow("unknown backend 'gpt'");
   });
+
+  it('releases assignments outside the active working set', () => {
+    const registry = new BackendRegistry({ cast: [sonnet, haiku], strong: [sonnet] });
+    registry.assign('active');
+    registry.assign('retired');
+    expect(registry.pruneAssignments(new Set(['active']))).toBe(1);
+    expect(registry.pruneAssignments(new Set(['active']))).toBe(0);
+    expect(registry.assign('retired')).toBeDefined();
+  });
 });

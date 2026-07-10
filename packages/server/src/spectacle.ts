@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { HighlightCard, LeaderboardEntry, SeasonWinner, ChronicleKind } from '@pagus/sim';
 import { dataDir } from './load-data.js';
-import { runtimeDb } from './runtime-db.js';
+import { runtimeDb, type RuntimeDb } from './runtime-db.js';
 
 /** コマンドの受理/却下 (握り潰さず理由を返す)。 */
 export type SpectacleResult = { ok: true } | { ok: false; reason: string };
@@ -424,32 +424,36 @@ export class RaidManager {
  * 失敗は握り潰さず console.error する (無言フォールバック禁止)。
  */
 export class SeasonStore {
-  private readonly db = runtimeDb();
+  private readonly db: RuntimeDb;
   private readonly legacyPath = resolve(dataDir(), 'runtime', 'seasons.json');
+
+  constructor(db: RuntimeDb = runtimeDb()) {
+    this.db = db;
+    this.migrateLegacy();
+  }
 
   append(record: SeasonRecord): void {
     try {
-      const records = this.load();
-      records.push(record);
-      this.db.setState('seasons', records);
+      this.db.addSeasonRecord(record);
     } catch (e) {
       console.error('[pagus] season history db save failed', e);
     }
   }
 
-  private load(): SeasonRecord[] {
+  private migrateLegacy(): void {
+    if (this.db.seasonRecordCount() > 0) return;
     const stored = this.db.getState<SeasonRecord[]>('seasons');
-    if (stored) return stored;
+    if (stored) {
+      this.db.replaceSeasonRecords(stored);
+      return;
+    }
     try {
       const raw = JSON.parse(readFileSync(this.legacyPath, 'utf8')) as unknown;
       if (Array.isArray(raw)) {
-        const records = raw as SeasonRecord[];
-        this.db.setState('seasons', records);
-        return records;
+        this.db.replaceSeasonRecords(raw as SeasonRecord[]);
       }
     } catch {
       /* no legacy season history */
     }
-    return [];
   }
 }

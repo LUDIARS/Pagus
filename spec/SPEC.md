@@ -17,7 +17,7 @@ v0.0〜v0.5 + 実LLM観戦UI + 創発/生活メカニクスまで実装済み (m
 - **プレイヤー裁判介入** (§4.4/§6): 中央の「有罪/無罪」大ボタンに殺活投票を一本化 (扇動/沈静化効果 + 罵倒/擁護の吹き出し)。投票し直し可。被告選び (foolish) は右パネル。
 - **観戦UI** (§6): PixiJS 村/裁判の2シーン、動物スプライト(Kenney CC0)、アニメ吹き出し、雑談、事件フォーカス、裁判劇場、断末魔、右上LLM設定パネル、3カラム + モバイルドロワー。
 - **配線**: game server WS=4310 / client(Vite)=4320 (Memoria 5180 と分離) / client は同一オリジン `/ws` を proxy (Cloudflare Tunnel 対応)。
-- **永続化(runtime, gitignore)**: ログ JSONL (`logs/pagus-*.jsonl`) / 糾弾プール (`data/runtime/denunciations.json`) / WebPush 購読などの周辺データは従来どおり。**ゲームデータ** (world スナップショット、村の歴史、チャット、イベントリプレイ、シーズン履歴) は `data/runtime/pagus.sqlite` で管理する。既存 JSON は初回起動時の移行元としてのみ読む。
+- **永続化(runtime, gitignore)**: **ゲームデータとセッションログ**は `data/runtime/pagus.sqlite` を権威とする。world スナップショット、村の歴史、チャット、行動、イベントリプレイ、シーズン履歴を分離保存し、メモリには現在の作業集合だけを置く。既存 JSON は初回起動時の移行元としてのみ読む。
 
 ## 1. コンセプト
 

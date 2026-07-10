@@ -8,7 +8,9 @@ import {
   type WorldSnapshot,
 } from '@pagus/sim';
 import { dataDir } from './load-data.js';
-import { runtimeDb } from './runtime-db.js';
+import { runtimeDb, type RuntimeDb } from './runtime-db.js';
+
+const WORLD_ACTION_WINDOW = 100;
 
 export interface RestoredWorld {
   world: World;
@@ -19,22 +21,25 @@ export interface RestoredWorld {
 
 export class WorldStore {
   private readonly legacyPath: string;
-  private readonly db = runtimeDb();
+  private readonly db: RuntimeDb;
   private readonly minIntervalMs: number;
   private lastSaveMs = 0;
 
-  constructor(opts: { intervalMs?: number } = {}) {
+  constructor(opts: { intervalMs?: number; db?: RuntimeDb } = {}) {
+    this.db = opts.db ?? runtimeDb();
     this.legacyPath = resolve(dataDir(), 'runtime', 'world.json');
     this.minIntervalMs = opts.intervalMs ?? 3000;
   }
 
   load(): RestoredWorld | null {
     const stored = this.db.getState<WorldSnapshot>('world');
-    if (stored) return restoreSnapshot(stored);
+    if (stored) return restoreSnapshot(this.withRecentActions(stored));
 
     const migrated = this.loadLegacyJson();
-    if (migrated) this.db.setState('world', migrated);
-    return migrated ? restoreSnapshot(migrated) : null;
+    if (!migrated) return null;
+    const hydrated = this.withRecentActions(migrated);
+    this.db.setState('world', withoutActionHistory(hydrated));
+    return restoreSnapshot(hydrated);
   }
 
   maybeSave(world: World, bornCount: number, incidentCount: number, ruleCount: number): void {
@@ -53,11 +58,25 @@ export class WorldStore {
       ruleCount,
     };
     try {
-      this.db.setState('world', snap);
+      this.db.setState('world', withoutActionHistory(snap));
       this.lastSaveMs = Date.now();
     } catch (e) {
       console.error('[pagus] world snapshot db save failed', e);
     }
+  }
+
+  private withRecentActions(snap: WorldSnapshot): WorldSnapshot {
+    const snapshotActions = snap.world.villagerActionLog ?? [];
+    if (this.db.villagerActionCount() === 0 && snapshotActions.length > 0) {
+      this.db.addVillagerActions(snapshotActions);
+    }
+    return {
+      ...snap,
+      world: {
+        ...snap.world,
+        villagerActionLog: this.db.recentVillagerActions(WORLD_ACTION_WINDOW),
+      },
+    };
   }
 
   private loadLegacyJson(): WorldSnapshot | null {
@@ -72,6 +91,16 @@ export class WorldStore {
       return null;
     }
   }
+}
+
+function withoutActionHistory(snap: WorldSnapshot): WorldSnapshot {
+  return {
+    ...snap,
+    world: {
+      ...snap.world,
+      villagerActionLog: [],
+    },
+  };
 }
 
 function restoreSnapshot(snap: WorldSnapshot): RestoredWorld | null {

@@ -12,7 +12,7 @@ import type {
 import type { PersonalityAxis } from './personality.js';
 
 export const KARMA_GACHA_COST = 35;
-const ACTION_LOG_CAP = 300;
+const ACTION_LOG_CAP = 100;
 const REL_HATE_THRESHOLD = -35;
 const REL_LIKE_THRESHOLD = 45;
 

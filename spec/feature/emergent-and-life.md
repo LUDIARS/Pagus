@@ -55,7 +55,8 @@ client は Vite 4320 (Memoria 5180 と分離)、WS は同一オリジン `/ws` �
 
 ## runtime 永続化 (gitignore)
 
-- `logs/pagus-*.jsonl` — セッションログ (節目+スナップショット要約)
+- `session_log` (SQLite) — セッションログの権威データ。設定時のみ `logs/pagus-*.jsonl` にも追記
 - `data/runtime/denunciations.json` — 糾弾レパートリー (成長)
 - `data/runtime/pagus.sqlite` — **ゲームデータDB**。world スナップショット、村の歴史、チャット、イベントリプレイ、シーズン履歴を保存する。既存 `world.json` / `chronicle.json` / `chat.json` / `seasons.json` は初回移行元として読む。
+- world BLOB は進行中状態だけを持ち、行動履歴と退場住民の関係・信仰は別テーブルへ退避する。
 - `data/runtime/push-subscriptions.json` — **WebPush 購読** (endpoint で重複排除)。失効購読は送信時に除去。実装 `server/push-service.ts`。

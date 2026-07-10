@@ -2,58 +2,62 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ChatChannel, ChatMessage, ChatSpeakerKind } from '@pagus/sim';
 import { dataDir } from './load-data.js';
-import { runtimeDb } from './runtime-db.js';
+import { runtimeDb, type RuntimeDb } from './runtime-db.js';
 
 const CHAT_CAP = 500;
+const DISPLAY_NAME_CAP = 1_000;
 const CHANNELS = new Set<ChatChannel>(['god', 'human', 'dm']);
 const SPEAKERS = new Set<ChatSpeakerKind>(['human', 'villager', 'system']);
 
 export class ChatStore {
   private readonly legacyPath: string;
-  private readonly db = runtimeDb();
-  private messages: ChatMessage[];
+  private readonly db: RuntimeDb;
+  private readonly displayNames = new Map<string, string>();
 
-  constructor() {
-    this.legacyPath = resolve(dataDir(), 'runtime', 'chat.json');
-    this.messages = this.load();
+  constructor(db: RuntimeDb = runtimeDb(), legacyPath = resolve(dataDir(), 'runtime', 'chat.json')) {
+    this.db = db;
+    this.legacyPath = legacyPath;
+    this.migrateLegacy();
   }
 
   all(n = 300): ChatMessage[] {
-    return this.messages.slice(-n);
+    return this.db.recentChat(Math.min(n, CHAT_CAP)).map((message) => {
+      const userName = message.speakerKind === 'human' ? this.displayNames.get(message.userId) : undefined;
+      return userName === undefined ? message : { ...message, userName };
+    });
   }
 
   add(message: ChatMessage): ChatMessage[] {
-    this.messages.push(message);
-    if (this.messages.length > CHAT_CAP) this.messages = this.messages.slice(-CHAT_CAP);
+    this.rememberDisplayName(message);
     this.db.addChat(message);
     return this.all();
   }
 
   addMany(messages: ChatMessage[]): ChatMessage[] {
-    this.messages.push(...messages);
-    if (this.messages.length > CHAT_CAP) this.messages = this.messages.slice(-CHAT_CAP);
+    for (const message of messages) this.rememberDisplayName(message);
     this.db.addChats(messages);
     return this.all();
   }
 
   updateUserName(userId: string, userName: string | null): ChatMessage[] {
-    let changed = false;
-    for (const msg of this.messages) {
-      if (msg.speakerKind !== 'human' || msg.userId !== userId || msg.userName === userName) continue;
-      msg.userName = userName;
-      changed = true;
-    }
-    if (changed) this.db.replaceChat(this.messages);
+    this.displayNames.delete(userId);
+    if (userName !== null) this.displayNames.set(userId, userName);
     return this.all();
   }
 
-  private load(): ChatMessage[] {
-    const stored = this.db.recentChat(CHAT_CAP);
-    if (stored.length > 0 || this.db.chatCount() > 0) return stored;
+  private rememberDisplayName(message: ChatMessage): void {
+    if (message.speakerKind !== 'human' || !message.userName) return;
+    this.displayNames.delete(message.userId);
+    this.displayNames.set(message.userId, message.userName);
+    if (this.displayNames.size <= DISPLAY_NAME_CAP) return;
+    const oldest = this.displayNames.keys().next().value as string | undefined;
+    if (oldest !== undefined) this.displayNames.delete(oldest);
+  }
 
+  private migrateLegacy(): void {
+    if (this.db.chatCount() > 0) return;
     const legacy = this.loadLegacyJson();
     if (legacy.length > 0) this.db.replaceChat(legacy);
-    return legacy;
   }
 
   private loadLegacyJson(): ChatMessage[] {

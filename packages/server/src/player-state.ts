@@ -222,6 +222,7 @@ export class PlayerState {
    * championAlive 未指定なら倍率なし (後方互換)。
    */
   accrue(now: number, championAlive?: (userId: string) => boolean): void {
+    this.pruneExpiredCooldowns(now);
     if (this.lastAccrueMs === null) {
       this.lastAccrueMs = now;
       return;
@@ -549,5 +550,14 @@ export class PlayerState {
       spotCost: this.intervene.spotCost,
       fanFlamesCost: this.intervene.fanFlamesCost,
     };
+  }
+
+  private pruneExpiredCooldowns(now: number): void {
+    for (const [userId, readyAt] of this.cardReadyAt) {
+      if (readyAt <= now) this.cardReadyAt.delete(userId);
+    }
+    for (const [userId, readyAt] of this.heckleReadyAt) {
+      if (readyAt <= now) this.heckleReadyAt.delete(userId);
+    }
   }
 }
