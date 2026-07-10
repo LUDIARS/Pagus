@@ -19,8 +19,8 @@ LLM 駆動で村人が自律行動し、事件 → 裁判 → 教育(改変) を
 
 - **環境 = プログラム / 感情 = AI / 情報 = 蓄積** の三分。型レベルで分離 (`spec/SPEC.md`)。
 - **sim は LLM/描画を知らない**。`Brain` interface 越しにのみ AI を呼ぶ → stub で決定的にテスト。
-- LLM は **API 不使用 = CLI** (LUDIARS 規約)。claude=`claude -p`、GPT-5.5=`codex exec`。tier は `@ludiars/llm-gateway` の `pickTier`: tick/感情 = cheap(Haiku)、承GANs/裁判/教育 = strong(Sonnet/Opus)。
-  - **codex(gpt-5.5) は既定キャストに合流済**。一過性 `exit 1` (codex Stop hook 由来等) は CLI レベルのリトライ (`PAGUS_CLI_RETRIES` 既定2) で吸収。`PAGUS_DISABLE_CODEX=1` で外せる。
+- LLM は **API 不使用 = CLI** (LUDIARS 規約)。claude=`claude -p`、GPT-5.6 family=`codex exec --model gpt-5.6-{sol,terra,luna}`。通常の住民脳は **Sol 2 / Terra 4 / Luna 2 / Sonnet 2** の10枠ウェイトで準固定配備する。
+  - **事件のデザイナ / 事件の首謀者 / イベントのファシリテーターはSol固定**。一過性 `exit 1` (codex Stop hook 由来等) は CLI レベルのリトライ (`PAGUS_CLI_RETRIES` 既定2) で吸収。`PAGUS_DISABLE_CODEX=1` でCodex familyを外せる。
 - 設定不備の**無言フォールバック禁止** = 即エラー (RULE_CODE §7.1)。
 
 ## 起動 / 観戦 (実装済)

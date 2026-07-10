@@ -2,10 +2,7 @@
 //
 // マルチモデル分散: 村人ごとに backend (provider+model) を準固定で割り当て、
 // 「村人それぞれが別 LLM の脳で動く」創発を作る。重い局面 (裁判/教育/世界評価) は
-// strong tier (opus / gpt-5.5) へ寄せる override を別途持つ。
-//
-// Discutere の DEFAULT_WORKERS (`persona-prompts.ts`) をミラー: claude(opus/sonnet/haiku)
-// に codex(gpt-5.5) を混ぜたキャスト。codex 経由で GPT-5.5 = `codex --model gpt-5.5`。
+// strong tier (opus / GPT-5.6 Sol) へ寄せる override を別途持つ。
 
 import type { CliProvider } from './cli-llm-client.js';
 
@@ -18,23 +15,49 @@ export interface Backend {
 }
 
 /**
- * デフォルトキャスト = claude 3 モデル。
- * codex(gpt-5.5) は GPT_BACKEND として index.ts が既定で合流させる
- * (一過性 `exit 1` は CliLlmClient のリトライで吸収)。`PAGUS_DISABLE_CODEX=1` で外せる。
+ * Codex 無効時のフォールバックキャスト = Claude 3 モデル。
  */
+export const OPUS_BACKEND: Backend = { id: 'opus', provider: 'claude', model: 'claude-opus-4-8' };
+export const SONNET_BACKEND: Backend = { id: 'sonnet', provider: 'claude', model: 'claude-sonnet-4-6' };
+export const HAIKU_BACKEND: Backend = { id: 'haiku', provider: 'claude', model: 'claude-haiku-4-5' };
+
 export const DEFAULT_CAST: readonly Backend[] = [
-  { id: 'opus', provider: 'claude', model: 'claude-opus-4-8' },
-  { id: 'sonnet', provider: 'claude', model: 'claude-sonnet-4-6' },
-  { id: 'haiku', provider: 'claude', model: 'claude-haiku-4-5' },
+  OPUS_BACKEND,
+  SONNET_BACKEND,
+  HAIKU_BACKEND,
 ] as const;
 
 /** 重い局面で寄せる strong tier (既定 = opus)。 */
 export const DEFAULT_STRONG: readonly Backend[] = [
-  { id: 'opus', provider: 'claude', model: 'claude-opus-4-8' },
+  OPUS_BACKEND,
 ] as const;
 
-/** codex 経由の GPT-5.5。既定で cast/strong へ合流 (`PAGUS_DISABLE_CODEX=1` で外す)。 */
-export const GPT_BACKEND: Backend = { id: 'gpt', provider: 'codex', model: 'gpt-5.5' };
+/** Codex CLI で使う GPT-5.6 family のモデル ID。 */
+export const GPT_SOL_MODEL = 'gpt-5.6-sol';
+export const GPT_TERRA_MODEL = 'gpt-5.6-terra';
+export const GPT_LUNA_MODEL = 'gpt-5.6-luna';
+
+export const GPT_SOL_BACKEND: Backend = { id: 'gpt-sol', provider: 'codex', model: GPT_SOL_MODEL };
+export const GPT_TERRA_BACKEND: Backend = { id: 'gpt-terra', provider: 'codex', model: GPT_TERRA_MODEL };
+export const GPT_LUNA_BACKEND: Backend = { id: 'gpt-luna', provider: 'codex', model: GPT_LUNA_MODEL };
+
+/** 通常の住民脳: Sol 2 / Terra 4 / Luna 2 / Sonnet 2 の 10 枠配備。 */
+export const GPT56_CAST: readonly Backend[] = [
+  GPT_SOL_BACKEND,
+  GPT_TERRA_BACKEND,
+  GPT_LUNA_BACKEND,
+  SONNET_BACKEND,
+] as const;
+
+export const GPT56_ASSIGNMENT_WEIGHTS = {
+  'gpt-sol': 2,
+  'gpt-terra': 4,
+  'gpt-luna': 2,
+  sonnet: 2,
+} as const satisfies Readonly<Record<string, number>>;
+
+/** 事件・裁判・教育などの強い役割は Sol 固定。 */
+export const GPT56_STRONG: readonly Backend[] = [GPT_SOL_BACKEND] as const;
 
 export interface BackendRegistryOptions {
   /** キャスト全体 (per-villager 割当の母集合)。既定 DEFAULT_CAST。 */

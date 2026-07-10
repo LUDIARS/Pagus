@@ -15,7 +15,7 @@ import { PlayerState } from './player-state.js';
 import { AuctionManager } from './auction.js';
 import { Governance } from './governance.js';
 import { SpectacleManager, RaidManager, SeasonStore } from './spectacle.js';
-import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, CostLog, DEFAULT_CAST, DEFAULT_STRONG, GPT_BACKEND, type CostSink } from './llm/index.js';
+import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, CostLog, DEFAULT_CAST, DEFAULT_STRONG, GPT56_CAST, GPT56_STRONG, GPT56_ASSIGNMENT_WEIGHTS, type CostSink } from './llm/index.js';
 import { createServer } from 'node:http';
 import { SessionLog } from './session-log.js';
 import { TrialNarrator } from './trial-narrator.js';
@@ -89,15 +89,15 @@ function selectBrains(costSink: CostSink, cfg: PagusConfig, fateBlackbox: BlackB
     };
   }
   if (mode === 'llm') {
-    // codex(gpt-5.5) は既定キャストに合流済。config.llm.disableCodex=true で外せる。
+    // 通常脳は Sol 2 / Terra 4 / Luna 2 / Sonnet 2。config.llm.disableCodex=true で Claude のみに戻す。
     const disableCodex = cfg.llm.disableCodex;
     // 村の進行はLLM停止時に詰まらせない。失敗後はLlmBrain側の短期オフライン扱いで再試行を抑制する。
     const retries = 0;
-    const cast = disableCodex ? DEFAULT_CAST : [...DEFAULT_CAST.filter((b) => b.id !== 'opus'), GPT_BACKEND];
-    const strong = disableCodex ? DEFAULT_STRONG : [GPT_BACKEND];
+    const cast = disableCodex ? DEFAULT_CAST : GPT56_CAST;
+    const strong = disableCodex ? DEFAULT_STRONG : GPT56_STRONG;
     const registry = disableCodex
       ? new BackendRegistry({ cast, strong })
-      : new BackendRegistry({ cast, strong, assignmentWeights: { gpt: 8, sonnet: 1, haiku: 1 } });
+      : new BackendRegistry({ cast, strong, assignmentWeights: GPT56_ASSIGNMENT_WEIGHTS });
     return {
       brain: new LlmBrain(registry, { costSink, retries, fateBlackbox }),
       worldBrain: new LlmWorldBrain(registry, { costSink, retries }),

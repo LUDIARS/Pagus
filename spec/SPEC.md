@@ -7,7 +7,7 @@
 
 v0.0〜v0.5 + 実LLM観戦UI + 創発/生活メカニクスまで実装済み (main)。本書 §1〜§9 の設計に、以下の実装追補が乗っている。**実装の詳細追補は `spec/feature/emergent-and-life.md`** に集約 (ファイルパス付き)。
 
-- **実LLM 駆動**: claude `-p` (opus/sonnet/haiku) + codex(gpt-5.5) でどうぶつを駆動。**codex は既定キャストに合流済** (一過性 `exit 1` は CLI レベルのリトライで吸収、`PAGUS_DISABLE_CODEX=1` で外す) — §5.2。
+- **実LLM 駆動**: claude `-p` + codex(GPT-5.6 Sol/Terra/Luna) でどうぶつを駆動。通常脳は **Sol 2 / Terra 4 / Luna 2 / Sonnet 2**、事件デザイナ・首謀者・イベントファシリテーターはSol固定 — §5.2。
 - **創発メカニクス** (§8B): 狂人(madman) の裁判扇動 / 事件の和解 / 二次被害。
 - **村の生活** (§8B): **ストレス耐性**(些細な嫌がらせを受け流す) / **結婚・出産**(夫婦から気質ブレンドの子) / **改変のいじられ方ログ**。
 - **裁判の糾弾を実LLM化** (§5.3): 65% は Haiku が事件文脈で生成しレパートリーへ蓄積、35% は再利用。
@@ -221,18 +221,21 @@ interface Brain {
 - 履歴は `rollingSummary` で予算内に畳む。
 - **無言フォールバック禁止**: モデル ID / backend 経路未設定なら即エラー (RULE_CODE §7.1)。
 
-### 5.2 マルチ LLM 分散 (Discutere 方式) + GPT-5.5
+### 5.2 マルチ LLM 分散 (Discutere 方式) + GPT-5.6 family
 
 どうぶつの「思考」は**単一モデルに集約せず、複数 LLM に分散**する (Discutere の LLM backend 切替設計を踏襲)。
 これにより個体ごとの思考の癖が分かれ、村の創発が豊かになる。
 
-- **backend レジストリ**: `claude -p` (Opus/Sonnet/Haiku の各モデル) に加え **GPT-5.5** を 1 backend として登録。
+- **backend レジストリ**: `claude -p` の Sonnet と、Codex の **GPT-5.6 Sol / Terra / Luna** を登録。
 - **個体↔backend 割当**: どうぶつごとに思考 backend を (準) 固定で割り当てる (Di の persona↔model 割当と同型)。
   sim は LLM を知らないので、割当は server が `villagerId → backendId` で保持 (seed に初期割当)。
-- **役割別 override**: 裁判/教育など重い局面は割当に依らず strong tier (Opus/GPT-5.5) へ寄せられる (§5.1 と併用)。
+- **通常配備**: 10枠ウェイトを **Sol 2 / Terra 4 / Luna 2 / Sonnet 2** とする。
+- **Sol固定役割**: 事件のデザイナ (`designIncident`) / 事件の首謀者 (`advanceIncident`) /
+  イベントのファシリテーター (`scheduleMonthlyIncident`, `holidayEvent`) は個体割当に依らずSolを使う。
+  裁判・教育などのstrong tierもSolへ寄せる (§5.1 と併用)。
 - **transport (実装)**: Claude = `claude -p --output-format json` (stdin 投入、`.result` 抽出、fence 対応)。
-  GPT-5.5 = `codex exec --skip-git-repo-check -s read-only --model gpt-5.5 --output-last-message <file>` (stdin 投入、最終メッセージをファイルから読む)。
-  **codex は既定キャストに合流済**。一過性 `exit 1` (codex の Stop hook 由来 / レート / sandbox blip 等) は **CLI レベルのリトライ** (`CliLlmClient`、既定 2 回、`PAGUS_CLI_RETRIES` で調整、backoff 付き) で吸収する。`PAGUS_DISABLE_CODEX=1` で `GPT_BACKEND` を外せる。実装 `packages/server/src/llm/cli-llm-client.ts`。
+  GPT-5.6 family = 同じ `codex exec ... --model <gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna> --output-last-message <file>` (stdin 投入、最終メッセージをファイルから読む)。
+  **codex は既定キャストに合流済**。一過性 `exit 1` (codex の Stop hook 由来 / レート / sandbox blip 等) は **CLI レベルのリトライ** (`CliLlmClient`、既定 2 回、`PAGUS_CLI_RETRIES` で調整、backoff 付き) で吸収する。`PAGUS_DISABLE_CODEX=1` で GPT-5.6 backends を外せる。実装 `packages/server/src/llm/cli-llm-client.ts`。
 - 確定形は `spec/interface/brain-backends.md`。
 
 ### 5.3 裁判の糾弾セリフ (Haiku 生成 + レパートリー)

@@ -2,7 +2,9 @@
 // server 実行時のみ使う (Date.now で記録時刻を打つ)。stub モードでは記録しない。
 //
 // 単価は概算 (per 1M tokens, USD)。model 文字列で tier を判定する:
-//   opus≈{in:5,out:25} / sonnet≈{in:3,out:15} / haiku≈{in:0.8,out:4} / codex|gpt≈{in:2,out:10}
+//   opus≈{in:5,out:25} / sonnet≈{in:3,out:15} / haiku≈{in:0.8,out:4}
+//   GPT-5.6 Sol={in:5,out:30} / Terra={in:2.5,out:15} / Luna={in:1,out:6}
+//   その他 codex|gpt≈{in:2,out:10}
 //   不明モデルは {in:0,out:0} (トークンは数えるが $0)。
 
 import type { CostSummary, CostKindSummary, CostEntry } from '@pagus/sim';
@@ -29,6 +31,9 @@ const RATES = {
   opus: { in: 5, out: 25 },
   sonnet: { in: 3, out: 15 },
   haiku: { in: 0.8, out: 4 },
+  gpt56Sol: { in: 5, out: 30 },
+  gpt56Terra: { in: 2.5, out: 15 },
+  gpt56Luna: { in: 1, out: 6 },
   gpt: { in: 2, out: 10 },
   unknown: { in: 0, out: 0 },
 } as const satisfies Record<string, Rate>;
@@ -39,6 +44,9 @@ function rateFor(model: string): Rate {
   if (m.includes('opus')) return RATES.opus;
   if (m.includes('sonnet')) return RATES.sonnet;
   if (m.includes('haiku')) return RATES.haiku;
+  if (m.includes('gpt-5.6-sol')) return RATES.gpt56Sol;
+  if (m.includes('gpt-5.6-terra')) return RATES.gpt56Terra;
+  if (m.includes('gpt-5.6-luna')) return RATES.gpt56Luna;
   if (m.includes('codex') || m.includes('gpt')) return RATES.gpt;
   return RATES.unknown;
 }

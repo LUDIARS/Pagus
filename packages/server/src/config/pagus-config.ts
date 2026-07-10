@@ -202,7 +202,7 @@ export interface ThemeConfig {
 export interface LlmConfig {
   /** CLI の一過性失敗リトライ回数 (PAGUS_CLI_RETRIES). */
   cliRetries: number;
-  /** codex(gpt-5.5) をキャストから外すか (PAGUS_DISABLE_CODEX). */
+  /** codex(GPT-5.6 Sol/Terra/Luna) をキャストから外すか (PAGUS_DISABLE_CODEX). */
   disableCodex: boolean;
 }
 

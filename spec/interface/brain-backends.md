@@ -31,19 +31,20 @@ interface Backend { id: string; provider: 'claude' | 'codex'; model: string; }
     Discutere `worker-pool/spawner.ts` の `BIN_BY_PROVIDER = { claude:'claude', codex:'codex' }`
     と `--model <model>` 引数形をミラー。standing worker (対話 TUI) と違い Brain は 1-shot なので
     非対話の `exec` サブコマンドを使う。
-- **GPT-5.5 = `codex --model gpt-5.5`** (provider=`codex`, model=`gpt-5.5`)。Discutere DEFAULT_WORKERS の
-  `{ provider:'codex', model:'gpt-5.5' }` に対応。
+- **GPT-5.6 family** = `codex --model gpt-5.6-{sol,terra,luna}`。Solをflagship/strong、
+  Terraを標準、Lunaを軽量として使う。
 
 ## デフォルトキャスト
 
 | id | provider | model | 役割 |
 |---|---|---|---|
-| `opus` | claude | `claude-opus-4-8` | strong |
-| `sonnet` | claude | `claude-sonnet-4-6` | 標準 |
-| `haiku` | claude | `claude-haiku-4-5` | 軽量 |
-| `gpt` | codex | `gpt-5.5` | 標準/strong |
+| `gpt-sol` | codex | `gpt-5.6-sol` | 2枠 / strong |
+| `gpt-terra` | codex | `gpt-5.6-terra` | 4枠 / 標準 |
+| `gpt-luna` | codex | `gpt-5.6-luna` | 2枠 / 軽量 |
+| `sonnet` | claude | `claude-sonnet-4-6` | 2枠 / 標準 |
 
-claude 3 モデルに codex(gpt-5.5) を混ぜる = **村人ごとに別 LLM の脳**で動く分散構成。
+10枠の配備ウェイトは **Sol 2 / Terra 4 / Luna 2 / Sonnet 2**。
+`PAGUS_DISABLE_CODEX=1` のときだけ従来のClaude 3モデルへ戻す。
 
 ## per-villager 割当
 
@@ -51,6 +52,8 @@ claude 3 モデルに codex(gpt-5.5) を混ぜる = **村人ごとに別 LLM の
   キャストから 1 つを選ぶ。**再起動しても同じ村人は同じ脳**(準固定)。
 - seed に初期割当 (`villagerId → backend.id`) があれば**それを尊重**する
   (`BackendRegistryOptions.initialAssignments`)。現行 seed には未設定。
+- `assignmentWeights` は上記10枠を表し、住民集合全体での厳密な同時実行数ではなく、
+  決定的ハッシュが参照する配備比率である。
 
 ## tier ルーティング (strong override)
 
@@ -58,9 +61,11 @@ claude 3 モデルに codex(gpt-5.5) を混ぜる = **村人ごとに別 LLM の
 (`prompt-build.routeTier`)。
 
 - **cheap (per-villager 割当)**: 起の行動決定 (`decideAction`) / 感情更新 (`updateEmotion`)。
-- **strong (opus / gpt-5.5)**: 承GANs (`advanceIncident`) / 裁判 (`groupVoteFoolish` /
+- **strong (GPT-5.6 Sol)**: 承GANs (`advanceIncident`) / 裁判 (`groupVoteFoolish` /
   `groupVoteFate`) / 教育 (`decideEducation`) / 世界評価 (`evaluateDay`)。
-  `BackendRegistry.strong(key)` が strong 母集合 (`opus` / `gpt`) から決定的に選ぶ。
+  通常構成の `BackendRegistry.strong(key)` はSolだけを返す。
+- **Sol固定役割**: 事件のデザイナ (`designIncident`) / 事件の首謀者 (`advanceIncident`) /
+  イベントのファシリテーター (`scheduleMonthlyIncident`, `holidayEvent`) は通常配備を参照しない。
 - 入力が大きい (`strongAboveTokens` 超) 局面も strong へ昇格する。
 
 ## プロンプト / 出力契約
@@ -72,7 +77,7 @@ claude 3 モデルに codex(gpt-5.5) を混ぜる = **村人ごとに別 LLM の
   なお失敗なら throw**。
 - **transport の一過性失敗** (spawn/timeout/非ゼロ終了/空出力) は `CliLlmClient` が backoff 付きで
   **リトライ** (既定 2 回 = `PAGUS_CLI_RETRIES`)。codex の Stop hook 由来 `exit 1` 等の一過性 blip を
-  吸収し、全試行失敗で throw。これにより codex(gpt-5.5) を既定キャストに合流できる (`PAGUS_DISABLE_CODEX=1` で外す)。
+  吸収し、全試行失敗で throw。これにより GPT-5.6 family を既定キャストに合流できる (`PAGUS_DISABLE_CODEX=1` で外す)。
 - **無言フォールバック禁止** (RULE_CODE §7.1): 設定不正・応答不正は黙って既定値に落とさず必ず例外。リトライは「同じ呼び出しのやり直し」であってフォールバックではない。
 
 ## 起動切替
