@@ -13,7 +13,6 @@ import { PlayerControls, type ActionType } from './player-controls.js';
 import { HeckleButtons } from './heckle-buttons.js';
 import { TestifyPanel } from './testify-panel.js';
 import { CardPanel } from './card-panel.js';
-import { EconomyPanel } from './economy-panel.js';
 import { GovernancePanel } from './governance-panel.js';
 import { SpectaclePanel } from './spectacle-panel.js';
 import { LeaderboardPanel } from './leaderboard-panel.js';
@@ -183,13 +182,6 @@ async function main(): Promise<void> {
   const residents = new ResidentPanel(el('residents'), residentHandlers, { showGacha: false });
   stage.setVillagerTapHandler((villagerId) => residents.showVillagerDetails(villagerId));
 
-  // 経済パネル (§v1.3-B): 保険 / 闇市 / オークション (送金・銀行は廃止)。
-  const economy = new EconomyPanel(el('economy'), {
-    onInsure: (targetId, premium) => conn.send({ t: 'insure', targetId, premium, userId }),
-    onBuyMarket: (item, args) => conn.send({ t: 'buyMarket', item, userId, ...args }),
-    onBid: (lotId, amount) => conn.send({ t: 'bid', lotId, amount, userId }),
-  });
-
   // 政治パネル (§v1.3-C + §17): 村長(村人選挙/世論/リコール) / 法案 / 革命 / 戒厳令 / 村基金。
   const governance = new GovernancePanel(el('governance'), {
     onRecallMayor: () => conn.send({ t: 'recallMayor', userId }),
@@ -246,7 +238,6 @@ async function main(): Promise<void> {
       cards.setWorld(world);
       items.setWorld(world);
       residents.setWorld(world);
-      economy.setWorld(world);
       governance.setWorld(world); // 村長/世論調査 (§17) は snapshot から
       spectacle.setWorld(world);
       heckle.setWorld(world);
@@ -284,7 +275,6 @@ async function main(): Promise<void> {
       items.setCosts(state.spotCost);
       cards.setKarma(state.karma);
       cards.setInventory(state.eventCards);
-      economy.setState(state.karma);
       account.setSpent(state.spent);
       setUserName(state.userName);
       accountSettings.setUserName(state.userName);
@@ -312,7 +302,6 @@ async function main(): Promise<void> {
       leaderboard.setLeaderboard(s);
       residents.setLeaderboard(s.players);
     },
-    onAuction: (lots) => economy.setAuction(lots),
     onLaws: (items) => governance.setLaws(items),
     onRevolt: (active, incite, suppress, endsInMs) => governance.setRevolt(active, incite, suppress, endsInMs),
     onMartial: (mode) => governance.setMartial(mode),

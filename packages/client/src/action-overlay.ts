@@ -1,8 +1,8 @@
-// 統合介入パネル (§v1.3-E)。増えたユーザ操作 (操作/カード/村/経済/情報) を
+// 統合介入パネル (§v1.3-E)。増えたユーザ操作 (操作/カード/村/情報) を
 // 1 つのタブ式パネルへ集約し、上部に常時ヘッダ (カルマ残高 / 善性 / 課金 / 推し / クールダウン) を出す。
 //
 // 本クラスは「枠」の責務だけを持つ: タブ切替・ヘッダ描画・開閉 (ドロワー/埋め込み)。
-// 各操作パネル (PlayerControls / CardPanel / EconomyPanel / GovernancePanel /
+// 各操作パネル (PlayerControls / CardPanel / GovernancePanel /
 // LeaderboardPanel / SpectaclePanel / StatusPanel / AccountPanel) は従来どおり
 // それぞれのクラスが該当タブ内の DOM (#controls 等) へ mount する (送信/受信ロジックは無改変)。
 
