@@ -5,6 +5,8 @@
   "description": "Pagus — AI村: LLM 駆動の創発的村シミュレーション",
   "type": "module",
   "scripts": {
+    "predev": "pnpm --filter @pagus/sim build && pnpm --filter @pagus/server build",
+    "dev": "pnpm -r --parallel --if-present run dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
