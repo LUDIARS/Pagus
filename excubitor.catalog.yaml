@@ -1,0 +1,24 @@
+# Excubitor catalog 断片 — このリポ自身のサービス定義。
+# 公開 Excubitor リポの services.yaml に private 定義を焼き込まないため、
+# 各サービスの catalog エントリは自リポに置く。 Excubitor が ${ARS_ROOT} 配下を
+# 走査して集積する (Excubitor catalog/FRAGMENTS.md 参照)。
+services:
+  - code: pagus
+    name: Pagus (AI 村シミュレーション)
+    domain: pagus${DOMAIN_ROOT}
+    tier: personal
+    project_code: pagus
+    subdomain: pagus
+    component: backend
+    port: 4310
+    repo: LUDIARS/Pagus
+    runtime: node
+    cwd: ${ARS_ROOT}/Pagus
+    command: npm run dev
+    allow_hot_reload: true
+    autostart: false
+    health:
+      type: tcp
+      interval_sec: 30
+    provides:
+      PAGUS_WS_URL: ws://${host}:${port}
