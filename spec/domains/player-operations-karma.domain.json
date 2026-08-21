@@ -1,0 +1,48 @@
+{
+  "name": "Player Operations & Karma",
+  "description": "プレイヤー操作: 沈静化廃止・制裁新設・扇動改修・応援、カルマ消費とプレイヤー善性。カードパック(一発介入)。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "/sim/src/"
+    },
+    {
+      "pathPattern": "/server/src/"
+    },
+    {
+      "namePattern": "[Ii]ncite"
+    },
+    {
+      "namePattern": "[Ss]anction"
+    },
+    {
+      "namePattern": "[Cc]heer"
+    },
+    {
+      "namePattern": "[Kk]arma"
+    },
+    {
+      "namePattern": "[Cc]ard"
+    },
+    {
+      "namePattern": "[Cc]alm"
+    }
+  ],
+  "cardTemplate": "Summarise the \"Player Operations & Karma\" domain: プレイヤー操作: 沈静化廃止・制裁新設・扇動改修・応援、カルマ消費とプレイヤー善性。カードパック(一発介入)。",
+  "mechanics": [
+    "incite",
+    "sanction",
+    "cheer",
+    "karma",
+    "cards"
+  ],
+  "specRefs": [
+    "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 4. プレイヤー操作の刷新 — 沈静化廃止 / 制裁新設 / 扇動改修",
+    "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 4. プレイヤー操作の刷新 — 沈静化廃止 / 制裁新設 / 扇動改修 / 4.2 扇動 (incite) を改修 — 対象指定 + カルマ消費",
+    "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 4. プレイヤー操作の刷新 — 沈静化廃止 / 制裁新設 / 扇動改修 / 4.3 制裁 (sanction) を新設 — 特定人物のつるし上げ",
+    "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 4. プレイヤー操作の刷新 — 沈静化廃止 / 制裁新設 / 扇動改修 / 4.4 カルマ & プレイヤー善性",
+    "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力 / A. カードパック (v1.3-A) — カルマで切る一発介入"
+  ],
+  "rationale": "プレイヤーの介入操作とカルマ経済は観戦者→ゲームへの入力チャネル。住民AIとは別の責務境界。"
+}

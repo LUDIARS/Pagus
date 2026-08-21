@@ -1,0 +1,49 @@
+{
+  "name": "Game Loop & Time Model",
+  "description": "起承転結ステートマシン (1ターム=1日)、セグメント駆動の起、日/月進行、カレンダー/季節/祝日、永続24h稼働。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "/sim/src/"
+    },
+    {
+      "namePattern": "[Ll]oop"
+    },
+    {
+      "namePattern": "[Tt]ick"
+    },
+    {
+      "namePattern": "[Ss]egment"
+    },
+    {
+      "namePattern": "[Cc]alendar"
+    },
+    {
+      "namePattern": "[Ss]eason"
+    },
+    {
+      "namePattern": "[Tt]erm"
+    },
+    {
+      "namePattern": "[Kk]isho"
+    },
+    {
+      "namePattern": "[Ss]tateMachine"
+    }
+  ],
+  "cardTemplate": "Summarise the \"Game Loop & Time Model\" domain: 起承転結ステートマシン (1ターム=1日)、セグメント駆動の起、日/月進行、カレンダー/季節/祝日、永続24h稼働。",
+  "mechanics": [
+    "kishotenketsu-state-machine",
+    "calendar",
+    "day-month-progression"
+  ],
+  "specRefs": [
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ",
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.1 起承転結ステートマシン (1 ターム = 1 日)",
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.2 起 (KISHO) — セグメント駆動",
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.6 住民改変 / 日・月の進行",
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.7 カレンダー / 季節 / 祝日"
+  ],
+  "rationale": "時間進行と起承転結のフェーズ駆動はゲーム全体を貫く制御フロー。各フェーズ(承/転/結)を呼び出すオーケストレーション層。"
+}

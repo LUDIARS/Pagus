@@ -1,0 +1,14 @@
+{
+  "name": "Test Suites",
+  "description": "シミュレーションとサーバの自動テスト。 各ドメインの振る舞いを検証する置き場で、 プロダクト責務そのものは持たない。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)packages/sim/test/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)packages/server/test/(?:.*/)?[^/]+$"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "name": "Evaluation, Voting & Groups",
+  "description": "評価系: イベント種別(起の行動)、グループ、投票→改変(転・結)、日末評価→ベクトル更新→人口、結(教育)。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "/sim/src/"
+    },
+    {
+      "namePattern": "[Vv]ote"
+    },
+    {
+      "namePattern": "[Gg]roup"
+    },
+    {
+      "namePattern": "[Ee]valuat"
+    },
+    {
+      "namePattern": "[Kk]etsu"
+    },
+    {
+      "namePattern": "[Pp]opulation"
+    },
+    {
+      "namePattern": "[Ee]ducat"
+    }
+  ],
+  "cardTemplate": "Summarise the \"Evaluation, Voting & Groups\" domain: 評価系: イベント種別(起の行動)、グループ、投票→改変(転・結)、日末評価→ベクトル更新→人口、結(教育)。",
+  "mechanics": [
+    "voting",
+    "groups",
+    "daily-evaluation",
+    "population"
+  ],
+  "specRefs": [
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.5 結 (KETSU) — 教育",
+    "Pagus 機能仕様書 (v0.0) / 8A. 評価系・イベント・投票・グループ (メカニクス追補 / v0.3〜) / 8A.2 イベント種別 (起の行動)",
+    "Pagus 機能仕様書 (v0.0) / 8A. 評価系・イベント・投票・グループ (メカニクス追補 / v0.3〜) / 8A.3 グループ",
+    "Pagus 機能仕様書 (v0.0) / 8A. 評価系・イベント・投票・グループ (メカニクス追補 / v0.3〜) / 8A.4 投票 → 改変 (転・結)",
+    "Pagus 機能仕様書 (v0.0) / 8A. 評価系・イベント・投票・グループ (メカニクス追補 / v0.3〜) / 8A.5 日末評価 → ベクトル更新 → 人口"
+  ],
+  "rationale": "投票・グループ・日末評価はベクトル更新と人口動態を駆動する社会評価メカニクス群。改変への入力を作る境界。"
+}

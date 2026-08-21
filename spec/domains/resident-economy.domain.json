@@ -1,0 +1,40 @@
+{
+  "name": "Resident Economy",
+  "description": "住民経済: 貧富・趣味消費・非行・クズ化のアルゴリズム (economy.ts)、Villager 経済フィールド。v1.3-B カルマ経済も含む。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "/sim/src/"
+    },
+    {
+      "namePattern": "[Ee]conom"
+    },
+    {
+      "namePattern": "[Ww]ealth"
+    },
+    {
+      "namePattern": "[Mm]oney"
+    },
+    {
+      "namePattern": "[Dd]elinquen"
+    },
+    {
+      "namePattern": "[Ss]pend"
+    }
+  ],
+  "cardTemplate": "Summarise the \"Resident Economy\" domain: 住民経済: 貧富・趣味消費・非行・クズ化のアルゴリズム (economy.ts)、Villager 経済フィールド。v1.3-B カルマ経済も含む。",
+  "mechanics": [
+    "wealth",
+    "consumption",
+    "delinquency"
+  ],
+  "specRefs": [
+    "Pagus 機能仕様書 (v0.0) / 15. 住民経済 (貧富と非行) — 実装済",
+    "住民経済 (§15) — 貧富・趣味消費・非行・クズ化",
+    "住民経済 (§15) — 貧富・趣味消費・非行・クズ化 / アルゴリズム (`packages/sim/src/economy.ts`)",
+    "住民経済 (§15) — 貧富・趣味消費・非行・クズ化 / データモデル (`Villager` 追加フィールド)",
+    "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力 / B. 経済パック (v1.3-B) — カルマ経済"
+  ],
+  "rationale": "経済は economy.ts に局所化された独立アルゴリズムで、非行(behavior-rules)へ連動する明確なドメイン。"
+}

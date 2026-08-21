@@ -1,0 +1,34 @@
+{
+  "name": "Behavior Engine (Black-box / BT)",
+  "description": "日常 = BT/ブラックボックスエンジン (LLM 不使用)。ふるまいの法則 (BehaviorRule) を Haiku がアトランダムに増やす。コスト削減の中核。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "/sim/src/"
+    },
+    {
+      "namePattern": "[Bb]ehavior"
+    },
+    {
+      "namePattern": "[Bb]lackbox"
+    },
+    {
+      "namePattern": "[Bb]ehaviorRule"
+    },
+    {
+      "namePattern": "[Bb]t"
+    }
+  ],
+  "cardTemplate": "Summarise the \"Behavior Engine (Black-box / BT)\" domain: 日常 = BT/ブラックボックスエンジン (LLM 不使用)。ふるまいの法則 (BehaviorRule) を Haiku がアトランダムに増やす。コスト削減の中核。",
+  "mechanics": [
+    "behavior-rules",
+    "black-box-daily-sim"
+  ],
+  "specRefs": [
+    "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 2. 日常 = BT / ブラックボックスエンジン (LLM 不使用)",
+    "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 2. 日常 = BT / ブラックボックスエンジン (LLM 不使用) / 2.1 ブラックボックスエンジン = ふるまいの法則 (BehaviorRule) — Haiku がアトランダムに増やす (v1.1)",
+    "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 1. LLM 呼び出し予算 (どこで呼ぶか / 呼ばないか)"
+  ],
+  "rationale": "LLM を呼ばない日常シミュレーションの決定論エンジンは Brain とは独立した責務。BehaviorRule の生成・適用が境界。"
+}

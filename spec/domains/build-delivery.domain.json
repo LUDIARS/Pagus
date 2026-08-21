@@ -1,0 +1,14 @@
+{
+  "name": "Build & Delivery",
+  "description": "ビルドと配信の設定。 Vite / Vitest の構成と、 クライアントの Service Worker。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)packages/(?:client|server|sim)/(?:vite|vitest)\\.config\\.ts$"
+    },
+    {
+      "pathPattern": "(^|/)packages/client/public/[^/]+$"
+    }
+  ]
+}

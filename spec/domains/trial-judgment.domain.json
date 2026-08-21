@@ -1,0 +1,42 @@
+{
+  "name": "Trial & Judgment",
+  "description": "転(審議/裁判): 糾弾セリフ (Haiku 生成+レパートリー)、死刑/教育の2択への簡素化、プレイヤーの裁判介入(投票一本化)。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "/sim/src/"
+    },
+    {
+      "namePattern": "[Tt]rial"
+    },
+    {
+      "namePattern": "[Jj]udg"
+    },
+    {
+      "namePattern": "[Tt]en"
+    },
+    {
+      "namePattern": "[Aa]ccus"
+    },
+    {
+      "namePattern": "[Vv]erdict"
+    },
+    {
+      "namePattern": "[Ss]entence"
+    }
+  ],
+  "cardTemplate": "Summarise the \"Trial & Judgment\" domain: 転(審議/裁判): 糾弾セリフ (Haiku 生成+レパートリー)、死刑/教育の2択への簡素化、プレイヤーの裁判介入(投票一本化)。",
+  "mechanics": [
+    "trial",
+    "death-or-education",
+    "accusation-lines"
+  ],
+  "specRefs": [
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.4 転 (TEN) — 審議 (裁判)",
+    "Pagus 機能仕様書 (v0.0) / 5. AI (Brain) インターフェース / 5.3 裁判の糾弾セリフ (Haiku 生成 + レパートリー)",
+    "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 5. 裁判の簡素化 — 死刑 / 教育の2択",
+    "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.4 プレイヤーの裁判介入 (投票一本化)"
+  ],
+  "rationale": "裁判は転フェーズの独立した審議メカニクスで、糾弾・判決・介入という固有ルールを持つ。"
+}

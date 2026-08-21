@@ -1,0 +1,37 @@
+{
+  "name": "Incident Lifecycle",
+  "description": "事件 (Incident) のライフサイクル: 月初スケジューリング、前日デザイン+事件用キャラ生成、事件中(承)の当事者 LLM 応答、二次被害。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "/sim/src/"
+    },
+    {
+      "namePattern": "[Ii]ncident"
+    },
+    {
+      "namePattern": "[Ee]vent"
+    },
+    {
+      "namePattern": "[Ss]chedule"
+    },
+    {
+      "namePattern": "[Ss]econdary"
+    }
+  ],
+  "cardTemplate": "Summarise the \"Incident Lifecycle\" domain: 事件 (Incident) のライフサイクル: 月初スケジューリング、前日デザイン+事件用キャラ生成、事件中(承)の当事者 LLM 応答、二次被害。",
+  "mechanics": [
+    "incident",
+    "incident-character",
+    "secondary-damage"
+  ],
+  "specRefs": [
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.3 承 (SHO) — 事件 (イベント)",
+    "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 3. 事件 (Incident) のライフサイクル",
+    "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 3. 事件 (Incident) のライフサイクル / 3.1 月初: 発生日時のスケジューリング (LLM 1 回)",
+    "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 3. 事件 (Incident) のライフサイクル / 3.3 事件用キャラ (Incident Character)",
+    "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.3 二次被害 (secondary)"
+  ],
+  "rationale": "事件の発生〜進行は固有のステートフルなライフサイクルを持ち、承フェーズの主役。スケジューリングとキャラ生成が境界。"
+}

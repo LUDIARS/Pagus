@@ -1,0 +1,36 @@
+{
+  "name": "Server Protocol & Transport",
+  "description": "WS プロトコル、データ配置(アンカー)、ユーザ確認イベント/通知投票、server オーケストレーション(llm を除く)。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "/server/src/"
+    },
+    {
+      "namePattern": "[Ww]s"
+    },
+    {
+      "namePattern": "[Ss]ocket"
+    },
+    {
+      "namePattern": "[Pp]rotocol"
+    },
+    {
+      "namePattern": "[Aa]nchor"
+    },
+    {
+      "namePattern": "[Bb]roadcast"
+    },
+    {
+      "namePattern": "[Nn]otif"
+    }
+  ],
+  "cardTemplate": "Summarise the \"Server Protocol & Transport\" domain: WS プロトコル、データ配置(アンカー)、ユーザ確認イベント/通知投票、server オーケストレーション(llm を除く)。",
+  "specRefs": [
+    "Pagus 機能仕様書 (v0.0) / 7. プロトコル (WS)",
+    "Pagus 機能仕様書 (v0.0) / 8. データ配置 (アンカー)",
+    "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.8 ユーザ確認イベント / 通知投票 (実装済 v0.6)"
+  ],
+  "rationale": "WS プロトコルとデータ配置は server/src のトランスポート/配信層。sim ロジックや LLM とは別のインフラ責務。"
+}
