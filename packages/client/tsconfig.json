@@ -4,7 +4,11 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "noEmit": true,
     "declaration": false,
-    "sourceMap": false
+    "sourceMap": false,
+    // sim の dist は build 済みとは限らないので TS ソースへ解決する。
+    "paths": {
+      "@pagus/sim": ["../sim/src/index.ts"]
+    }
   },
   "include": ["src"]
 }

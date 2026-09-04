@@ -1,0 +1,15 @@
+{
+  // typecheck 専用。@pagus/sim の dist (build 成果物) が無い状態でも型解決できるよう
+  // sim の TS ソースへ paths を張る。emit を伴う build 用 tsconfig.json とは分離する
+  // (build 側で同じ paths を張ると rootDir 外のファイルを取り込み TS6059 になる)。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // sim の TS ソースを直接読むため rootDir 制約を monorepo ルートまで広げる
+    // (noEmit なので出力レイアウトには影響しない)。
+    "rootDir": "../..",
+    "paths": {
+      "@pagus/sim": ["../sim/src/index.ts"]
+    }
+  }
+}
