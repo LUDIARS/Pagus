@@ -1,6 +1,7 @@
 import type { WireWorld, VillagerGachaKind, LeaderboardEntry, Villager } from '@pagus/sim';
-import { HOBBY_LABELS, KARMA_GACHA_COST, PERSONALITY_LABELS, dominantAxis, isAwake, lifeProfileFor, routineTextFor, sleepRoutineTextFor, timeOfDayForSegment } from '@pagus/sim';
+import { HOBBY_LABELS, KARMA_GACHA_COST, PERSONALITY_LABELS, dominantAxis, isAwake, lifeProfileFor, routineTextFor, sleepRoutineTextFor, timeOfDayForSegment, townRoutine, routineSchedule, HOUSING_NAMES, SHOP_NAMES, townMap, townSite } from '@pagus/sim';
 import { residentHistoryDisplayName, villagerNameMap } from './villager-display.js';
+import { mixedPartsFor, PART_LABELS, DIRECTION_LABELS, residentHeadSpecies } from '@pagus/sim';
 
 const REL_HATE_THRESHOLD = -35;
 const REL_LIKE_THRESHOLD = 45;
@@ -47,7 +48,7 @@ export class ResidentPanel {
     this.statusBox.className = 'resident-list resident-status-list';
     this.root.appendChild(this.statusBox);
 
-    this.root.appendChild(sub('住民LLM脳'));
+    this.root.appendChild(sub('住民の行動方式'));
     this.brainBox.className = 'resident-list';
     this.root.appendChild(this.brainBox);
 
@@ -116,7 +117,7 @@ export class ResidentPanel {
     for (const v of w.villagers.filter((x) => x.alive).sort((a, b) => a.name.localeCompare(b.name))) {
       const profile = lifeProfileFor(v);
       const awake = isAwake(v.activity, w.calendar.segment, w.config.segmentsPerDay);
-      const routine = awake ? routineTextFor(v, now) : sleepRoutineTextFor(now);
+      const routine = v.townLife ? townRoutine(w, v).label : awake ? routineTextFor(v, now) : sleepRoutineTextFor(now);
       const recent = latestAction.get(v.id);
       const meta = [
         `職能:${profile.label}`,
@@ -131,7 +132,7 @@ export class ResidentPanel {
     }
 
     for (const v of w.villagers.filter((x) => x.alive).sort((a, b) => a.name.localeCompare(b.name))) {
-      this.brainBox.appendChild(row(`${v.name} (${v.species})`, `LLM脳: ${brainLabelFor(w, v.id)}`, () => this.showVillagerDetails(v.id)));
+      this.brainBox.appendChild(row(`${v.name} (${v.species})`, `行動: ${brainLabelFor(w, v.id)}`, () => this.showVillagerDetails(v.id)));
     }
 
     const championRows = this.leaderboard.filter((p) => p.championId);
@@ -301,7 +302,7 @@ function villagerDetails(w: WireWorld, v: Villager): HTMLElement {
   const now = timeOfDayForSegment(w.calendar.segment, w.config.segmentsPerDay);
   const awake = isAwake(v.activity, w.calendar.segment, w.config.segmentsPerDay);
   const latest = latestActionByVillager(w).get(v.id);
-  const routine = awake ? routineTextFor(v, now) : sleepRoutineTextFor(now);
+  const routine = v.townLife ? townRoutine(w, v).label : awake ? routineTextFor(v, now) : sleepRoutineTextFor(now);
 
   const hero = document.createElement('div');
   hero.className = 'resident-detail-hero';
@@ -314,7 +315,7 @@ function villagerDetails(w: WireWorld, v: Villager): HTMLElement {
       profile.label,
     ]),
     statPills([
-      ['LLM', brainLabelFor(w, v.id)],
+      ['行動', brainLabelFor(w, v.id)],
       ['気分', v.emotion.label],
       ['趣味', HOBBY_LABELS[v.hobby]],
       ['所持', String(Math.round(v.wealth))],
@@ -325,13 +326,37 @@ function villagerDetails(w: WireWorld, v: Villager): HTMLElement {
   const grid = document.createElement('div');
   grid.className = 'resident-detail-grid';
   grid.append(
+    detailCard('ビヘイビアツリー', (v.btHistory ?? []).slice(-6).reverse().map(trace => metric(trace.phase,
+      `${trace.decision} / ${trace.visits.filter(node => node.status !== 'failure').map(node => node.node).join(' → ')}`))),
+    detailCard('街での暮らし', [
+      metric('住まい', v.townLife ? `${HOUSING_NAMES[v.townLife.housing]}：${townSite(townMap(w.config), v.townLife.homeId).name}` : '割り当て待ち'),
+      metric('事情', v.townLife?.reason ?? 'なし'),
+      metric('仕事', v.townLife ? v.townLife.occupation === 'hunter' ? '街の外で狩猟' : SHOP_NAMES[v.townLife.occupation] : '割り当て待ち'),
+      metric('いまの日課', townRoutine(w, v).label),
+      ...routineSchedule(w, v).map((line) => metric(line.slice(0, 5), line.slice(6))),
+    ]),
+    detailCard('教育とまざりもの', [
+      metric('外見', mixedPartsFor(v).map((p) => PART_LABELS[p]).join('・') || (v.reformCount ? '以前の教育：外見の対応記録なし' : '生まれつきの姿')),
+      metric('教育回数', String(v.reformCount)),
+      metric('頭と胴体', `${residentHeadSpecies(v)}の頭 / ${v.species}の胴体`),
+      ...(v.educationHistory ?? []).slice(-4).reverse().map((mark) => metric(`${mark.term + 1}日目・${DIRECTION_LABELS[mark.direction]}`,
+        `${mark.rationale} → ${PART_LABELS[mark.part]}。${Object.entries(mark.afterTraits).filter(([axis,value]) => value !== mark.beforeTraits[axis as keyof typeof mark.beforeTraits]).map(([axis,value]) => `${PERSONALITY_LABELS[axis as keyof typeof PERSONALITY_LABELS]} ${mark.beforeTraits[axis as keyof typeof mark.beforeTraits].toFixed(2)}→${value.toFixed(2)}`).join(' / ')}`)),
+    ]),
+    detailCard('目的と行動の理由', [
+      metric('目的', v.behaviorTrace?.goal.label ?? '次の行動で決定'),
+      metric('優先度', v.behaviorTrace ? `${v.behaviorTrace.goal.priority}${v.behaviorTrace.goal.interrupted ? '・割り込み中' : ''}` : '未決定'),
+      metric('行き先', v.behaviorTrace ? `${v.behaviorTrace.goal.destination.x}, ${v.behaviorTrace.goal.destination.y}` : '未決定'),
+      metric('行動候補', v.behaviorTrace?.proposedAction ?? 'なし'),
+      metric('実際の行動', v.behaviorTrace?.outputAction ?? 'なし'),
+      metric('教育による抑制', v.behaviorTrace?.gate ?? '抑制なし'),
+    ]),
     detailCard('現在', [
       metric('場所', `${v.position.x}, ${v.position.y}`),
       metric('日課', routine),
       metric('直近行動', latest ?? 'なし'),
       meter('ストレス', Math.min(1, v.stress / 10), String(v.stress)),
     ]),
-    detailCard('日々のルーティーン', [
+    detailCard('個性に由来する習慣', [
       timeline('朝', profile.routine.morning),
       timeline('昼', profile.routine.noon),
       timeline('夕', profile.routine.evening),
@@ -592,6 +617,7 @@ function userFaithLabel(userId: string): string {
 }
 
 function brainLabelFor(w: WireWorld, villagerId: string): string {
+  if (w.residentControl === 'bt') return 'BT自律・LLMは介入';
   const history = (w.residentHistory ?? []).find((h) => h.id === villagerId);
   return history?.llmBrain ?? 'stub';
 }

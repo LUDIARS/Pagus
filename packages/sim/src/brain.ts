@@ -18,6 +18,9 @@ import type { PersonalityAxis } from './personality.js';
 
 /** sim がプログラムで算出して Brain へ渡す環境ビュー。 */
 export interface EnvironmentView {
+  /** Town routine supplied by the simulation, also available to learned/LLM proposals. */
+  townActivity?: string;
+  townSite?: string;
   position: GridPos;
   place: string;
   timeOfDay: TimeOfDay;
@@ -84,6 +87,8 @@ export interface IncidentContext {
   perspective: IncidentPerspective;
   perpetrator: Villager;
   victims: Villager[];
+  /** 現在の日 (教育の効き目が新しいかの判定に使う)。省略時は教育による抑制を見ない。 */
+  term?: number;
 }
 
 export interface IncidentStep {

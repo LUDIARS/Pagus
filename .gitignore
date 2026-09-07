@@ -12,6 +12,7 @@ logs/
 .DS_Store
 .vite/
 coverage/
+.preview/
 
 # Anatomia のローカル状態 (ドメイン定義の正本は spec/domains/)
 .anatomia/

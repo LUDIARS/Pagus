@@ -5,6 +5,10 @@
 import type { World, Villager, VillagerId, GridPos, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign, InfoItem, MartialMode, ScheduledParty, ScheduledPartyKind, MoralDial } from './types/index.js';
 import type { Brain, ActionDecision, EnvironmentView } from './brain.js';
 import { aliveVillagers, awakeVillagers, environmentView, clampPos, bumpEventParam } from './world.js';
+import { ensureTownResidents, changeHousing } from './town-residency.js';
+import { residentDailyTree } from './resident-daily-tree.js';
+import { fateTree, manipulationTree } from './resident-trial-tree.js';
+import { residentSpeech } from './resident-speech-tree.js';
 import { DailyEngine, REACTION_EXPOSURE, type DailyEngineOptions } from './daily-engine.js';
 import { season, daysInMonth, holidayName } from './calendar.js';
 import { groupByDominant, dominantAxis, PERSONALITY_AXES, PERSONALITY_LABELS, type PersonalityAxis } from './personality.js';
@@ -49,6 +53,9 @@ import {
   type AddThreadInput,
 } from './plot-threads.js';
 import { pickArcTheme, DEFAULT_ARCS, type ArcRule, type ArcPick } from './incident-arc.js';
+import { recordEducation, PART_LABELS } from './education-profile.js';
+import { finalizeResidentAction } from './resident-goals.js';
+import { advanceNarrative, rememberIncident, beginAftermath, suppressesOrganicIncident } from './narrative-director.js';
 import { playMinorIncident, DEFAULT_MINOR, type MinorConfig } from './minor-incident.js';
 import {
   composeWitnesses,
@@ -1220,24 +1227,28 @@ export class TermMachine {
     // 戒厳令 surge (§v1.3-C ⑨): 発動中だけ事件化閾値を下げる (解除で 0 に戻る)。
     this.daily.setSurge(this.martialActive('surge') ? this.martialSurgeBonus : 0);
     const actions: KishoTickResult['actions'] = [];
-
-    if (this.director) {
-      const remaining = this.world.config.segmentsPerDay - this.world.calendar.segment;
-      for (const directive of this.director.planSegment(this.world, remaining)) {
-        const actor = this.world.villagers.get(directive.actor);
-        if (!actor || !actor.alive) continue;
-        // 日常エンジン (LLM 非依存) が行動を決める (§12.2)。
-        const env = environmentView(this.world, actor);
-        const decision = this.withRelationshipRoutine(actor, env, this.daily.decide(actor, env, directive));
-        this.onDailyDecision?.(actor, env, decision); // shadow sampling (§v1.4-C)
-        if (this.applyDecision(actor, decision, actions)) return { actions, incidentStarted: true };
-      }
-      return { actions, incidentStarted: false };
+    ensureTownResidents(this.world);
+    const awakeIds = new Set(awakeVillagers(this.world).map((v) => v.id));
+    for (const v of aliveVillagers(this.world)) {
+      if (awakeIds.has(v.id)) continue;
+      // 睡眠帯も帰宅経路は進めるが、行動概要 (actions) は起きて行動した住民のみ (§KishoTickResult)。
+      const decision = residentDailyTree(this.world, v, () => { throw new Error('Sleeping resident entered waking behavior'); });
+      this.applyDecision(v, decision, []);
+    }
+    const episode = this.trialOpenedToday() ? null : advanceNarrative(this.world, this.moral);
+    if (episode) {
+      const incident = this.startIncident(episode.perpetrator, { description: episode.story.setup, involved: episode.involved }, { origin: 'designed' });
+      incident.story = episode.story;
+      this.world.incident = incident;
+      this.world.phase = 'sho';
+      return { actions: [{ villager: episode.perpetrator, action: episode.story.setup }], incidentStarted: true };
     }
 
+    const remaining = this.world.config.segmentsPerDay - this.world.calendar.segment;
+    const directives = new Map((this.director?.planSegment(this.world, remaining) ?? []).map((d) => [d.actor, d]));
     for (const villager of awakeVillagers(this.world)) {
       const env = environmentView(this.world, villager);
-      const decision = this.withRelationshipRoutine(villager, env, this.daily.decide(villager, env, null));
+      const decision = residentDailyTree(this.world, villager, () => this.withRelationshipRoutine(villager, env, this.daily.decide(villager, env, directives.get(villager.id) ?? null)));
       this.onDailyDecision?.(villager, env, decision); // shadow sampling (§v1.4-C)
       if (this.applyDecision(villager, decision, actions)) return { actions, incidentStarted: true };
     }
@@ -1296,9 +1307,14 @@ export class TermMachine {
   /** 行動を適用。事件が発火したら true を返し phase を sho にする。 */
   private applyDecision(
     actor: Villager,
-    decision: ActionDecision,
+    proposal: ActionDecision,
     actions: KishoTickResult['actions'],
   ): boolean {
+    // Preserve a breathing interval and a readable omen. Explicit player incitement still wins.
+    if (!proposal.forcedTrigger && proposal.triggersIncident && suppressesOrganicIncident(this.world)) {
+      proposal = { ...proposal, triggersIncident: false, incidentSeed: null };
+    }
+    const decision = finalizeResidentAction(this.world, actor, proposal);
     if (decision.move) actor.position = clampPos(this.world, decision.move);
     actor.emotion = decision.newEmotion;
     this.applyRelationshipEffects(actor, decision);
@@ -1348,6 +1364,10 @@ export class TermMachine {
         const target = this.world.villagers.get(targetId);
         if (!target || !target.alive) continue;
         if (effect.kind === 'harass') {
+          bumpEventParam(target, 'townHarassment', 1);
+          if ((target.eventParams['townHarassment'] ?? 0) >= 6 && target.townLife && target.townLife.housing !== 'isolated') {
+            changeHousing(target, 'isolated', '繰り返される嫌がらせから逃れ、街はずれの離れで暮らしている');
+          }
           const targetDrop = -Math.round(12 * this.relationshipVolatility(target) * (1 + target.persona.traits.kindness * 0.25));
           const actorDrop = -Math.round(4 * this.relationshipVolatility(actor) * (1 + actor.persona.traits.aggression * 0.35));
           this.adjustRelationship(target, actor, targetDrop, `${target.name}は${actor.name}の嫌がらせを忘れていない`);
@@ -1477,6 +1497,7 @@ export class TermMachine {
     };
     // exactOptionalPropertyTypes: framedTargetId は値があるときだけキーを足す。
     if (opts.framedTargetId != null) incident.framedTargetId = opts.framedTargetId;
+    rememberIncident(this.world, incident);
     return incident;
   }
 
@@ -1494,6 +1515,7 @@ export class TermMachine {
       perspective,
       perpetrator: this.get(incident.perpetrator),
       victims,
+      term: this.world.term,
     });
     incident.steps.push({ perspective, action: step.action, damageDelta: step.damageDelta });
     incident.damage += step.damageDelta;
@@ -1847,6 +1869,9 @@ export class TermMachine {
   }
 
   private supportsPlayerStatement(v: Villager, pick: 'kill' | 'spare'): boolean {
+    if (this.world.residentControl === 'bt' && this.world.incident && this.world.trial?.defendant) {
+      return fateTree({ axis: dominantAxis(v.persona.traits), voters: [v], defendant: this.get(this.world.trial.defendant), incident: this.world.incident }) === pick;
+    }
     const t = v.persona.traits;
     if (pick === 'kill') {
       const score = t.aggression * 0.38 + t.discipline * 0.22 + t.ambition * 0.18 + this.world.reputation.malice * 0.22 - t.kindness * 0.28;
@@ -1857,6 +1882,7 @@ export class TermMachine {
   }
 
   private reactionLine(v: Villager, pick: 'kill' | 'spare', supports: boolean): string {
+    if (this.world.residentControl === 'bt') return residentSpeech(v, this.world, supports ? pick : pick === 'kill' ? 'spare' : 'kill');
     const axis = dominantAxis(v.persona.traits);
     const label = PERSONALITY_LABELS[axis] ?? axis;
     if (pick === 'kill') {
@@ -1908,7 +1934,7 @@ export class TermMachine {
     if (!trial.defendant) {
       // 狂人の扇動: 全グループ投票後、最も善良な候補へ重い票を投げて陥れる。
       const madman = this.aliveMadman();
-      if (madman && !this.hasStageVote(trial, 'madman', 'foolish')) {
+      if (madman && !this.hasStageVote(trial, 'madman', 'foolish') && (this.world.residentControl !== 'bt' || manipulationTree(madman, this.world.term))) {
         const target = this.scapegoat(trial.candidates);
         if (target) {
           const w = this.madmanWeight();
@@ -1919,7 +1945,7 @@ export class TermMachine {
       // 連続犯: 真犯人 (事件用キャラ) が陥れる対象が候補にいれば重い擦り付け票を加える (§12.3.3)。
       // 無実の既存住民が被告に選ばれやすくなり、真犯人は alive のまま居座る。
       const framed = incident.framedTargetId;
-      if (framed && trial.candidates.includes(framed) && !this.hasStageVote(trial, 'culprit', 'foolish')) {
+      if (framed && trial.candidates.includes(framed) && !this.hasStageVote(trial, 'culprit', 'foolish') && (this.world.residentControl !== 'bt' || manipulationTree(this.get(incident.perpetrator), this.world.term))) {
         const w = Math.round(3 + this.world.reputation.malice * 4);
         trial.foolishVotes[framed] = (trial.foolishVotes[framed] ?? 0) + w;
         trial.votes.push({ voter: 'culprit', weight: w, pick: framed });
@@ -1935,7 +1961,7 @@ export class TermMachine {
     if (trial.verdict === null) {
       // 狂人の扇動: 処刑へ重い票を上乗せする。
       const madman = this.aliveMadman();
-      if (madman && !this.hasStageVote(trial, 'madman', 'fate')) {
+      if (madman && !this.hasStageVote(trial, 'madman', 'fate') && (this.world.residentControl !== 'bt' || manipulationTree(madman, this.world.term))) {
         const w = this.madmanWeight();
         trial.fateVotes.kill += w;
         trial.votes.push({ voter: 'madman', weight: w, pick: 'kill' });
@@ -2126,6 +2152,7 @@ export class TermMachine {
       summary = { villager: this.pendingReform.villager, name: v?.name ?? this.pendingReform.villager, text };
     }
     this.pendingReform = null;
+    beginAftermath(this.world, summary?.text ?? '裁きが終わった。残された住民は、それぞれの日課へ戻る。');
     this.world.incident = null;
     this.world.trial = null;
     this.world.phase = 'kisho';
@@ -2139,16 +2166,19 @@ export class TermMachine {
       v.alive = false;
       return `${v.name} は村を追放された (${reform.rationale})`;
     }
+    const beforeAppearance = { ...v.appearance, descriptors: [...v.appearance.descriptors] };
+    const beforeTraits = { ...v.persona.traits };
     const changes: string[] = [];
     if (reform.persona?.traits) {
       for (const [k, nv] of Object.entries(reform.persona.traits)) {
-        if (typeof nv !== 'number') continue;
+        if (typeof nv !== 'number' || !Number.isFinite(nv) || !Object.hasOwn(v.persona.traits, k)) continue;
         const ax = k as PersonalityAxis;
         const ov = v.persona.traits[ax];
-        const arrow = nv > ov ? '↑' : nv < ov ? '↓' : '→';
+        const next = clamp01(ov + nv);
+        const arrow = next > ov ? '↑' : next < ov ? '↓' : '→';
+        v.persona.traits[ax] = next;
         changes.push(`${PERSONALITY_LABELS[ax] ?? ax}${arrow}`);
       }
-      v.persona.traits = { ...v.persona.traits, ...reform.persona.traits };
     }
     if (reform.persona?.values) {
       v.persona.values = reform.persona.values;
@@ -2167,6 +2197,9 @@ export class TermMachine {
     }
     if (reform.emotion) v.emotion = { ...v.emotion, ...reform.emotion };
     v.reformCount += 1;
+    const mark = recordEducation(v, reform, this.world.term, beforeAppearance, beforeTraits);
+    changes.push(`外見→${PART_LABELS[mark.part]}`);
+    delete v.behaviorTrace;
     return `${v.name} は教育で作り替えられた: ${changes.join(' / ') || '微調整'} (${reform.rationale})`;
   }
 

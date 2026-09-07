@@ -56,9 +56,12 @@ export function composeWitnesses(
     const w = pool.splice(idx, 1)[0];
     if (!w) break;
     const template = WITNESS_LINES[Math.floor(rng() * WITNESS_LINES.length)] ?? WITNESS_LINES[0] ?? '';
-    witnesses.push({ id: w.id, name: w.name, accusedId, line: template.replaceAll('{accused}', accusedName) });
+    const account = incident.story?.evidence.filter((e) => e.stage === 'opening')[i % 2];
+    const line = account ? `「${account.title}」にはこうある：${account.account}。これだけで断定はできない。` : template.replaceAll('{accused}', accusedName);
+    witnesses.push({ id: w.id, name: w.name, accusedId, line });
   }
   for (const w of witnesses) {
+    if (incident.story) continue; // Reading a disputed account must not manufacture an accusation vote.
     trial.foolishVotes[w.accusedId] = (trial.foolishVotes[w.accusedId] ?? 0) + cfg.witnessWeight;
     trial.votes.push({ voter: 'witness', weight: cfg.witnessWeight, pick: w.accusedId });
   }

@@ -45,8 +45,6 @@ export class DailyEngine {
   private readonly triggerAfter: number;
   /** ふるまいの法則。TermMachine が setRules で world.behaviorRules を流し込む。 */
   private rules: BehaviorRule[];
-  /** 自由行動の通算回数 (事件化判定の基準)。 */
-  private actionCount = 0;
   /** プレイヤーの扇動: 次に周囲がいる自由行動で必ず事件化する (対象不問)。 */
   private forced = false;
   /** プレイヤーの対象指定扇動: この id の自由行動で (周囲がいれば) 必ず事件化する (§4.2)。 */
@@ -104,14 +102,22 @@ export class DailyEngine {
 
   /** 起の 1 行動を決める。directive があれば差配を narration、無ければ自由行動。 */
   decide(villager: Villager, env: EnvironmentView, directive: EventDirective | null): ActionDecision {
-    const move = this.wander(villager, env);
+    // Actual movement is selected by the resident's goal tree at the application boundary.
+    const move = { ...villager.position };
     if (directive) return this.narrate(villager, env, directive, move);
     return this.freeAction(villager, env, move);
   }
 
   /** directive 無しの自由行動。カウンタ/扇動/イベント由来パラメータ/ルール重みで事件化する。 */
   private freeAction(villager: Villager, env: EnvironmentView, move: { x: number; y: number }): ActionDecision {
-    this.actionCount += 1;
+    // Per-villager, not a single engine-wide counter: previously any villager's action
+    // advanced one shared count, so the threshold was reached ~N× faster with N villagers
+    // and the trigger jumped between unrelated residents. Resetting on trigger makes
+    // triggerAfter mean "actions since this villager's last incident", which is what the
+    // §12.2 threshold documents. Both slow the legacy cadence relative to the old shared
+    // counter; that is the intended correction, not an incidental side effect.
+    const actionCount = (villager.eventParams['dailyActionCount'] ?? 0) + 1;
+    villager.eventParams['dailyActionCount'] = actionCount;
     const hasNeighbor = env.nearby.length > 0;
     // イベント由来パラメータ (殺人を見た等) が高い個体ほど閾値が下がり、事件を起こしやすい。
     const exposure = villager.eventParams[REACTION_EXPOSURE] ?? 0;
@@ -124,15 +130,16 @@ export class DailyEngine {
     // 対象指定扇動: この個体が指名されていれば即事件化を促す。
     const targeted = this.forcedTargetId === villager.id;
     const forcedTrigger = hasNeighbor && (this.forced || targeted);
-    const trigger = forcedTrigger || (hasNeighbor && this.actionCount >= threshold);
+    const trigger = forcedTrigger || (hasNeighbor && actionCount >= threshold);
     if (trigger) {
+      villager.eventParams['dailyActionCount'] = 0;
       this.forced = false;
       if (targeted) this.forcedTargetId = null;
     }
     // 最終カテゴリ (発火時は興奮 = harass 相当) でルール評価し感情・flavor・副作用を得る。
     const { emotion, flavor, sideEffects } = this.evalFor(villager, env, trigger ? 'harass' : 'wander');
     const targetIds = trigger ? env.nearby.map((n) => n.id) : [];
-    const routineText = flavor ?? routineActionFor(villager, env);
+    const routineText = flavor ?? (env.townActivity ? `${villager.name}は${env.townActivity}` : routineActionFor(villager, env));
     return {
       ...(sideEffects ? { sideEffects } : {}),
       move,
@@ -184,13 +191,6 @@ export class DailyEngine {
       incidentSeed: null,
       ...(targetIds.length > 0 ? { relationshipEffects: [{ kind: d.category === 'good' ? 'good' : 'chat', targetIds }] } : {}),
     };
-  }
-
-  /** 1 マスのうろつき移動 (rng で 8 近傍 + 留まる)。 */
-  private wander(villager: Villager, _env: EnvironmentView): { x: number; y: number } {
-    const dx = Math.floor(this.rng() * 3) - 1;
-    const dy = Math.floor(this.rng() * 3) - 1;
-    return { x: villager.position.x + dx, y: villager.position.y + dy };
   }
 
   private socialTargets(env: EnvironmentView, max: number): string[] {

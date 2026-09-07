@@ -1,0 +1,18 @@
+.village-labels { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+.village-labels button { position:absolute; left:0; top:0; pointer-events:auto; border:1px solid #ffffff70; border-radius:14px; padding:4px 8px; background:#283d36df; color:#fff6df; font:11px/1.2 sans-serif; white-space:nowrap; cursor:pointer; }
+.village-labels button[data-mixed="true"] { border-color:#df9dee; background:#463650e8; }
+.village-labels button:focus-visible,.village-camera button:focus-visible { outline:3px solid #ffcf78; }
+.village-camera { position:absolute; right:12px; top:12px; display:flex; gap:4px; }
+.village-camera button { width:32px; height:32px; border:1px solid #dacba0; border-radius:50%; color:#fff6df; background:#293c37e8; cursor:pointer; }
+.village-story { position:absolute; left:12px; top:12px; width:min(410px,calc(100% - 174px)); max-height:38%; overflow:auto; background:#faf1dfef; color:#3c332c; border:1px solid #c6b38e; border-radius:12px; padding:10px 14px; font:13px/1.55 sans-serif; box-shadow:0 4px 20px #15292030; }
+.village-story summary { cursor:pointer; font-weight:700; }
+.village-story p { margin:9px 0; }
+.village-speech { position:absolute; left:50%; top:48%; transform:translate(-50%,-50%); width:max-content; max-width:75%; padding:12px 18px; border-radius:18px; border:2px solid #d2bb8f; background:#fff8e9f2; color:#3b3030; font:15px/1.6 sans-serif; pointer-events:none; }
+.village-render-error { padding:30px; color:#ffdebc; font:16px/1.6 sans-serif; }
+.town-labels { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+.town-labels button { position:absolute; left:0; top:0; pointer-events:auto; border:1px solid #e4d5b8; border-radius:5px; background:#f8efdbe8; color:#463b2c; font:11px/1.3 sans-serif; padding:3px 6px; white-space:nowrap; cursor:pointer; }
+.town-labels button[data-kind="home"] { font-size:9px; background:#eee5ccd9; }
+.town-labels button:focus-visible { outline:3px solid #df8849; }
+.town-detail { position:absolute; bottom:12px; left:12px; max-width:min(330px,70%); max-height:22%; overflow:auto; border:1px solid #c6b38e; border-radius:10px; padding:8px 12px; background:#faf1dfee; color:#3c332c; font:12px/1.5 sans-serif; }
+.town-detail p { white-space:pre-line; margin:4px 0 0; }
+@media(max-width:600px) { .village-story { width:calc(100% - 48px); top:54px; max-height:28%; font-size:12px; } .village-labels button { font-size:10px; padding:3px 5px; } }

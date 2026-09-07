@@ -224,6 +224,8 @@ export interface WorldConfig {
 }
 
 export interface World {
+  residentControl?: 'bt' | 'legacy';
+  narrative?: import('../narrative-director.js').NarrativeState;
   config: WorldConfig;
   /** 経過した総ターム数 (= 総日数, 0 始まり)。情報取得タームの基準。 */
   term: number;

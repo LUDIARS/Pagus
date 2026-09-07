@@ -3,14 +3,16 @@
 //   35% → 既存レパートリーから再利用。
 // 生成は並行 (Promise.all)。LLM 不在 (stub) のときは全て再利用。
 
-import { pickTrialAttendees, type World, type Villager, type TrialLine } from '@pagus/sim';
+import { pickTrialAttendees, visibleStoryEvidence, type World, type Villager, type TrialLine } from '@pagus/sim';
 import type { LlmClient } from './llm/llm-client.js';
 import { extractJson } from './llm/json-coerce.js';
 import { Repertoire, type RepertoireOptions } from './repertoire.js';
+import { residentSpeech } from '@pagus/sim';
 
 const HAIKU_MODEL = 'claude-haiku-4-5';
 
 export interface TrialNarratorOptions {
+  residentBt?: boolean;
   /** Haiku 生成に使う client (省略時は再利用のみ)。 */
   client?: LlmClient;
   /** 新規生成する割合 (0..1)。既定 0.65。 */
@@ -26,8 +28,10 @@ export class TrialNarrator {
   private readonly client: LlmClient | undefined;
   private readonly genProb: number;
   private readonly tone: string;
+  private readonly residentBt: boolean;
 
   constructor(opts: TrialNarratorOptions = {}) {
+    this.residentBt = opts.residentBt ?? false;
     this.repertoire = new Repertoire(opts.repertoire ?? {});
     this.client = opts.client;
     this.genProb = opts.genProbability ?? 0.65;
@@ -43,9 +47,17 @@ export class TrialNarrator {
   async linesFor(world: World): Promise<TrialLine[]> {
     const incident = world.incident;
     if (!incident) return [];
-    const target = world.villagers.get(incident.perpetrator);
+    const target = world.villagers.get(world.trial?.defendant ?? incident.perpetrator);
     if (!target) return [];
     const accusers = pickTrialAttendees([...world.villagers.values()], target.id, incident.id);
+    if (this.residentBt) return accusers.map(v => ({ speaker: v.id, text: residentSpeech(v, world, 'trial') }));
+    if (incident.story) {
+      const records = visibleStoryEvidence(incident, world.trial?.stage);
+      return accusers.map((accuser, index) => ({ speaker: accuser.id,
+        text: index % 2 === 0 ? `${records[index % Math.max(1, records.length)]?.title ?? '証言'}を確かめたい。${incident.story?.question}`
+          : `その記録だけで${target.name}を断定していいの？`,
+      }));
+    }
 
     return Promise.all(
       accusers.map(async (accuser) => ({

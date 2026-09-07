@@ -2,6 +2,7 @@ import type { VillagerId } from './villager.js';
 
 /** 承: 村人が起こした事件。 */
 export interface Incident {
+  story?: import('../narrative-director.js').StoryCase;
   id: string;
   /** 当事者 (加害者)。 */
   perpetrator: VillagerId;

@@ -52,7 +52,8 @@ describe('TermMachine 起承転結 (セグメント駆動)', () => {
     expect(world.phase).toBe('kisho'); // その日の残りセグメントへ復帰
     const perp = world.villagers.get('a');
     expect(perp?.appearance.body).toBe('machine'); // 活かされ → 強制教育で改変
-    expect(perp?.persona.traits.aggression).toBe(-0.5);
+    // 教育の traits は差分。0.6 + (-0.5) を 0..1 にクランプ。
+    expect(perp?.persona.traits.aggression).toBeCloseTo(0.1, 6);
     expect(perp?.reformCount).toBe(1);
     expect(world.incident).toBeNull();
     expect(world.trial).toBeNull();

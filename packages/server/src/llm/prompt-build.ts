@@ -8,6 +8,7 @@
 
 import { orderSegments, pickTier, estimateTokens } from '@ludiars/llm-gateway';
 import type { Segment, Tier } from '@ludiars/llm-gateway';
+import { storyContext } from './story-context.js';
 
 import {
   PERSONALITY_AXES,
@@ -116,6 +117,7 @@ export function buildEmotionPrompt(ctx: EmotionContext): PromptParts {
   const user =
     `${villagerBrief(ctx.villager)}\n` +
     `場所: ${env.place} / 時間帯: ${env.timeOfDay}\n` +
+    (env.townActivity ? `街での日課: ${env.townActivity} / 行き先: ${env.townSite}\n` : '') +
     `周囲: ${env.nearby.map((n) => n.name).join(', ') || 'いない'}\n` +
     `直近の出来事: ${ctx.recentEvents.join(' / ') || 'なし'}\n` +
     'この状況を踏まえ、更新後の感情を JSON で返せ。';
@@ -148,6 +150,7 @@ export function buildActionPrompt(ctx: ActionContext, incited: boolean): PromptP
   const user =
     `${villagerBrief(ctx.villager)}\n` +
     `現在地: (${ctx.villager.position.x},${ctx.villager.position.y}) / 場所: ${env.place} / 時間帯: ${env.timeOfDay}\n` +
+    (env.townActivity ? `街での日課: ${env.townActivity} / 行き先: ${env.townSite}\n` : '') +
     `周囲: ${env.nearby.map((n) => `${n.name}(${n.id})`).join(', ') || 'いない'}\n` +
     `${directiveLine}${inciteLine}\n` +
     '1 手を JSON で返せ。';
@@ -163,7 +166,7 @@ export function buildIncidentPrompt(ctx: IncidentContext): PromptParts {
   const sys =
     'あなたは村シミュレーションの「事件エンジン」。加害者と被害者が応酬する事件を 1 ステップ進める。\n' +
     '出力スキーマ: {"action": "その視点でとられた行動(日本語)", "damageDelta": 0以上の数値, "ended": true|false}\n' +
-    'damageDelta は被害の増分。ended=true で事件を打ち切れる。' +
+    'damageDelta は被害の増分。ended=true で事件を打ち切れる。事件記録がある場合、記録に反する新事実や無根拠な真犯人の断定はしない。' +
     JSON_ONLY;
   const inc = ctx.incident;
   const log = inc.steps
@@ -172,6 +175,7 @@ export function buildIncidentPrompt(ctx: IncidentContext): PromptParts {
     .join('\n');
   const user =
     `事件: ${inc.description}\n` +
+    (inc.story ? `事件記録: ${JSON.stringify(inc.story)}\n` : '') +
     `累積被害: ${inc.damage}\n` +
     `今回進める視点: ${ctx.perspective} (perpetrator=加害者 / victim=被害者)\n` +
     `加害者: ${ctx.perpetrator.name} (${ctx.perpetrator.id})\n` +
@@ -195,6 +199,7 @@ export function buildFoolishPrompt(ctx: FoolishVoteContext): PromptParts {
   const user =
     `グループの軸: ${PERSONALITY_LABELS[ctx.axis]} (${ctx.axis})\n` +
     `事件: ${ctx.incident.description}\n` +
+    storyContext(ctx.incident, 'foolish') +
     `候補:\n${ctx.candidates.map((c) => `- ${c.id}: ${c.name} | ${traitsLine(c.persona.traits)}`).join('\n')}\n` +
     'このグループの価値観で最も愚かな 1 人を JSON で返せ。';
   return partsFromSegments('foolish', [
@@ -232,6 +237,7 @@ export function buildFatePrompt(ctx: FateVoteContext, ruleHint?: FateRuleHint): 
   const user =
     `グループの軸: ${PERSONALITY_LABELS[ctx.axis]} (${ctx.axis})\n` +
     `事件: ${ctx.incident.description}\n` +
+    storyContext(ctx.incident, 'fate') +
     `被告:\n${villagerBrief(ctx.defendant)}\n` +
     hintUser +
     'このグループの価値観で kill / spare を JSON で返せ。';
@@ -249,13 +255,15 @@ export function buildEducationPrompt(ctx: EducationContext): PromptParts {
     'あなたは審判人。活かすと決まった被告を「教育(改変)」または「追放」する。\n' +
     '出力スキーマ (いずれか):\n' +
     '  追放: {"kind": "exile", "villager": "id", "rationale": "理由"}\n' +
-    '  教育: {"kind": "educate", "villager": "id", "rationale": "理由", ' +
+    '  教育: {"kind": "educate", "villager": "id", "rationale": "理由", "direction": "empathy|discipline|curiosity|ambition", ' +
     '"persona": {"traits": {"<軸>": 差分 -1..1}, "values": ["信条"], "speechStyle": "口調"}, ' +
     '"appearance": {"body": "体", "descriptors": ["特徴"]}}\n' +
     `性格軸: ${axisList}。traits は差分 (例 攻撃性を下げるなら aggression: -0.5)。教育の各サブ項目は任意。` +
+    'direction は1つ選ぶ。empathy=共感の触手・加害抑制、discipline=ぜんまい・衝動と噂を抑制、curiosity=第三の目・異変調査割り込み、ambition=ティーポット・収集優先。元の動物種と本人らしさは保ち、理由を事件と結びつける。' +
     JSON_ONLY;
   const user =
     `事件: ${ctx.incident.description}\n` +
+    storyContext(ctx.incident, 'decided') +
     `被告(改変対象):\n${villagerBrief(ctx.perpetrator)}\n` +
     `改変回数: ${ctx.perpetrator.reformCount}\n` +
     'どう作り替えるか (または追放するか) を JSON で返せ。';

@@ -21,7 +21,7 @@ export class IncidentPanel {
   update(world: WireWorld): void {
     const inc = world.incident;
     const byId = new Map(world.villagers.map((v) => [v.id, v]));
-    const targetId = inc?.perpetrator ?? world.trial?.defendant ?? null;
+    const targetId = world.trial?.defendant ?? inc?.perpetrator ?? null;
     const target = targetId ? byId.get(targetId) ?? null : null;
 
     this.root.replaceChildren();

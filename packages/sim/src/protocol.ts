@@ -4,8 +4,11 @@
 import type { World, WorldConfig, Villager, Calendar, Phase, Incident, TrialState, ScheduledIncident, ScheduledParty, VillageRule, MartialState, MartialMode, FieldItem, MayorPoll, PlaceStateEntry, PlotThread, MoralDial, ResidentHistoryEntry, VillagerRelationship, UserFaithEntry, VillagerActionEntry, VillagerGachaKind } from './types/index.js';
 import type { VirtueVector } from './virtue.js';
 import { defaultBehaviorRules, type BehaviorRule } from './behavior-rules.js';
+import { ensureTownResidents } from './town-residency.js';
 
 export interface WireWorld {
+  residentControl?: 'bt' | 'legacy';
+  narrative?: import('./narrative-director.js').NarrativeState;
   config: WorldConfig;
   term: number;
   calendar: Calendar;
@@ -67,6 +70,8 @@ export function toWire(world: World): WireWorld {
   };
   // exactOptionalPropertyTypes: 戒厳令は発動中のみキーを足す (§v1.3-C ⑨)。
   if (world.martial !== undefined) wire.martial = world.martial;
+  if (world.narrative !== undefined) wire.narrative = world.narrative;
+  if (world.residentControl !== undefined) wire.residentControl = world.residentControl;
   return wire;
 }
 
@@ -98,6 +103,9 @@ export function fromWire(wire: WireWorld): World {
     villagerActionLog: wire.villagerActionLog ?? [],
   };
   if (wire.martial !== undefined) world.martial = wire.martial;
+  if (wire.narrative !== undefined) world.narrative = wire.narrative;
+  if (wire.residentControl !== undefined) world.residentControl = wire.residentControl;
+  ensureTownResidents(world);
   return world;
 }
 
@@ -428,7 +436,7 @@ export interface CostSummary {
 
 /** 稼働中の LLM 構成 (UI 表示用)。 */
 export interface LlmInfo {
-  mode: 'stub' | 'llm';
+  mode: 'stub' | 'llm' | 'bt';
   /** どうぶつ駆動に使うバックエンド一覧。 */
   backends: { id: string; provider: string; model: string }[];
   /** 重い局面 (裁判/教育) で寄せる strong tier の id 一覧。 */

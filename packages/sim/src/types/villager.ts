@@ -58,6 +58,12 @@ export type VillagerOrigin = 'seed' | 'born' | 'incident';
 export type Hobby = 'ascetic' | 'collector' | 'social' | 'fashion' | 'gourmet' | 'gamble';
 
 export interface Villager {
+  btHistory?: import('../resident-bt-trace.js').ResidentBtTrace[];
+  btIntervention?: import('../resident-interventions.js').ResidentIntervention;
+  townLife?: import('../town-residency.js').TownLife;
+  educationHistory?: import('../education-profile.js').EducationMark[];
+  mixedParts?: import('../education-profile.js').MixedPart[];
+  behaviorTrace?: import('../resident-goals.js').BehaviorTrace;
   id: VillagerId;
   name: string;
   /** false = 追放/死刑で退場。以後登場しない。 */

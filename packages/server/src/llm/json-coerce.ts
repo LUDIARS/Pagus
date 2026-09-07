@@ -184,6 +184,12 @@ export function coerceReform(u: unknown, targetId: VillagerId): Reform {
   }
   if (kind === 'educate') {
     const reform: Reform = { kind: 'educate', villager: targetId, rationale };
+    if (o.direction !== undefined) {
+      if (o.direction !== 'empathy' && o.direction !== 'discipline' && o.direction !== 'curiosity' && o.direction !== 'ambition') {
+        throw new Error('Reform.direction は empathy|discipline|curiosity|ambition');
+      }
+      reform.direction = o.direction;
+    }
     if (o.persona !== undefined && o.persona !== null) {
       const p = asObj(o.persona);
       const persona: NonNullable<Extract<Reform, { kind: 'educate' }>['persona']> = {};

@@ -3,6 +3,9 @@ import type { EnvironmentView } from './brain.js';
 import { season, daysInMonth, timeOfDayForSegment, isAwake } from './calendar.js';
 import { makeVirtueVector } from './virtue.js';
 import { defaultBehaviorRules, type BehaviorRule } from './behavior-rules.js';
+import { ensureTownResidents } from './town-residency.js';
+import { townRoutine } from './town-routine.js';
+import { townMap } from './town-map.js';
 
 export const DEFAULT_CONFIG: WorldConfig = {
   gridWidth: 24,
@@ -40,7 +43,7 @@ export function createWorld(
   villageRules: VillageRule[] = [],
   behaviorRules: BehaviorRule[] = defaultBehaviorRules(),
 ): World {
-  return {
+  const world: World = {
     config,
     term: 0,
     calendar: makeCalendar(calendar),
@@ -73,6 +76,8 @@ export function createWorld(
     userFaith: [],
     villagerActionLog: [],
   };
+  ensureTownResidents(world);
+  return world;
 }
 
 /** placeAt が返しうる場所ラベル (§v1.4-A' spot の対象一覧)。 */
@@ -113,6 +118,12 @@ function chebyshev(a: GridPos, b: GridPos): number {
 
 /** 位置からの場所ラベル (環境の言語化)。中央は広場、外周は村はずれ。 */
 export function placeAt(world: World, pos: GridPos): string {
+  const site = townMap(world.config).sites.find((s) => Math.abs(s.entrance.x - pos.x) + Math.abs(s.entrance.y - pos.y) <= 1);
+  if (site) {
+    if (site.kind === 'home') return '住宅地';
+    if (site.kind === 'hunting' || site.kind === 'shelter' || site.kind === 'isolation') return '村はずれ';
+    return '広場';
+  }
   const { gridWidth, gridHeight } = world.config;
   const cx = gridWidth / 2;
   const cy = gridHeight / 2;
@@ -131,6 +142,8 @@ export function environmentView(world: World, villager: Villager): EnvironmentVi
     .map((v) => ({ id: v.id, name: v.name, pos: { ...v.position } }));
   const place = placeAt(world, villager.position);
   const view: EnvironmentView = {
+    townActivity: townRoutine(world, villager).label,
+    townSite: townRoutine(world, villager).siteId,
     position: { ...villager.position },
     place,
     timeOfDay: timeOfDayForSegment(world.calendar.segment, world.config.segmentsPerDay),

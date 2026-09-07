@@ -24,6 +24,8 @@ import { WorldStore } from './world-store.js';
 import { PushService } from './push-service.js';
 import { ChatStore } from './chat-store.js';
 import { GodChatResponder } from './god-chat.js';
+import { BtGodChatResponder } from './bt-god-chat.js';
+import { ResidentBtBrain, AutonomousWorldBrain, residentSpeech } from '@pagus/sim';
 import type { BlackBox } from '@ludiars/blackbox';
 import { makeTrialFateBlackBox } from './llm/fate-blackbox.js';
 import { createRequestListener } from './http-api.js';
@@ -74,12 +76,18 @@ function classifyKind(text: string, verdictPrefix = '判決'): ChronicleKind {
  * チューニング (triggerAfter / disableCodex) は config から受ける。
  * 不正値は無言フォールバックせず即エラー (RULE_CODE §7.1)。
  */
+const residentControl = process.env.PAGUS_RESIDENT_CONTROL ?? 'bt';
+if (residentControl !== 'bt' && residentControl !== 'legacy') throw new Error(`PAGUS_RESIDENT_CONTROL must be bt or legacy: ${residentControl}`);
+const btResidents = residentControl === 'bt';
+
 function selectBrains(costSink: CostSink, cfg: PagusConfig, fateBlackbox: BlackBox): {
   brain: Brain;
   worldBrain: WorldBrain;
   registry: BackendRegistry | null;
 } {
   const mode = process.env.PAGUS_BRAIN ?? 'stub'; // 起動モードは env 維持 (launch behavior)
+  if (mode !== 'stub' && mode !== 'llm') throw new Error(`Unknown PAGUS_BRAIN: ${mode}`);
+  if (btResidents) return { brain: new ResidentBtBrain(), worldBrain: new AutonomousWorldBrain(), registry: null };
   if (mode === 'stub') {
     // stub モードは LLM を呼ばないのでコスト計上なし。
     return {
@@ -109,6 +117,7 @@ function selectBrains(costSink: CostSink, cfg: PagusConfig, fateBlackbox: BlackB
 
 /** UI 表示用の LLM 構成を作る。 */
 function buildLlmInfo(registry: BackendRegistry | null, villagers: { id: string }[]): LlmInfo {
+  if (btResidents) return { mode: 'bt', backends: [], strong: [], assignments: {} };
   if (!registry) return { mode: 'stub', backends: [], strong: [], assignments: {} };
   return {
     mode: 'llm',
@@ -229,13 +238,14 @@ function main(): void {
   // 蒸留ループ (§v1.4-C): shadow sampling → 乖離ログ → 日末蒸留。教師は個体 Brain と同じ実装
   // (llm モードでは cheap tier の LLM、stub では決定的 StubBrain = パイプラインの動作確認用)。
   const divergence = new DivergenceLog();
-  const shadow = cfg.distill.enabled ? new ShadowSampler(brain, divergence) : null;
+  const shadow = !btResidents && cfg.distill.enabled ? new ShadowSampler(brain, divergence) : null;
 
   const llmInfo = buildLlmInfo(registry, villagers);
   const brainFor = (id: string): string | null => (registry ? registry.assign(id).id : null);
   ensureResidentHistory(world, brainFor);
   registry?.pruneAssignments(new Set([...world.villagers.values()].filter((v) => v.alive).map((v) => v.id)));
   const director = new EventDirector({ maxRepsPerSegment: cfg.sim.reps });
+  world.residentControl = btResidents ? 'bt' : 'legacy';
   const tm = new TermMachine(world, brain, {
     director,
     dailyTriggerAfter: cfg.sim.triggerAfter, // 日常エンジンが自由行動を事件化する閾値 (§12.2)
@@ -299,13 +309,14 @@ function main(): void {
   }, db);
 
   // 裁判の糾弾セリフ: llm モードでは Haiku 生成 (65%) + レパートリー蓄積。
-  const llmMode = (process.env.PAGUS_BRAIN ?? 'stub') === 'llm';
+  const llmMode = !btResidents && (process.env.PAGUS_BRAIN ?? 'stub') === 'llm';
   const highlightClient = llmMode
     ? new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: cfg.llm.cliRetries })
     : null;
   // 糾弾のトーン/種/プールはテーマパックに従う (パック別ファイルでトーン混線を防ぐ, §v1.4-D)。
   const repertoireFile = cfg.theme.pack === 'classic' ? 'denunciations.json' : `denunciations.${cfg.theme.pack}.json`;
   const narrator = new TrialNarrator({
+    residentBt: btResidents,
     ...(llmMode
       ? { client: new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: cfg.llm.cliRetries }) }
       : {}),
@@ -421,7 +432,8 @@ function main(): void {
   // チャット履歴。神の声/人間のみ/DM を永続化する。
   const chatStore = new ChatStore(db);
   let chatSeq = 0;
-  const godChat = new GodChatResponder({
+  const godChat = btResidents ? new BtGodChatResponder((process.env.PAGUS_BRAIN ?? 'stub') === 'llm'
+    ? new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: 0 }) : null, e => costLog.record(e)) : new GodChatResponder({
     client: new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: 0 }),
     costSink: (e) => costLog.record(e),
   });
@@ -561,7 +573,8 @@ function main(): void {
     };
     if (responder) {
       voice.respondentId = responder.villagerId;
-      voice.responseText = pick === 'kill' ? '神の裁きに従う' : '神の慈悲を信じる';
+      const actor = tm.world.villagers.get(responder.villagerId);
+      voice.responseText = btResidents && actor ? residentSpeech(actor, tm.world, pick) : pick === 'kill' ? '神の裁きに従う' : '神の慈悲を信じる';
       voice.faith = responder.faith;
       addUserFaith(responder.villagerId, userId, 2, '裁判の声に応えた');
       ws.broadcastSnapshot(tm.world);
@@ -1814,7 +1827,7 @@ function main(): void {
         for (const uid of knownUsers) pushState(uid);
       }
       // 蒸留 (§v1.4-C): 日末に乖離ケースが溜まっていたら蒸留を試みる (fire-and-forget)。
-      if (cfg.distill.enabled && w.term > lastDistillTerm) {
+      if (!btResidents && cfg.distill.enabled && w.term > lastDistillTerm) {
         lastDistillTerm = w.term;
         if (!distillBusy && divergence.pendingCount >= cfg.distill.minCases) {
           distillBusy = true;
@@ -1971,7 +1984,7 @@ function main(): void {
     },
   }, {
     // ふるまいの法則の Haiku 増殖 (§2.1)。config sim.rulegenEnabled で切替 (既定有効)。
-    enabled: cfg.sim.rulegenEnabled,
+    enabled: !btResidents && cfg.sim.rulegenEnabled,
     chance: cfg.sim.rulegenChance,
   }, {
     // テーマパック (§v1.4-D) の feed 文言。

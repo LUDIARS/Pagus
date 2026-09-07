@@ -85,6 +85,7 @@ export type Reform =
       kind: 'educate';
       villager: VillagerId;
       rationale: string;
+      direction?: import('../education-profile.js').EducationDirection;
       /** 適用する人格の差分 (性格軸は部分指定可)。 */
       persona?: { traits?: Partial<Personality>; values?: string[]; speechStyle?: string };
       appearance?: Partial<Appearance>;
