@@ -32,6 +32,8 @@ import {
 } from '@pagus/sim';
 import type { PlayerStateSnapshot } from './player-state.js';
 import { isValidUserCode, connectionsToLogout } from './user-code.js';
+import { isTownArea, type TownArea, type WireWorld } from '@pagus/sim';
+import { areaFrame } from './area-stream.js';
 
 /** カード介入 (§v1.3-A) の引数 (card 別に必要分だけ伴う)。 */
 export interface CardArgs {
@@ -96,6 +98,10 @@ export interface WsHandlers {
 export class GameWsServer {
   private readonly wss: WebSocketServer;
   private lastSnapshot: string | null = null;
+  private areaWorld: WireWorld | null = null;
+  private areaSequence = 0;
+  private readonly areas = new Map<WebSocket, TownArea>();
+  private readonly areaCache = new Map<TownArea, string>();
   private llmInfo: LlmInfo | null = null;
   /** テーマパック (§v1.4-D)。接続時に現値を送る。 */
   private theme: Extract<ServerMessage, { t: 'theme' }> | null = null;
@@ -161,6 +167,8 @@ export class GameWsServer {
   private onConnection(ws: WebSocket): void {
     // 接続直後に最新スナップショット・接続人数・LLM 構成・村の歴史・人間の行動記録を送る。
     if (this.lastSnapshot) ws.send(this.lastSnapshot);
+    this.areas.set(ws, 'plaza');
+    this.sendArea(ws);
     if (this.llmInfo) ws.send(JSON.stringify({ t: 'llm', info: this.llmInfo } satisfies ServerMessage));
     if (this.theme) ws.send(JSON.stringify(this.theme));
     if (this.chronicle.length > 0) {
@@ -183,6 +191,7 @@ export class GameWsServer {
     this.broadcastPlayers();
     ws.on('close', () => {
       this.connUser.delete(ws);
+      this.areas.delete(ws);
       this.broadcastPlayers();
     });
     ws.on('message', (data) => {
@@ -226,6 +235,14 @@ export class GameWsServer {
   }
 
   private handle(ws: WebSocket, msg: ClientMessage): void {
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.t === 'subscribeArea') {
+      if (isTownArea(msg.area)) {
+        this.areas.set(ws, msg.area);
+        this.sendArea(ws);
+      }
+      return;
+    }
     if (msg.t === 'hello') {
       this.bind(ws, msg.userId);
       this.h.onHello(msg.userId, msg.userName);
@@ -489,9 +506,34 @@ export class GameWsServer {
   }
 
   broadcastSnapshot(world: World): void {
-    const msg: ServerMessage = { t: 'snapshot', world: toWire(world) };
+    this.areaWorld = structuredClone(toWire(world));
+    // Global panels still receive the roster; only area frames carry movement routes.
+    const roster = this.areaWorld.villagers.map((v) => {
+      if (!v.behaviorTrace) return v;
+      const { route: _route, ...trace } = v.behaviorTrace;
+      return { ...v, behaviorTrace: trace };
+    });
+    const msg: ServerMessage = { t: 'snapshot', world: { ...this.areaWorld, villagers: roster } };
     this.lastSnapshot = JSON.stringify(msg);
-    this.fanout(this.lastSnapshot);
+    for (const c of this.wss.clients) {
+      if (c.readyState === WebSocket.OPEN && c.bufferedAmount <= 1024 * 1024) c.send(this.lastSnapshot);
+    }
+    this.areaSequence++;
+    this.areaCache.clear();
+    for (const c of this.wss.clients) this.sendArea(c);
+  }
+
+  private sendArea(ws: WebSocket): void {
+    if (!this.areaWorld || ws.readyState !== WebSocket.OPEN) return;
+    // A slow viewer resynchronizes on the next complete frame; simulation never waits.
+    if (ws.bufferedAmount > 1024 * 1024) return;
+    const area = this.areas.get(ws) ?? 'plaza';
+    let frame = this.areaCache.get(area);
+    if (!frame) {
+      frame = JSON.stringify(areaFrame(this.areaWorld, area, this.areaSequence));
+      this.areaCache.set(area, frame);
+    }
+    ws.send(frame);
   }
 
   broadcastLog(phase: World['phase'], text: string): void {

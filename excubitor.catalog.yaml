@@ -14,7 +14,7 @@ services:
     repo: LUDIARS/Pagus
     runtime: node
     cwd: ${ARS_ROOT}/Pagus
-    command: npm run dev
+    command: pnpm --filter @pagus/server start
     allow_hot_reload: true
     autostart: false
     health:
@@ -22,3 +22,18 @@ services:
       interval_sec: 30
     provides:
       PAGUS_WS_URL: ws://${host}:${port}
+  - code: pagus-client
+    name: Pagus client
+    tier: personal
+    project_code: pagus
+    component: frontend
+    port: 4320
+    repo: LUDIARS/Pagus
+    runtime: node
+    cwd: ${ARS_ROOT}/Pagus
+    command: pnpm --filter @pagus/client dev --strictPort
+    allow_hot_reload: true
+    autostart: false
+    health:
+      type: tcp
+      interval_sec: 30

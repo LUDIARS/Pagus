@@ -18,6 +18,7 @@ export interface SysStatus {
 }
 
 export interface WsHandlers {
+  onAreaFrame?(frame: Extract<ServerMessage, { t: 'areaFrame' }>): void;
   onSnapshot(world: WireWorld): void;
   onLog(phase: Phase, text: string): void;
   onStatus(status: string): void;
@@ -118,6 +119,7 @@ export function connect(url: string, h: WsHandlers): Conn {
         return;
       }
       if (msg.t === 'snapshot') h.onSnapshot(msg.world);
+      else if (msg.t === 'areaFrame') h.onAreaFrame?.(msg);
       else if (msg.t === 'log') h.onLog(msg.phase, msg.text);
       else if (msg.t === 'players') h.onPlayers(msg.count);
       else if (msg.t === 'trialLines') h.onTrialLines(msg.incidentId, msg.lines);

@@ -447,6 +447,7 @@ export interface LlmInfo {
 
 /** server → client。 */
 export type ServerMessage =
+  | { t: 'areaFrame'; area: import('./town-areas.js').TownArea; sequence: number; world: WireWorld }
   | { t: 'snapshot'; world: WireWorld }
   | { t: 'log'; phase: Phase; text: string }
   | { t: 'players'; count: number } // 同時接続プレイヤー数
@@ -536,6 +537,7 @@ export type MarketItem = 'revive' | 'card_disaster' | 'card_swap' | 'card_awaken
 
 /** client → server。 */
 export type ClientMessage =
+  | { t: 'subscribeArea'; area: import('./town-areas.js').TownArea }
   | { t: 'hello'; userId: string; userName?: string } // 接続とユーザを紐付け (per-user カルマ push 用)
   | { t: 'login'; code: string } // 別端末のユーザーコード (=userId UUIDv4) で現接続を束ね直す (§v1.3-F)
   | { t: 'setUserName'; name: string; userId?: string } // ユーザー名を設定する (§v1.3-F)

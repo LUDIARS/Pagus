@@ -19,6 +19,16 @@ interface ResidentVisual {
 }
 /** Presentation follows authoritative BT positions; it never invents simulation movement. */
 export class StageView {
+    addAreaControl(control: HTMLElement): void { this.controls.append(control); }
+    /** Drop every resident visual so a new area starts from an empty stage. */
+    clearResidents(): void {
+        for (const visual of this.units.values()) {
+            this.renderer?.release(visual.mesh);
+            visual.label.remove();
+        }
+        this.units.clear();
+        this.areaWorld = null;
+    }
     private renderer: VillageRenderer | null = null;
     private host: HTMLElement | null = null;
     private readonly labels = document.createElement('div');
@@ -35,6 +45,8 @@ export class StageView {
     private lastTime = 0;
     private speechUntil = 0;
     private world: WireWorld | null = null;
+    /** Last area frame: area-filtered, used only for resident meshes and routes. */
+    private areaWorld: WireWorld | null = null;
     private tap: ((id: string) => void) | null = null;
     private trialKey = '';
     private voiceIds = new Set<string>();
@@ -128,12 +140,21 @@ export class StageView {
         this.say(`${this.name(id)}：${text}`);
     }
     reactToHeckle(side: 'agitate' | 'soothe'): void { this.say(side === 'agitate' ? '観客席がざわめいている…' : '落ち着いて、話を聞こう。'); }
+    /**
+     * Whole-town snapshot: scenery, building occupancy, story and speaker-name lookup
+     * all need the full roster, which the area frame does not carry. Resident meshes
+     * come from updateArea() instead.
+     */
     update(world: WireWorld): void {
         const renderer = this.renderer;
         const previous = this.world;
         // Track the world even without a renderer so isTrial (and the verdict controls
         // keyed off it) stay correct on the degraded, WebGL2-less path.
         this.world = world;
+        if (previous?.incident?.id !== world.incident?.id) {
+            this.messages = [];
+            this.voiceIds.clear();
+        }
         if (!renderer)
             return;
         const damagedHomes = new Set(world.villagers.flatMap((v) => v.townLife?.housing === 'displaced' && v.townLife.formerHomeId ? [v.townLife.formerHomeId] : []));
@@ -153,22 +174,44 @@ export class StageView {
         } else if (!this.isTrial && previousTrial) {
             renderer.focus = [0, 0, 0]; renderer.zoom = 1;
         }
-        if (previous?.incident?.id !== world.incident?.id) {
-            this.messages = [];
-            this.voiceIds.clear();
+        const key = `${world.incident?.id}:${world.trial?.stage}:${world.trial?.defendant}`;
+        if (this.isTrial && this.trialKey !== key) {
+            this.trialKey = key;
+            this.messages.unshift(world.trial?.stage === 'foolish' ? `${this.lex?.trialOpen ?? '開廷'}。記録と証言を照らし合わせよう。`
+                : world.trial?.stage === 'fate' ? `${this.name(world.trial.defendant ?? '')}の責任と、裁きの先を考える。`
+                    : `判決：${world.trial?.verdict === 'death' ? '死刑' : '教育へ'}。この結果が次の暮らしに残る。`);
         }
+        this.story.update(world);
+        if (!this.isTrial && !world.incident && this.messages.length === 0) {
+            const latest = world.villagerActionLog.at(-1);
+            const text = latest ? `${latest.villagerName}：${latest.text}` : '';
+            if (text && text !== this.lastAmbientAction) {
+                this.lastAmbientAction = text;
+                this.messages.push(text);
+            }
+        }
+    }
+    /**
+     * Area frame: only the residents (and their routes) inside the subscribed area.
+     * The frame's world is area-filtered, so nothing here may read the global roster.
+     */
+    updateArea(world: WireWorld): void {
+        const renderer = this.renderer;
+        if (!renderer)
+            return;
+        const previous = this.areaWorld;
+        this.areaWorld = world;
+        const regridded = previous !== null
+            && (previous.config.gridWidth !== world.config.gridWidth || previous.config.gridHeight !== world.config.gridHeight);
         const residents = world.villagers.filter((v) => v.alive && (v.hiddenUntilTerm ?? -1) <= world.term);
         const seen = new Set<string>();
-        for (const [i, v] of residents.entries()) {
+        for (const v of residents) {
             seen.add(v.id);
             const signature = JSON.stringify([v.species, v.reformCount, mixedPartsFor(v)]);
             let visual = this.units.get(v.id);
             const defendant = world.trial?.defendant === v.id;
-            const angle = i / Math.max(1, residents.length) * Math.PI * 2;
-            const plaza = townPoint(world.config, townSite(townMap(world.config), 'fountain').entrance);
-            const target: Vec3 = this.isTrial ? (defendant ? [plaza[0], 0, plaza[2] + 1] : [plaza[0] + Math.cos(angle) * 2.7, 0, plaza[2] + 1 + Math.sin(angle) * 1.2])
-                : townPoint(world.config, v.position);
-            const movementKey = `${this.isTrial}:${world.term}:${world.calendar.segment}:${v.position.x}:${v.position.y}`;
+            const target: Vec3 = townPoint(world.config, v.position);
+            const movementKey = `${this.isTrial}:${v.position.x}:${v.position.y}`;
             if (!visual) {
                 const mesh = renderer.upload(triangulate(residentParts(v)));
                 const label = document.createElement('button');
@@ -187,9 +230,9 @@ export class StageView {
             }
             visual.target = target;
             if (visual.movementKey !== movementKey) {
-                // Trial staging is presentation-only. Returning restores authoritative position.
-                const wasTrial = previous?.phase === 'ten' || previous?.phase === 'ketsu';
-                if (this.isTrial || wasTrial || previous?.config.gridWidth !== world.config.gridWidth || previous?.config.gridHeight !== world.config.gridHeight) {
+                // A regridded town invalidates every cached world-space point; snap rather
+                // than interpolate across the discontinuity.
+                if (regridded) {
                     visual.position = [...target];
                     visual.route = [];
                 } else {
@@ -201,7 +244,9 @@ export class StageView {
                 visual.movementKey = movementKey;
             }
             const awake = isAwake(v.activity, world.calendar.segment, world.config.segmentsPerDay);
-            visual.label.textContent = `${defendant ? '⚖ ' : ''}${villagerDisplayName(world, v)}${!awake ? ' 💤' : ''}${v.reformCount ? ` · 混${v.reformCount}` : ''}`;
+            // Badges come from residentHistory, which only the global snapshot carries.
+            const display = this.world ? villagerDisplayName(this.world, v) : v.name;
+            visual.label.textContent = `${defendant ? '⚖ ' : ''}${display}${!awake ? ' 💤' : ''}${v.reformCount ? ` · 混${v.reformCount}` : ''}`;
             visual.label.title = v.behaviorTrace?.outputAction ?? v.emotion.label;
             visual.label.dataset['mixed'] = String(v.reformCount > 0);
         }
@@ -211,22 +256,6 @@ export class StageView {
                 visual.label.remove();
                 this.units.delete(id);
             }
-        const key = `${world.incident?.id}:${world.trial?.stage}:${world.trial?.defendant}`;
-        if (this.isTrial && this.trialKey !== key) {
-            this.trialKey = key;
-            this.messages.unshift(world.trial?.stage === 'foolish' ? `${this.lex?.trialOpen ?? '開廷'}。記録と証言を照らし合わせよう。`
-                : world.trial?.stage === 'fate' ? `${this.name(world.trial.defendant ?? '')}の責任と、裁きの先を考える。`
-                    : `判決：${world.trial?.verdict === 'death' ? '死刑' : '教育へ'}。この結果が次の暮らしに残る。`);
-        }
-        this.story.update(world);
-        if (!this.isTrial && !world.incident && this.messages.length === 0) {
-            const latest = world.villagerActionLog.at(-1);
-            const text = latest ? `${latest.villagerName}：${latest.text}` : '';
-            if (text && text !== this.lastAmbientAction) {
-                this.lastAmbientAction = text;
-                this.messages.push(text);
-            }
-        }
     }
     private readonly tick = (now: number): void => {
         const renderer = this.renderer;
@@ -239,9 +268,11 @@ export class StageView {
         if (this.world) this.town.project(renderer, this.world);
         if (this.scenery)
             renderer.draw(this.scenery, [0, 0, 0]);
-        if (!this.isTrial && this.itemMesh && this.world)
-            for (const item of this.world.items) {
-                renderer.draw(this.itemMesh, townPoint(this.world.config, item.position));
+        // Items follow the subscribed area, matching the residents drawn beside them.
+        const area = this.areaWorld;
+        if (!this.isTrial && this.itemMesh && area)
+            for (const item of area.items) {
+                renderer.draw(this.itemMesh, townPoint(area.config, item.position));
             }
         for (const visual of this.units.values()) {
             const waypoint = visual.route[0] ?? visual.target;
@@ -278,6 +309,7 @@ export class StageView {
         this.sceneryKey = '';
         for (const visual of this.units.values()) visual.label.remove();
         this.units.clear();
+        this.areaWorld = null;
         this.say('3D描画の接続が失われました。ページを再読み込みしてください。');
     };
     private readonly onPageHide = (event: PageTransitionEvent): void => {
@@ -297,6 +329,7 @@ export class StageView {
         this.sceneryKey = '';
         this.town.destroy();
         this.world = null;
+        this.areaWorld = null;
         this.trialKey = '';
         this.voiceIds.clear();
         this.messages = [];

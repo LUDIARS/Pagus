@@ -40,3 +40,4 @@ export * from './resident-daily-tree.js';
 export * from './resident-interventions.js';
 export * from './autonomous-world-brain.js';
 export * from './resident-speech-tree.js';
+export { TOWN_AREAS, isTownArea, townAreaAt, type TownArea } from './town-areas.js';

@@ -1,6 +1,7 @@
 // Pagus client エントリ。WS に繋ぎ、ステージ (村/裁判) と左右パネル・ログを更新する。
 
 import { StageView } from './stage-view.js';
+import { AreaView } from './area-view.js';
 import { Radar } from './radar.js';
 import { Hud } from './hud.js';
 import { TrialPanel } from './trial-panel.js';
@@ -222,9 +223,13 @@ async function main(): Promise<void> {
   // 課金以外の操作群 (介入/カード/村のしきたり) をタブ式に集約する。
   const overlay = new ActionOverlay(el('action-overlay'), el('ao-header'), el('ao-tabs'), null, el('ao-backdrop'), { embedded: true });
 
+  const areaView = new AreaView(stage, (area) => conn.send({ t: 'subscribeArea', area }));
   conn = connect(WS_URL, {
+    onAreaFrame: (frame) => { if (areaView.accept(frame)) stage.updateArea(frame.world); },
     onSnapshot: (world) => {
       log.setDate(`${world.calendar.month}月${world.calendar.dayOfMonth}日`);
+      // 街全体の情報 (建物の在籍・住民名の表示・物語) は全体 snapshot から。
+      // 3D の住民描画だけが areaFrame 由来 (spec/feature/area-resident-playback.md)。
       stage.update(world);
       radar.update(world.reputation);
       hud.updateCalendar(world);
@@ -249,6 +254,7 @@ async function main(): Promise<void> {
       // 接続確立時にユーザを名乗る (per-user カルマ push 用)。
       if (status.startsWith('●') && status.includes('接続')) {
         const currentName = getUserName();
+        areaView.reconnect();
         conn.send(currentName ? { t: 'hello', userId, userName: currentName } : { t: 'hello', userId });
       }
     },
