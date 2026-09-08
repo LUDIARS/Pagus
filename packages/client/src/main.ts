@@ -1,6 +1,7 @@
 // Pagus client エントリ。WS に繋ぎ、ステージ (村/裁判) と左右パネル・ログを更新する。
 
 import { StageView } from './stage-view.js';
+import { LoadingScreen } from './loading-screen.js';
 import { AreaView } from './area-view.js';
 import { Radar } from './radar.js';
 import { Hud } from './hud.js';
@@ -26,6 +27,7 @@ import { connect, type Conn } from './ws-client.js';
 import { getUserId, getUserName, setUserId, setUserName, enablePush } from './push-client.js';
 import { lockPageZoom } from './lock-page-zoom.js';
 
+const loading = new LoadingScreen();
 lockPageZoom();
 
 // 既定は同一オリジンの /ws (Vite が game server 4310 へ proxy)。
@@ -62,7 +64,9 @@ function showEventTitle(title: string, subtitle: string | undefined, kind: 'myst
 
 async function main(): Promise<void> {
   const stage = new StageView();
+  stage.onFirstScene = () => loading.sceneReady();
   await stage.mount(el('stage'));
+  if (!stage.canRender) loading.fail('3D描画を開始できませんでした。再読み込みするか、先に画面を開いて詳細を確認してください。');
 
   const radar = new Radar(el('radar') as HTMLCanvasElement);
   const hud = new Hud(el('hud'), el('status'));
@@ -227,6 +231,7 @@ async function main(): Promise<void> {
   conn = connect(WS_URL, {
     onAreaFrame: (frame) => { if (areaView.accept(frame)) { stage.setArea(frame.area); stage.updateArea(frame.world); } },
     onSnapshot: (world) => {
+      loading.snapshot();
       areaView.update(world);
       log.setDate(`${world.calendar.month}月${world.calendar.dayOfMonth}日`);
       // 街全体の情報 (建物の在籍・住民名の表示・物語) は全体 snapshot から。
@@ -251,6 +256,7 @@ async function main(): Promise<void> {
     },
     onLog: (phase, text) => log.add(phase, text),
     onStatus: (status) => {
+      loading.connection(status);
       hud.setStatus(status);
       // 接続確立時にユーザを名乗る (per-user カルマ push 用)。
       if (status.startsWith('●') && status.includes('接続')) {
@@ -532,4 +538,7 @@ function setupDrawers(): void {
   backdrop.addEventListener('click', closeAll);
 }
 
-void main();
+void main().catch((error: unknown) => {
+  loading.fail('街の準備中にエラーが発生しました。再読み込みしてください。');
+  console.error('Pagus initialization failed', error);
+});

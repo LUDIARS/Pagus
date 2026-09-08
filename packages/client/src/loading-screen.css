@@ -1,0 +1,15 @@
+#app-shell { display:contents; }
+.pagus-loading { position:fixed; inset:0; z-index:10000; display:grid; place-items:center; padding:24px; background:radial-gradient(ellipse at 50% 38%,#30473c,#111e1b 70%); color:#f5eedc; }
+.pagus-loading[hidden] { display:none; }
+.pagus-loading-card { width:min(420px,100%); text-align:center; padding:36px 24px; border:1px solid #afc19b66; border-radius:28px; background:#192b26e8; box-shadow:0 20px 80px #0005; }
+.pagus-loading-brand { letter-spacing:.3em; color:#bad0a5; font-size:12px; }
+.pagus-loading h1 { margin:14px 0; font-size:27px; }
+.pagus-loading p { line-height:1.8; }
+.pagus-loading-spinner { width:52px; height:52px; margin:22px auto; border:3px solid #ffffff20; border-top-color:#b7d59e; border-radius:50%; animation:pagus-loading-spin 1.4s linear infinite; }
+.pagus-loading ol { padding:0; list-style:none; color:#d1dcc7; line-height:2; }
+.pagus-loading li[data-ready="true"]::before { content:'✓ '; color:#b7d59e; }
+.pagus-loading-actions { display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin-top:22px; }
+.pagus-loading a,.pagus-loading button { color:#f5eedc; background:#314c40; border:1px solid #b3c79c88; padding:10px 16px; border-radius:10px; font:inherit; cursor:pointer; text-decoration:none; }
+.pagus-loading a:focus-visible,.pagus-loading button:focus-visible { outline:3px solid #f1d58f; outline-offset:3px; }
+@keyframes pagus-loading-spin { to { transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { .pagus-loading-spinner { animation:none; } }

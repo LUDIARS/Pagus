@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Pagus — AI村</title>
+    <link rel="stylesheet" href="/src/loading-screen.css" />
     <style>
       :root { color-scheme: dark; --dock-h: 0px; }
       * { box-sizing: border-box; }
@@ -566,6 +567,25 @@
     </style>
   </head>
   <body>
+    <div id="pagus-loading" class="pagus-loading" role="dialog" aria-modal="true" aria-labelledby="loading-title">
+      <div class="pagus-loading-card">
+        <div class="pagus-loading-brand">PAGUS</div>
+        <div class="pagus-loading-spinner" aria-hidden="true"></div>
+        <h1 id="loading-title">街を読み込んでいます</h1>
+        <p id="loading-status" role="status" aria-live="polite">建物と住民の暮らしを準備しています…</p>
+        <ol aria-label="読み込み状況">
+          <li id="loading-connection">街に接続</li>
+          <li id="loading-world">街の情報を受信</li>
+          <li id="loading-scene">建物と住民を描画</li>
+        </ol>
+        <div class="pagus-loading-actions">
+          <a href="">再読み込み</a>
+          <button id="loading-skip" type="button" hidden>先に画面を開く</button>
+        </div>
+        <noscript><p>この街を開くにはJavaScriptを有効にしてください。</p></noscript>
+      </div>
+    </div>
+    <div id="app-shell" inert aria-busy="true">
     <div id="topbar">
       <div class="topbar-info">
         <span id="hud">接続待ち…</span>
@@ -685,6 +705,7 @@
       <div id="backdrop"></div>
     </div>
     <div id="ao-backdrop"></div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

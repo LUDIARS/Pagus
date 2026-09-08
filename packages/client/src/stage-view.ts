@@ -21,6 +21,8 @@ interface ResidentVisual {
 }
 /** Presentation follows authoritative BT positions; it never invents simulation movement. */
 export class StageView {
+    onFirstScene: (() => void) | null = null;
+    get canRender(): boolean { return this.renderer !== null; }
     private readonly courtTransition = new CourtTransition();
     private changingScene = false;
     private sceneGeneration = 0;
@@ -332,6 +334,11 @@ export class StageView {
             else
                 this.speech.hidden = true;
         }
+        if (this.world && this.areaWorld && !this.changingScene && this.onFirstScene) {
+            const ready = this.onFirstScene;
+            this.onFirstScene = null;
+            ready();
+        }
         this.frame = requestAnimationFrame(this.tick);
     };
     private say(text: string): void { this.speech.textContent = text; this.speech.hidden = false; this.speechUntil = performance.now() + 5500; }
@@ -356,6 +363,7 @@ export class StageView {
             this.destroy();
     };
     destroy(): void {
+        this.onFirstScene = null;
         this.courtTransition.destroy();
         cancelAnimationFrame(this.frame);
         this.observer?.disconnect();
