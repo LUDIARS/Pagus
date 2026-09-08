@@ -1,5 +1,7 @@
 import { mixedPartsFor, residentHeadSpecies, type Villager } from '@pagus/sim';
 import { mutateAnatomy } from './resident-mutations.js';
+import { residentCostume } from './resident-costume.js';
+import { residentSpeciesDetail } from './resident-species-detail.js';
 import type { ShapePart, Vec3 } from './mesh-primitives.js';
 export type { ShapePart, Vec3 } from './mesh-primitives.js';
 export { triangulate } from './mesh-primitives.js';
@@ -17,7 +19,7 @@ export function residentParts(v: Villager): ShapePart[] {
     const hasBeast = mixed.includes('hybrid');
     const parts: ShapePart[] = [];
     const add = (center: Vec3, radius: Vec3, color: Vec3, box = false): void => { parts.push({ center, radius, color, box, detail: true }); };
-    add([0, 0.55, 0], [0.32, 0.4, 0.24], [0.35, 0.58, 0.57]);
+    parts.push(...residentCostume(seed, v.species));
     add([0, 1.13, 0], [0.43, 0.39, 0.32], headFur);
     add([0, 1.03, 0.28], [0.26, 0.18, 0.13], cream);
     for (const side of [-1, 1]) {
@@ -72,5 +74,13 @@ export function residentParts(v: Villager): ShapePart[] {
             add([0, 1.65, -0.05], [0.18, 0.055, 0.055], [0.86, 0.67, 0.28], true);
         }
     }
-    return mutateAnatomy(v, parts).map(part => ({ ...part, detail: true }));
+    parts.push(...residentSpeciesDetail(headSpecies, headFur));
+    // Body silhouette is species-specific while keeping education attachments intact.
+    const width = v.species === '熊' ? 1.22 : v.species === '兎' ? .86 : v.species === '蛇' ? .82 : 1;
+    const height = v.species === '兎' ? 1.10 : v.species === '熊' ? .96 : 1;
+    const shaped = parts.map(part => ({ ...part,
+        center: [part.center[0] * width, part.center[1] * height, part.center[2]] as Vec3,
+        radius: [part.radius[0] * width, part.radius[1] * height, part.radius[2]] as Vec3,
+    }));
+    return mutateAnatomy(v, shaped).map(part => ({ ...part, detail: true }));
 }

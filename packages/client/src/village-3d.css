@@ -19,3 +19,11 @@
 .court-wipe { position:absolute; inset:0; background:#171a20; z-index:100; transform:scaleX(0); pointer-events:none; }
 .village-labels button[data-side="accusers"] { border:2px solid #f4846c; background:#632d2deb; }
 .village-labels button[data-side="defenders"] { border:2px solid #7dbde8; background:#243f60eb; }
+.court-dialogue { position:absolute; bottom:24px; left:8%; right:8%; z-index:12; padding:16px 22px; border:2px solid #e4cc99; border-left-width:8px; border-radius:6px 20px 20px 6px; background:#fff7e9f5; color:#302a28; box-shadow:0 8px 30px #15151b65; }
+.court-dialogue[hidden] { display:none; }
+.court-dialogue strong { font:700 16px/1.4 sans-serif; }
+.court-dialogue p { margin:8px 0 0; font:18px/1.6 sans-serif; white-space:pre-wrap; }
+.court-dialogue[data-side="告発側"] { border-color:#c55745; }
+.court-dialogue[data-side="被告側"] { border-color:#427eb2; }
+.village-labels button[data-speaking="true"] { background:#fff1be; color:#38291c; border:3px solid #efb752; z-index:11; font-weight:bold; }
+@media(max-width:600px) { .court-dialogue { bottom:12px; left:3%; right:3%; padding:10px 12px; } .court-dialogue p { font-size:15px; } }

@@ -35,13 +35,12 @@ export function ensureTownResidents(world: World): void {
   // Opening cast backstories are authored at first town setup, never inferred from
   // species, wealth, or mixed appearance, and never repeated for later immigrants.
   if (firstSettlement) {
-    const [unhoused, displaced, isolated] = residents.filter((v) => v.townLife?.occupation !== 'hunter').slice(-3);
+    const [unhoused, displaced] = residents.filter((v) => v.townLife?.occupation !== 'hunter').slice(-2);
     if (unhoused?.townLife) {
       unhoused.townLife.homeId = 'shelter';
       changeHousing(unhoused, 'unhoused', '定住する家を持たず、共同の野営地で寝起きしている');
     }
     if (displaced) changeHousing(displaced, 'displaced', '以前の火災で家を失い、再建を待って野営地に身を寄せている');
-    if (isolated) changeHousing(isolated, 'isolated', '以前の迫害によって街の中心を追われ、離れで暮らしている');
   }
 }
 

@@ -3,6 +3,7 @@ import { residentParts, triangulate, type Vec3 } from './resident-mesh.js';
 import { VillageRenderer, type VillageMesh } from './village-renderer.js';
 import { townScenery } from './town-scenery.js';
 import { CourtTransition } from './court-transition.js';
+import { TrialDialogue } from './trial-dialogue.js';
 import { MAX_VISIBLE_RESIDENTS, type TownArea } from '@pagus/sim';
 import { townAreaCentre } from './town-area-centre.js';
 import { townPoint } from './town-coordinates.js';
@@ -27,6 +28,7 @@ export class StageView {
     onFirstScene: (() => void) | null = null;
     get canRender(): boolean { return this.renderer !== null; }
     private readonly courtTransition = new CourtTransition();
+    private readonly dialogue = new TrialDialogue();
     private changingScene = false;
     private sceneGeneration = 0;
     /**
@@ -44,7 +46,7 @@ export class StageView {
     resetCamera(): void {
         if (!this.renderer) return;
         this.renderer.focus = this.world ? townPoint(this.world.config, townAreaCentre(this.world.config, this.area)) : [0, 0, 0];
-        this.renderer.zoom = 2.5;
+        this.renderer.zoom = 4.5;
         this.renderer.yaw = -.2;
     }
     setArea(area: TownArea): void {
@@ -115,7 +117,7 @@ export class StageView {
                     }],
                 ['＋', () => {
                         if (this.renderer)
-                            this.renderer.zoom = Math.min(5, this.renderer.zoom + .25);
+                            this.renderer.zoom = Math.min(8, this.renderer.zoom + .5);
                     }],
                 ['−', () => {
                         if (this.renderer)
@@ -130,7 +132,7 @@ export class StageView {
                 b.onclick = action;
                 this.controls.append(b);
             }
-            el.append(this.renderer.canvas, this.town.root, this.labels, this.controls, this.town.detail, this.story.root, this.speech, this.courtTransition.element);
+            el.append(this.renderer.canvas, this.town.root, this.labels, this.controls, this.town.detail, this.story.root, this.speech, this.dialogue.element, this.courtTransition.element);
             this.observer = new ResizeObserver(() => { this.width = el.clientWidth; this.height = el.clientHeight; });
             this.observer.observe(el);
             this.width = el.clientWidth;
@@ -158,8 +160,8 @@ export class StageView {
     setTrialLines(incidentId: string, lines: TrialLine[]): void {
         if (incidentId !== this.world?.incident?.id)
             return;
-        this.messages.push(...lines.slice(0, 8).map((line) => `${this.name(line.speaker)}：${line.text}`));
-        this.messages = this.messages.slice(-12);
+        for (const line of lines) this.dialogue.enqueue({ key: `line:${line.speaker}:${line.text}`, speaker: line.speaker,
+            name: this.name(line.speaker), text: line.text, side: line.speaker === this.world?.trial?.defendant ? '被告側' : '証言' });
     }
     setTrialVoices(incidentId: string, voices: TrialVoice[]): void {
         if (incidentId !== this.world?.incident?.id)
@@ -169,7 +171,7 @@ export class StageView {
                 this.voiceIds.add(v.id);
                 this.messages.push(`${v.userName ?? '観客'}：${v.text}`);
                 if (v.respondentId && v.responseText)
-                    this.messages.push(`${this.name(v.respondentId)}：${v.responseText}`);
+                    this.dialogue.enqueue({ key: `voice:${v.id}`, speaker: v.respondentId, name: this.name(v.respondentId), text: v.responseText, side: '応答' });
             }
         this.messages = this.messages.slice(-12);
     }
@@ -189,10 +191,10 @@ export class StageView {
         // Track the world even without a renderer so isTrial (and the verdict controls
         // keyed off it) stay correct on the degraded, WebGL2-less path.
         this.world = world;
-        const lastArgument = world.trial?.factions?.lines.at(-1);
-        if (lastArgument && world.trial?.factions?.turn !== previous?.trial?.factions?.turn) {
-            this.say(`${lastArgument.side === 'accusers' ? '告発側' : '被告側'}・${this.name(lastArgument.speaker)}：${lastArgument.text}`);
-        }
+        this.dialogue.reset(this.isTrial ? world.incident?.id ?? null : null);
+        for (const [index, line] of (world.trial?.factions?.lines ?? []).entries())
+            this.dialogue.enqueue({ key: `faction:${index}:${line.speaker}:${line.text}`, speaker: line.speaker,
+                name: this.name(line.speaker), text: line.text, side: line.side === 'accusers' ? '告発側' : '被告側' });
         if (previous?.incident?.id !== world.incident?.id) {
             this.messages = [];
             this.voiceIds.clear();
@@ -311,6 +313,13 @@ export class StageView {
             return;
         const dt = Math.min(.1, Math.max(0, (now - this.lastTime) / 1000));
         this.lastTime = now;
+        this.dialogue.tick(now);
+        const speaker = this.dialogue.speaker ? this.units.get(this.dialogue.speaker) : undefined;
+        if (this.isTrial && speaker) {
+            const focus: Vec3 = [speaker.position[0], speaker.position[1] + 1, speaker.position[2]];
+            const blend = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : Math.min(1, dt * 4);
+            for (const axis of [0, 1, 2] as const) renderer.focus[axis] += (focus[axis] - renderer.focus[axis]) * blend;
+        }
         const night = this.world && this.world.calendar.segment / this.world.config.segmentsPerDay < 1 / 6;
         renderer.begin(this.width, this.height, night ? [.18, .24, .34] : [.68, .8, .82]);
         if (this.world) this.town.project(renderer, this.world);
@@ -330,11 +339,12 @@ export class StageView {
             for (const axis of [0, 1, 2] as const) visual.position[axis] += (waypoint[axis] - visual.position[axis]) * step;
             if (gap < .03) { visual.position = [...waypoint]; visual.route.shift(); }
             const moving = gap > .03 || visual.route.length > 0;
-            const speaking = this.world?.trial?.stage === 'foolish' && this.world.trial.factions?.lines.at(-1)?.speaker === id;
+            const speaking = this.isTrial && this.dialogue.speaker === id;
+            visual.label.dataset['speaking'] = String(speaking);
             const phase = now * (visual.swagger ? .010 : .012);
             const ground = terrainHeight(visual.position[0], visual.position[2]);
             const offset: Vec3 = [visual.position[0], ground + (moving || speaking ? Math.abs(Math.sin(phase)) * (visual.swagger ? .10 : .06) : 0), visual.position[2]];
-            renderer.draw(visual.mesh, offset, visual.heading, 1.35, phase, moving ? (visual.swagger ? .24 : .15) : 0);
+            renderer.draw(visual.mesh, offset, speaking ? Math.PI - renderer.yaw : visual.heading, speaking ? 1.5 : 1.35, phase, speaking ? .12 : moving ? (visual.swagger ? .24 : .15) : 0);
             const pos = renderer.project([offset[0], offset[1] + 2.5, offset[2]]);
             visual.label.style.transform = `translate(${pos.x}px,${pos.y}px) translate(-50%,-50%)`;
         }
@@ -376,6 +386,7 @@ export class StageView {
     destroy(): void {
         this.onFirstScene = null;
         this.courtTransition.destroy();
+        this.dialogue.destroy();
         cancelAnimationFrame(this.frame);
         this.observer?.disconnect();
         this.observer = null;
