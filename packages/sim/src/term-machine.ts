@@ -5,7 +5,8 @@
 import type { World, Villager, VillagerId, GridPos, Incident, TrialState, Reform, Verdict, ActivityPattern, IncidentDesign, InfoItem, MartialMode, ScheduledParty, ScheduledPartyKind, MoralDial } from './types/index.js';
 import type { Brain, ActionDecision, EnvironmentView } from './brain.js';
 import { aliveVillagers, awakeVillagers, environmentView, clampPos, bumpEventParam } from './world.js';
-import { ensureTownResidents, changeHousing } from './town-residency.js';
+import { ensureTownResidents } from './town-residency.js';
+import { advanceTownIsolationRecovery, recordTownHarassment } from './town-isolation-recovery.js';
 import { createFactionTrial, advanceFactionDebate, settleFactionSides } from './faction-trial.js';
 import { educationTree } from './resident-trial-tree.js';
 import { advanceTownConstruction } from './town-construction.js';
@@ -1238,6 +1239,7 @@ export class TermMachine {
     this.daily.setSurge(this.martialActive('surge') ? this.martialSurgeBonus : 0);
     const actions: KishoTickResult['actions'] = [];
     ensureTownResidents(this.world);
+    advanceTownIsolationRecovery(this.world);
     advanceTownConstruction(this.world);
     const awakeIds = new Set(awakeVillagers(this.world).map((v) => v.id));
     for (const v of aliveVillagers(this.world)) {
@@ -1375,10 +1377,7 @@ export class TermMachine {
         const target = this.world.villagers.get(targetId);
         if (!target || !target.alive) continue;
         if (effect.kind === 'harass') {
-          bumpEventParam(target, 'townHarassment', 1);
-          if ((target.eventParams['townHarassment'] ?? 0) >= 6 && target.townLife && target.townLife.housing !== 'isolated') {
-            changeHousing(target, 'isolated', '繰り返される嫌がらせから逃れ、街はずれの離れで暮らしている');
-          }
+          recordTownHarassment(this.world, target);
           const targetDrop = -Math.round(12 * this.relationshipVolatility(target) * (1 + target.persona.traits.kindness * 0.25));
           const actorDrop = -Math.round(4 * this.relationshipVolatility(actor) * (1 + actor.persona.traits.aggression * 0.35));
           this.adjustRelationship(target, actor, targetDrop, `${target.name}は${actor.name}の嫌がらせを忘れていない`);

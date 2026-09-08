@@ -14,6 +14,7 @@ export function residentDailyTree(world: World, v: Villager, learned: () => Acti
       const axes = { ...v.emotion.axes, anger: Math.max(-1, (v.emotion.axes['anger'] ?? 0) - .15) };
       return { ...quiet(`${v.name}は聞いた提案を受け、落ち着いて考える`), newEmotion: { axes, label: '考え直している' } };
     }),
+    branch('isolation-recovery', () => v.townLife?.housing === 'isolated', () => quiet(`${v.name}は離れで休養し、平穏な暮らしを取り戻している`)),
     leaf('learned-behavior-and-relationships', learned),
   ]), world, value => value.action);
 }

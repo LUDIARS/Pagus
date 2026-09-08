@@ -10,6 +10,7 @@ export interface TownLife {
   housing: HousingStatus;
   homeId: string;
   formerHomeId?: string;
+  isolationReturnHousing?: Exclude<HousingStatus, 'isolated'>;
   reason: string;
   occupation: ShopKind | 'hunter';
 }
@@ -49,6 +50,9 @@ export function changeHousing(v: Villager, housing: HousingStatus, reason: strin
   const life = v.townLife;
   if (!life) throw new Error('Town residency must be assigned before changing housing');
   if (!reason.trim()) throw new Error('Housing changes require a story reason');
+  if (housing === 'isolated' && life.housing !== 'isolated') {
+    life.isolationReturnHousing = life.housing;
+  }
   if (housing === 'housed') {
     const home = life.formerHomeId ?? (life.homeId.startsWith('home-') ? life.homeId : undefined);
     if (!home) throw new Error('A home must be assigned before rehousing');
@@ -59,6 +63,7 @@ export function changeHousing(v: Villager, housing: HousingStatus, reason: strin
     life.homeId = housing === 'isolated' ? 'isolation' : 'shelter';
   }
   life.housing = housing;
+  if (housing !== 'isolated') delete life.isolationReturnHousing;
   life.reason = reason;
   delete v.behaviorTrace;
 }
