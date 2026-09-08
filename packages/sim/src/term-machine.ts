@@ -6,6 +6,8 @@ import type { World, Villager, VillagerId, GridPos, Incident, TrialState, Reform
 import type { Brain, ActionDecision, EnvironmentView } from './brain.js';
 import { aliveVillagers, awakeVillagers, environmentView, clampPos, bumpEventParam } from './world.js';
 import { ensureTownResidents, changeHousing } from './town-residency.js';
+import { createFactionTrial, advanceFactionDebate, settleFactionSides } from './faction-trial.js';
+import { educationTree } from './resident-trial-tree.js';
 import { advanceTownConstruction } from './town-construction.js';
 import { residentDailyTree } from './resident-daily-tree.js';
 import { fateTree, manipulationTree } from './resident-trial-tree.js';
@@ -491,7 +493,7 @@ export class TermMachine {
   private openTrialFixed(incident: Incident, defendantId: VillagerId): TrialState {
     this.userVotes.clear();
     this.markTrialOpened();
-    return {
+    const trial: TrialState = {
       incidentId: incident.id,
       judge: { kind: 'nekomori' },
       candidates: [defendantId],
@@ -503,6 +505,13 @@ export class TermMachine {
       votes: [],
       verdict: null,
     };
+    const factions = createFactionTrial(this.world, incident, defendantId);
+    // 被告は確定済みなので討論段階は挟まず、量刑を受ける敗北勢力だけを決めておく。
+    if (factions) {
+      trial.factions = factions;
+      settleFactionSides(trial, defendantId);
+    }
+    return trial;
   }
 
   // --- 即効介入 (§v1.4-A 野次/証言/差し入れ) --------------------------------------
@@ -1664,6 +1673,8 @@ export class TermMachine {
     // 目撃者 (§v1.4-B witness): 開廷時に傍観者が証言し foolish 票へ重みを乗せる。
     // 擦り付け (framed) があれば目撃者は framed を指し、冤罪に説得力が生まれる。
     composeWitnesses(this.world, incident, trial, this.rng, this.trialComposeConfig);
+    const factions = createFactionTrial(this.world, incident, incident.framedTargetId ?? incident.perpetrator);
+    if (factions) trial.factions = factions;
     return trial;
   }
 
@@ -1676,6 +1687,7 @@ export class TermMachine {
   addUserVote(pick: string, userId = 'local'): void {
     const trial = this.world.trial;
     if (!trial || trial.stage === 'decided') return;
+    // 勢力裁判でもユーザ票は集計へ入る。討論 (advanceFactionDebate) は foolishVotes を参照しないので勝敗は動かない。
 
     // 同段階の自分の前票を取り消す (投票し直し)。
     const prevVote = this.userVotes.get(userId);
@@ -1933,6 +1945,10 @@ export class TermMachine {
   }
 
   private finishFoolishStage(trial: TrialState, incident: Incident): RevealResult | null {
+    // 勢力裁判: 残りの討論を消化して発言と説得点を揃える (被告選出は下の既存投票が決める)。
+    if (trial.factions) {
+      while (!advanceFactionDebate(this.world, trial)) { /* bounded persisted debate, at most 40 arguments */ }
+    }
     if (!trial.defendant) {
       // 狂人の扇動: 全グループ投票後、最も善良な候補へ重い票を投げて陥れる。
       const madman = this.aliveMadman();
@@ -1954,6 +1970,8 @@ export class TermMachine {
       }
       trial.defendant = this.argmaxCandidate(trial);
     }
+    // 被告が属する側を敗北勢力に確定する (量刑は敗北勢力全員へ及ぶ)。
+    settleFactionSides(trial, trial.defendant);
     trial.stage = 'fate';
     trial.pendingGroups = this.trialRoundGroups(TRIAL_FATE_ROUNDS);
     return maybeReveal(this.world, incident, trial, this.rng, this.trialComposeConfig);
@@ -1994,6 +2012,10 @@ export class TermMachine {
     const trial = this.world.trial;
     const incident = this.world.incident;
     let reveal: RevealResult | null = null;
+    // 勢力裁判の討論は 1 ステップ 1 発言。討論中も従来の被告選択投票は並行して進む。
+    if (trial.factions && !trial.factions.loser && trial.stage === 'foolish') {
+      advanceFactionDebate(this.world, trial);
+    }
     const axis = trial.pendingGroups[0];
     if (!axis) {
       return { reveal: this.finishPendingTrialStage(trial, incident) };
@@ -2049,6 +2071,20 @@ export class TermMachine {
     }
     const trial = this.world.trial;
     const defendant = this.get(trial.defendant as VillagerId);
+    // 勢力裁判: 量刑は敗北勢力全員へ及ぶ。被告本人は従来どおり下の pendingReform で処理し、
+    // ここでは同じ側の残りメンバーぶんの制裁だけを組む (二重適用しない)。
+    const faction = trial.factions;
+    const incident = this.world.incident;
+    if (faction?.loser) {
+      faction.sanctions ??= faction[faction.loser].flatMap(id => {
+        if (id === defendant.id) return [];
+        const actor = this.world.villagers.get(id);
+        if (!actor?.alive) return [];
+        return [trial.verdict === 'death'
+          ? { kind: 'exile' as const, villager: id, rationale: '勢力裁判で敗北し、量刑投票で廃棄処分が言い渡された' }
+          : educationTree({ trial, incident, perpetrator: actor })];
+      });
+    }
     // applyReform が後で incident/trial を null にするため、日末評価用にここで捕捉する。
     this.dayOutcome = {
       incident: this.world.incident,
@@ -2148,10 +2184,29 @@ export class TermMachine {
   applyReform(): ReformSummary | null {
     if (this.world.phase !== 'reform') throw new Error(`applyReform in phase ${this.world.phase}`);
     let summary: ReformSummary | null = null;
+    const faction = this.world.trial?.factions;
+    if (faction?.sanctions) {
+      faction.applied ??= [];
+      const messages: string[] = [];
+      for (const reform of faction.sanctions) {
+        if (faction.applied.includes(reform.villager)) continue;
+        const actor = this.world.villagers.get(reform.villager);
+        if (actor?.alive) messages.push(this.reform(reform));
+        faction.applied.push(reform.villager);
+      }
+      // 実際に適用された制裁が無ければ要約を作らない (空文の主文が後日談へ流れるのを防ぐ)。
+      const id = faction.sanctions[0]?.villager;
+      if (id && messages.length) summary = { villager: id, name: '敗北勢力全員', text: messages.join(' / ') };
+    }
     if (this.pendingReform) {
       const v = this.world.villagers.get(this.pendingReform.villager);
       const text = this.reform(this.pendingReform);
-      summary = { villager: this.pendingReform.villager, name: v?.name ?? this.pendingReform.villager, text };
+      // 被告の改変を主文にし、敗北勢力の残りぶんは後ろへ連ねる。
+      summary = {
+        villager: this.pendingReform.villager,
+        name: v?.name ?? this.pendingReform.villager,
+        text: summary ? `${text} / ${summary.text}` : text,
+      };
     }
     this.pendingReform = null;
     beginAftermath(this.world, summary?.text ?? '裁きが終わった。残された住民は、それぞれの日課へ戻る。');
@@ -2166,7 +2221,10 @@ export class TermMachine {
     const v = this.get(reform.villager);
     if (reform.kind === 'exile') {
       v.alive = false;
-      return `${v.name} は村を追放された (${reform.rationale})`;
+      // 敗北勢力の一員なら被告本人 (sanctions からは除外される) も含めて廃棄処分と表記する。
+      const faction = this.world.trial?.factions;
+      const collective = !!faction?.loser && faction[faction.loser].includes(v.id);
+      return `${v.name} は${collective ? '廃棄処分となった' : '村を追放された'} (${reform.rationale})`;
     }
     const beforeAppearance = { ...v.appearance, descriptors: [...v.appearance.descriptors] };
     const beforeTraits = { ...v.persona.traits };

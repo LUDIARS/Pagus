@@ -223,6 +223,7 @@ export class TermLoop {
   private trialTrace(): string | null {
     const t = this.tm.world.trial;
     if (!t) return null;
+    if (t.factions) return `勢力裁判 / 議論${t.factions.turn} / ${t.factions.explanation || 'BTで議論中'} / 廃棄${t.fateVotes.kill}-教育${t.fateVotes.spare}`;
     const stage = t.stage === 'foolish' ? '被告選択' : t.stage === 'fate' ? '量刑' : '判決済み';
     const pending = t.pendingGroups.length;
     const defendant = t.defendant ? this.tm.world.villagers.get(t.defendant)?.name ?? t.defendant : '未定';

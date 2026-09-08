@@ -54,6 +54,7 @@ export interface TestimonyRecord {
 
 /** 転: 投票による裁判の状態。 */
 export interface TrialState {
+  factions?: import('../faction-trial.js').FactionTrial;
   incidentId: string;
   judge: Judge;
   /** 被告候補 (その日の愚かしい行動の実行者たち)。 */

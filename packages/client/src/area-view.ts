@@ -12,6 +12,8 @@ export class AreaView {
   private area: TownArea = 'plaza';
   private sequence = -1;
   private chosen = false;
+  private court = false;
+  private previousArea: TownArea = 'plaza';
   private world: WireWorld | null = null;
   private readonly select = document.createElement('select');
   private readonly find = document.createElement('button');
@@ -33,6 +35,15 @@ export class AreaView {
   }
   update(world: WireWorld): void {
     this.world = world;
+    const court = !!world.trial?.factions && ['ten', 'ketsu', 'reform'].includes(world.phase);
+    this.select.disabled = court;
+    if (court !== this.court) {
+      if (court) this.previousArea = this.area;
+      this.court = court;
+      const target = court ? 'plaza' : this.previousArea;
+      this.stage.transitionScene(() => { this.switchTo(target); this.stage.resetCamera(); });
+    }
+    if (court) { this.find.disabled = true; return; }
     const counts = this.countByArea(world);
     let total = 0;
     TOWN_AREAS.forEach((area, i) => {

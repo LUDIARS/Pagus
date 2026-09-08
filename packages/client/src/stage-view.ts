@@ -2,6 +2,7 @@ import { isAwake, mixedPartsFor, PART_LABELS, type WireWorld, type TrialLine, ty
 import { residentParts, triangulate, type Vec3 } from './resident-mesh.js';
 import { VillageRenderer, type VillageMesh } from './village-renderer.js';
 import { townScenery } from './town-scenery.js';
+import { CourtTransition } from './court-transition.js';
 import { MAX_VISIBLE_RESIDENTS, type TownArea } from '@pagus/sim';
 import { townAreaCentre } from './town-area-centre.js';
 import { townPoint } from './town-coordinates.js';
@@ -20,6 +21,19 @@ interface ResidentVisual {
 }
 /** Presentation follows authoritative BT positions; it never invents simulation movement. */
 export class StageView {
+    private readonly courtTransition = new CourtTransition();
+    private changingScene = false;
+    private sceneGeneration = 0;
+    /**
+     * 遷移中は updateArea を止める。superseded / teardown では changeScene が呼ばれないため、
+     * 自分が最新の遷移である場合に限りフラグを戻す (戻し損ねると法廷が固まったままになる)。
+     */
+    transitionScene(action: () => void): void {
+        const generation = ++this.sceneGeneration;
+        this.changingScene = true;
+        const settle = (): void => { if (generation === this.sceneGeneration) this.changingScene = false; };
+        void this.courtTransition.run(() => { action(); settle(); }).finally(settle);
+    }
     private area: TownArea = 'plaza';
     /** Frames the subscribed district; the world is absent until the first snapshot. */
     resetCamera(): void {
@@ -111,7 +125,7 @@ export class StageView {
                 b.onclick = action;
                 this.controls.append(b);
             }
-            el.append(this.renderer.canvas, this.town.root, this.labels, this.controls, this.town.detail, this.story.root, this.speech);
+            el.append(this.renderer.canvas, this.town.root, this.labels, this.controls, this.town.detail, this.story.root, this.speech, this.courtTransition.element);
             this.observer = new ResizeObserver(() => { this.width = el.clientWidth; this.height = el.clientHeight; });
             this.observer.observe(el);
             this.width = el.clientWidth;
@@ -170,6 +184,10 @@ export class StageView {
         // Track the world even without a renderer so isTrial (and the verdict controls
         // keyed off it) stay correct on the degraded, WebGL2-less path.
         this.world = world;
+        const lastArgument = world.trial?.factions?.lines.at(-1);
+        if (lastArgument && world.trial?.factions?.turn !== previous?.trial?.factions?.turn) {
+            this.say(`${lastArgument.side === 'accusers' ? '告発側' : '被告側'}・${this.name(lastArgument.speaker)}：${lastArgument.text}`);
+        }
         if (previous?.incident?.id !== world.incident?.id) {
             this.messages = [];
             this.voiceIds.clear();
@@ -211,6 +229,7 @@ export class StageView {
      * The frame's world is area-filtered, so nothing here may read the global roster.
      */
     updateArea(world: WireWorld): void {
+        if (this.changingScene) return;
         const renderer = this.renderer;
         if (!renderer)
             return;
@@ -267,6 +286,7 @@ export class StageView {
             visual.label.textContent = `${defendant ? '⚖ ' : ''}${display}${!awake ? ' 💤' : ''}${v.reformCount ? ` · 混${v.reformCount}` : ''}`;
             visual.label.title = v.behaviorTrace?.outputAction ?? v.emotion.label;
             visual.label.dataset['mixed'] = String(v.reformCount > 0);
+            visual.label.dataset['side'] = world.trial?.factions?.accusers.includes(v.id) ? 'accusers' : world.trial?.factions?.defenders.includes(v.id) ? 'defenders' : '';
         }
         for (const [id, visual] of this.units)
             if (!seen.has(id)) {
@@ -292,14 +312,15 @@ export class StageView {
             for (const item of area.items) {
                 renderer.draw(this.itemMesh, townPoint(area.config, item.position));
             }
-        for (const visual of this.units.values()) {
+        for (const [id, visual] of this.units) {
             const waypoint = visual.route[0] ?? visual.target;
             const gap = Math.hypot(waypoint[0] - visual.position[0], waypoint[2] - visual.position[2]);
             const step = Math.min(1, dt * 5 / Math.max(.001, gap));
             for (const axis of [0, 1, 2] as const) visual.position[axis] += (waypoint[axis] - visual.position[axis]) * step;
             if (gap < .03) { visual.position = [...waypoint]; visual.route.shift(); }
             const moving = Math.hypot(visual.target[0] - visual.position[0], visual.target[2] - visual.position[2]) > .03;
-            const offset: Vec3 = [visual.position[0], moving ? Math.abs(Math.sin(now * .012)) * .06 : 0, visual.position[2]];
+            const speaking = this.world?.trial?.stage === 'foolish' && this.world.trial.factions?.lines.at(-1)?.speaker === id;
+            const offset: Vec3 = [visual.position[0] + (speaking ? Math.sin(now * .025) * .05 : 0), moving || speaking ? Math.abs(Math.sin(now * .012)) * .06 : 0, visual.position[2]];
             renderer.draw(visual.mesh, offset);
             const pos = renderer.project([offset[0], 1.95, offset[2]]);
             visual.label.style.transform = `translate(${pos.x}px,${pos.y}px) translate(-50%,-50%)`;
@@ -335,6 +356,7 @@ export class StageView {
             this.destroy();
     };
     destroy(): void {
+        this.courtTransition.destroy();
         cancelAnimationFrame(this.frame);
         this.observer?.disconnect();
         this.observer = null;

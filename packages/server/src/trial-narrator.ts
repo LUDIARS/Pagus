@@ -45,6 +45,7 @@ export class TrialNarrator {
 
   /** その事件の被告へ向けた、糾弾者ごとの一言を作る。 */
   async linesFor(world: World): Promise<TrialLine[]> {
+    if (world.trial?.factions) return world.trial.factions.lines.slice(-4).map(line => ({ speaker: line.speaker, text: line.text }));
     const incident = world.incident;
     if (!incident) return [];
     const target = world.villagers.get(world.trial?.defendant ?? incident.perpetrator);

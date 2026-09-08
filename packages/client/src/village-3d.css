@@ -16,3 +16,6 @@
 .town-detail { position:absolute; bottom:12px; left:12px; max-width:min(330px,70%); max-height:22%; overflow:auto; border:1px solid #c6b38e; border-radius:10px; padding:8px 12px; background:#faf1dfee; color:#3c332c; font:12px/1.5 sans-serif; }
 .town-detail p { white-space:pre-line; margin:4px 0 0; }
 @media(max-width:600px) { .village-story { width:calc(100% - 48px); top:54px; max-height:28%; font-size:12px; } .village-labels button { font-size:10px; padding:3px 5px; } }
+.court-wipe { position:absolute; inset:0; background:#171a20; z-index:100; transform:scaleX(0); pointer-events:none; }
+.village-labels button[data-side="accusers"] { border:2px solid #f4846c; background:#632d2deb; }
+.village-labels button[data-side="defenders"] { border:2px solid #7dbde8; background:#243f60eb; }

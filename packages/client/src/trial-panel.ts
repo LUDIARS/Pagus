@@ -2,6 +2,7 @@
 
 import type { WireWorld } from '@pagus/sim';
 import { villagerDisplayName } from './villager-display.js';
+import { factionTrialPanel } from './faction-trial-panel.js';
 
 export class TrialPanel {
   private verdictCooldownUntil = 0;
@@ -13,6 +14,11 @@ export class TrialPanel {
 
   update(world: WireWorld): void {
     const trial = world.trial;
+    if (trial?.factions && ['ten', 'ketsu', 'reform'].includes(world.phase)) {
+      this.root.style.display = 'block';
+      this.root.replaceChildren(factionTrialPanel(world, pick => this.voteVerdict(pick), Date.now() < this.verdictCooldownUntil));
+      return;
+    }
     if (!trial || world.phase !== 'ten' || trial.stage === 'decided') {
       this.root.style.display = 'none';
       this.root.replaceChildren();
