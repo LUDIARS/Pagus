@@ -2,6 +2,7 @@ import type { WireWorld, VillagerGachaKind, LeaderboardEntry, Villager } from '@
 import { HOBBY_LABELS, KARMA_GACHA_COST, PERSONALITY_LABELS, dominantAxis, isAwake, lifeProfileFor, routineTextFor, sleepRoutineTextFor, timeOfDayForSegment, townRoutine, routineSchedule, HOUSING_NAMES, SHOP_NAMES, townMap, townSite } from '@pagus/sim';
 import { residentHistoryDisplayName, villagerNameMap } from './villager-display.js';
 import { mixedPartsFor, PART_LABELS, DIRECTION_LABELS, residentHeadSpecies } from '@pagus/sim';
+import { ResidentPortraits } from './resident-portrait.js';
 
 const REL_HATE_THRESHOLD = -35;
 const REL_LIKE_THRESHOLD = 45;
@@ -19,6 +20,7 @@ export interface ResidentPanelOptions {
 }
 
 export class ResidentPanel {
+  private readonly portraits = new ResidentPortraits();
   private world: WireWorld | null = null;
   private leaderboard: LeaderboardEntry[] = [];
   private readonly gachaBox = document.createElement('div');
@@ -68,6 +70,8 @@ export class ResidentPanel {
     this.actionBox.className = 'resident-list';
     this.root.appendChild(this.actionBox);
     this.setupModal();
+    // `persisted` means the page went into the bfcache and may come back; only release on real unload.
+    window.addEventListener('pagehide', (e) => { if (!e.persisted) this.portraits.destroy(); });
     this.render();
   }
 
@@ -93,6 +97,7 @@ export class ResidentPanel {
 
   private render(): void {
     const w = this.world;
+    this.portraits.reset();
     this.statusBox.replaceChildren();
     this.brainBox.replaceChildren();
     this.championBox.replaceChildren();
@@ -120,6 +125,7 @@ export class ResidentPanel {
       const routine = v.townLife ? townRoutine(w, v).label : awake ? routineTextFor(v, now) : sleepRoutineTextFor(now);
       const recent = latestAction.get(v.id);
       const meta = [
+        `教育:${v.reformCount}回`,
         `職能:${profile.label}`,
         `脳:${brainLabelFor(w, v.id)}`,
         `活動:${activityLabel(v.activity)}`,
@@ -128,7 +134,11 @@ export class ResidentPanel {
         `日課:${routine}`,
         recent ? `最近:${recent}` : null,
       ].filter((s): s is string => s !== null).join(' / ');
-      this.statusBox.appendChild(row(`${v.name} (${v.species})`, meta, () => this.showVillagerDetails(v.id)));
+      const residentRow = row(`${v.name} (${v.species})`, meta, () => this.showVillagerDetails(v.id));
+      residentRow.style.display = 'flow-root';
+      residentRow.style.minHeight = '80px';
+      residentRow.prepend(this.portraits.create(v));
+      this.statusBox.appendChild(residentRow);
     }
 
     for (const v of w.villagers.filter((x) => x.alive).sort((a, b) => a.name.localeCompare(b.name))) {
