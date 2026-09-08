@@ -77,7 +77,7 @@ export class ResidentPortraits {
   reset(): void { this.observer.disconnect(); this.pending.clear(); }
   create(v: Villager): HTMLImageElement {
     const img = document.createElement('img');
-    img.width = img.height = 80;
+    img.width = img.height = 104;
     img.alt = `${v.name}の現在のモデル（教育${v.reformCount}回）`;
     img.style.cssText = 'float:left;margin:0 10px 4px 0;border-radius:8px;object-fit:contain';
     const parts = residentParts(v);

@@ -5,7 +5,7 @@ import type { ShapePart, Vec3 } from './mesh-primitives.js';
 export function homeModel(id: string, origin: Vec3, scale: number, mutations: readonly MixedPart[]): ShapePart[] {
   const parts: ShapePart[] = [];
   const add = (x: number, y: number, z: number, rx: number, ry: number, rz: number, color: Vec3, box = true): void => {
-    parts.push({ center: [origin[0] + x * scale, y, origin[2] + z * scale], radius: [rx * scale, ry, rz * scale], color, box });
+    parts.push({ center: [origin[0] + x * scale, origin[1] + y, origin[2] + z * scale], radius: [rx * scale, ry, rz * scale], color, box });
   };
   const variant = [...id].reduce((sum, char) => sum + char.charCodeAt(0), 0) % 2;
   if (variant === 0) {

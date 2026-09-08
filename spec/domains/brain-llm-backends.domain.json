@@ -31,6 +31,8 @@
   ],
   "cardTemplate": "Summarise the \"Brain/LLM Backends\" domain: Multi-model LLM distribution: backend abstraction, per-villager assignment, tier routing (strong override), default cast, prompt/output contracts. The AI inference layer (Discutere-style).",
   "specRefs": [
+    "spec/feature/village-presence.md#pa-presence-04-非公開の呼びかけ",
+    "spec/ux/product.md",
     "Brain backends — マルチモデル分散 (v0.2)",
     "Brain backends — マルチモデル分散 (v0.2) / backend 抽象",
     "Brain backends — マルチモデル分散 (v0.2) / per-villager 割当",

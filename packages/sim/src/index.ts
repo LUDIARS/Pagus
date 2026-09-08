@@ -31,6 +31,7 @@ export * from './resident-goals.js';
 export * from './narrative-director.js';
 export * from './town-map.js';
 export * from './town-navigation.js';
+export * from './town-roads.js';
 export * from './town-residency.js';
 export * from './town-routine.js';
 export * from './behavior-tree.js';

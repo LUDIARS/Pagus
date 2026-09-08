@@ -6,6 +6,7 @@ import { CourtTransition } from './court-transition.js';
 import { MAX_VISIBLE_RESIDENTS, type TownArea } from '@pagus/sim';
 import { townAreaCentre } from './town-area-centre.js';
 import { townPoint } from './town-coordinates.js';
+import { terrainVertices, terrainHeight } from './town-terrain.js';
 import { TownLabels } from './town-labels.js';
 import { StoryPanel } from './story-panel.js';
 import { villagerDisplayName } from './villager-display.js';
@@ -18,6 +19,8 @@ interface ResidentVisual {
     target: Vec3;
     route: Vec3[];
     movementKey: string;
+    heading: number;
+    swagger: boolean;
 }
 /** Presentation follows authoritative BT positions; it never invents simulation movement. */
 export class StageView {
@@ -200,7 +203,11 @@ export class StageView {
         const homesKey = JSON.stringify(world.villagers.filter((v) => v.alive && v.townLife).map((v) => [v.townLife?.homeId, v.townLife?.formerHomeId, v.townLife?.buildHomeId, mixedPartsFor(v)]));
         const sceneryKey = `${this.area}:${world.config.gridWidth}:${world.config.gridHeight}:${[...damagedHomes].sort().join(',')}:${homesKey}`;
         if (this.sceneryKey !== sceneryKey) {
-            const mesh = renderer.upload(triangulate(townScenery(world, this.area, damagedHomes)));
+            const ground = terrainVertices();
+            const objects = triangulate(townScenery(world, this.area, damagedHomes));
+            const vertices = new Float32Array(ground.length + objects.length);
+            vertices.set(ground); vertices.set(objects, ground.length);
+            const mesh = renderer.upload(vertices);
             if (this.scenery)
                 renderer.release(this.scenery);
             this.scenery = mesh;
@@ -257,7 +264,7 @@ export class StageView {
                 label.type = 'button';
                 label.onclick = () => this.tap?.(v.id);
                 this.labels.append(label);
-                visual = { mesh, signature, label, position: [...target], target, route: [], movementKey };
+                visual = { mesh, signature, label, position: [...target], target, route: [], movementKey, heading: 0, swagger: false };
                 this.units.set(v.id, visual);
             }
             else if (visual.signature !== signature) {
@@ -283,6 +290,7 @@ export class StageView {
                 visual.movementKey = movementKey;
             }
             const awake = isAwake(v.activity, world.calendar.segment, world.config.segmentsPerDay);
+            visual.swagger = awake && v.persona.traits.aggression > .6 && !v.behaviorTrace?.gate;
             // Badges come from residentHistory, which only the global snapshot carries.
             const display = this.world ? villagerDisplayName(this.world, v) : v.name;
             visual.label.textContent = `${defendant ? '⚖ ' : ''}${display}${!awake ? ' 💤' : ''}${v.reformCount ? ` · 混${v.reformCount}` : ''}`;
@@ -317,14 +325,17 @@ export class StageView {
         for (const [id, visual] of this.units) {
             const waypoint = visual.route[0] ?? visual.target;
             const gap = Math.hypot(waypoint[0] - visual.position[0], waypoint[2] - visual.position[2]);
+            if (gap > .03) visual.heading = Math.atan2(waypoint[0] - visual.position[0], waypoint[2] - visual.position[2]);
             const step = Math.min(1, dt * 5 / Math.max(.001, gap));
             for (const axis of [0, 1, 2] as const) visual.position[axis] += (waypoint[axis] - visual.position[axis]) * step;
             if (gap < .03) { visual.position = [...waypoint]; visual.route.shift(); }
-            const moving = Math.hypot(visual.target[0] - visual.position[0], visual.target[2] - visual.position[2]) > .03;
+            const moving = gap > .03 || visual.route.length > 0;
             const speaking = this.world?.trial?.stage === 'foolish' && this.world.trial.factions?.lines.at(-1)?.speaker === id;
-            const offset: Vec3 = [visual.position[0] + (speaking ? Math.sin(now * .025) * .05 : 0), moving || speaking ? Math.abs(Math.sin(now * .012)) * .06 : 0, visual.position[2]];
-            renderer.draw(visual.mesh, offset);
-            const pos = renderer.project([offset[0], 1.95, offset[2]]);
+            const phase = now * (visual.swagger ? .010 : .012);
+            const ground = terrainHeight(visual.position[0], visual.position[2]);
+            const offset: Vec3 = [visual.position[0], ground + (moving || speaking ? Math.abs(Math.sin(phase)) * (visual.swagger ? .10 : .06) : 0), visual.position[2]];
+            renderer.draw(visual.mesh, offset, visual.heading, 1.35, phase, moving ? (visual.swagger ? .24 : .15) : 0);
+            const pos = renderer.project([offset[0], offset[1] + 2.5, offset[2]]);
             visual.label.style.transform = `translate(${pos.x}px,${pos.y}px) translate(-50%,-50%)`;
         }
         if (now > this.speechUntil) {

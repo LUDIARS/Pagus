@@ -7,7 +7,7 @@ export function mutateAnatomy(v: Villager, base: ShapePart[]): ShapePart[] {
   const result = mixed.includes('slime') ? base.map((part) => ({ ...part,
     center: [part.center[0], part.center[1] * .84, part.center[2]] as Vec3,
     radius: [part.radius[0] * 1.12, part.radius[1] * .92, part.radius[2] * 1.12] as Vec3,
-    color: part.color[0] < .2 ? part.color : [.32, .81, .73] as Vec3,
+    color: part.preserveColor || part.color[0] < .2 ? part.color : [.32, .81, .73] as Vec3,
   })) : [...base];
   const add = (center:Vec3,radius:Vec3,color:Vec3):void => { result.push({center,radius,color}); };
   if (mixed.includes('slime')) {

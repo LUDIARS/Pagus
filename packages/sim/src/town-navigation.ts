@@ -1,7 +1,8 @@
 import type { GridPos } from './types/index.js';
 import { townBlocked, type TownMap } from './town-map.js';
+import { townRoadCells } from './town-roads.js';
 
-/** Four-way BFS prevents corner cutting. The start may be inside a legacy decoration. */
+/** Four-way Dijkstra prefers the stone streets without making off-road goals unreachable. */
 export function townRoute(map: TownMap, from: GridPos, to: GridPos): GridPos[] {
   const key = (p: GridPos): number => p.y * map.width + p.x;
   const inside = (p: GridPos): boolean => p.x >= 0 && p.y >= 0 && p.x < map.width && p.y < map.height;
@@ -12,9 +13,20 @@ export function townRoute(map: TownMap, from: GridPos, to: GridPos): GridPos[] {
     : to;
   if (!target) return [];
   const queue: GridPos[] = [from];
+  const roads = townRoadCells(map);
+  const costs = new Map<number, number>([[key(from), 0]]);
+  const visited = new Set<number>();
   const previous = new Map<number, GridPos | null>([[key(from), null]]);
-  for (let i = 0; i < queue.length; i++) {
-    const p = queue[i]!;
+  while (queue.length) {
+    // Select the cheapest frontier cell in one linear scan. Re-sorting the whole queue on
+    // every pop costs O(V² log V) on a grid this routing runs per resident per tick.
+    let best = 0;
+    for (let i = 1; i < queue.length; i++) if (costs.get(key(queue[i]!))! < costs.get(key(queue[best]!))!) best = i;
+    const p = queue[best]!;
+    queue[best] = queue[queue.length - 1]!;
+    queue.pop();
+    if (visited.has(key(p))) continue;
+    visited.add(key(p));
     if (key(p) === key(target)) {
       const path: GridPos[] = [];
       let cursor: GridPos = p;
@@ -22,7 +34,10 @@ export function townRoute(map: TownMap, from: GridPos, to: GridPos): GridPos[] {
       return path.reverse();
     }
     for (const next of [{ x: p.x - 1, y: p.y }, { x: p.x + 1, y: p.y }, { x: p.x, y: p.y - 1 }, { x: p.x, y: p.y + 1 }]) {
-      if (!inside(next) || townBlocked(map, next) || previous.has(key(next))) continue;
+      if (!inside(next) || townBlocked(map, next) || visited.has(key(next))) continue;
+      const cost = costs.get(key(p))! + (roads.has(key(next)) ? 1 : 3);
+      if (cost >= (costs.get(key(next)) ?? Infinity)) continue;
+      costs.set(key(next), cost);
       previous.set(key(next), p);
       queue.push(next);
     }

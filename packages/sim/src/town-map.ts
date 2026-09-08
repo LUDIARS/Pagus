@@ -33,10 +33,13 @@ export function townMap(config: Pick<WorldConfig, 'gridWidth' | 'gridHeight'>): 
     sites.push({ id, name, kind, position, entrance: { x: position.x, y: Math.min(height - 1, position.y + 1) } });
   };
   add('fountain', '噴水広場', 'fountain', 12, 12);
-  const shops: [ShopKind, number, number][] = [['doctor', 8, 8], ['general', 12, 8], ['carpenter', 16, 8], ['tailor', 7, 12], ['grocer', 17, 12], ['diner', 9, 16], ['inn', 15, 16]];
+  // Market frontages flank the civic square, leaving the eight main approaches clear.
+  const shops: [ShopKind, number, number][] = [['doctor', 9, 7], ['general', 14, 7], ['carpenter', 17, 10], ['tailor', 7, 10], ['grocer', 17, 14], ['diner', 9, 17], ['inn', 14, 17]];
   for (const [kind, x, y] of shops) add(kind, SHOP_NAMES[kind], kind, x, y);
-  for (const [i, [x, y]] of ([[4, 3], [8, 3], [12, 3], [16, 3], [20, 3], [3, 7], [3, 11], [3, 15], [4, 20], [8, 20], [12, 20], [16, 20], [20, 20], [21, 15], [21, 11], [21, 7]] as const).entries()) {
-    add(`home-${i}`, `郊外の家 ${i + 1}`, 'home', x, y);
+  for (let i = 0; i < 16; i++) {
+    const angle = (i + .5) * Math.PI / 8;
+    const radius = i % 2 ? 10.2 : 9.2;
+    add(`home-${i}`, `郊外の家 ${i + 1}`, 'home', 11.5 + Math.cos(angle) * radius, 11.5 + Math.sin(angle) * radius);
   }
   add('shelter', '共同の野営地', 'shelter', 1, 19);
   add('isolation', '隔離された離れ', 'isolation', 22, 1);

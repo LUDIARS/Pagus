@@ -9,6 +9,8 @@ import { branch, leaf, selector } from './behavior-tree.js';
 import { decideWithTree } from './resident-bt-trace.js';
 import { currentIntervention } from './resident-interventions.js';
 import { townSite } from './town-map.js';
+import { socialGoal } from './resident-social-goal.js';
+import { socialAction } from './resident-social-action.js';
 export interface ResidentGoal {
     kind: 'care' | 'investigate' | 'collect' | 'work' | 'social' | 'rest';
     label: string;
@@ -43,13 +45,14 @@ export function selectResidentGoal(world: World, v: Villager): ResidentGoal {
         branch('education-discipline', () => parts.includes('clockwork'), () => ({ ...routine, priority: 80 })),
         branch('accepted-intervention', () => !!input && input.intent !== 'calm', () => ({ kind: input!.intent === 'investigate' ? 'investigate' : 'social', label: input!.intent === 'investigate' ? '提案を受け、広場の手掛かりを調べる' : '提案を受け、広場へ集まる', destination: { ...townSite(map, 'fountain').entrance }, priority: 75, interrupted: true })),
         branch('education-collection', () => parts.includes('teapot') && !!item, () => ({ kind: 'collect', label: '珍しい品を集める', destination: { ...item!.position }, priority: 70, interrupted: false })),
-        leaf('scheduled-routine', () => routine),
+        leaf('scheduled-routine', () => socialGoal(world, v, routine)),
     ]), world, value => value.label);
 }
 /** Runs after learned rules and relationship proposals, before any world side effect. */
 export function finalizeResidentAction(world: World, v: Villager, proposed: ActionDecision): ActionDecision {
     const selected = selectResidentGoal(world, v);
     const goal = { ...selected, destination: { ...selected.destination } };
+    proposed = socialAction(world, v, goal, proposed);
     const parts = educationPartsFor(v);
     const harmful = proposed.triggersIncident || proposed.relationshipEffects?.some((effect) => effect.kind === 'harass')
         || (proposed.sideEffects?.wealthDelta ?? 0) < 0;

@@ -1,0 +1,2513 @@
+{
+  "projectId": "01M20FNTMBJ498ZY1DDSTQJSEG",
+  "anatomiaRepo": "pagus",
+  "importedAt": "2026-09-08T12:38:13.825Z",
+  "kind": "fragment",
+  "files": 30,
+  "fragments": [
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 1,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け)",
+      "sourceEventId": "5f88263b-92f3-5542-a94c-2f48073e2c04",
+      "id": "01M20FNTXVCWCDR7367HF6PPPV",
+      "revision": 2,
+      "sha256": "5f88263b92f38542b94c2f48073e2c04fcade383261ec5e5bbe9b33dc4338abc"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 7,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 1. プロダクト一行定義",
+      "sourceEventId": "7ab35b22-c466-5dae-a6d5-67dbd7428f31",
+      "id": "01M20FNTYCMHS12SAFZVKPWEHR",
+      "revision": 2,
+      "sha256": "7ab35b22c466adae46d567dbd7428f31e8c07a9f6d16d92548646a94ea31539b"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 12,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 2. アーキテクチャ大分類 (レイヤノード)",
+      "sourceEventId": "7a06cd65-b685-5099-ab4d-2fb334b61f15",
+      "id": "01M20FNTYPGSTSPSYJE9GWC63P",
+      "revision": 2,
+      "sha256": "7a06cd65b685c0997b4d2fb334b61f1536f132c785bcb4d6a413346645f23a52"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 22,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧)",
+      "sourceEventId": "cf0f2080-7642-57d2-a3be-d8a887a50769",
+      "id": "01M20FNTZ83WZMQVH7D682P50G",
+      "revision": 2,
+      "sha256": "cf0f2080764217d2d3bed8a887a50769b5ef3b43dc6a6216e9eb60d1717cac74"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 26,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D1. 時間・暦",
+      "sourceEventId": "7b923dfa-ef95-52e8-a06b-b3f7a46fd9b5",
+      "id": "01M20FNTZHRK8H4Q3FFWD3DZBJ",
+      "revision": 2,
+      "sha256": "7b923dfaef9522e8706bb3f7a46fd9b5c9f29811edcf91b376cb409fa67f6d1f"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 33,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D2. 村人 (ペルソナエンジン)",
+      "sourceEventId": "146e365d-7b35-5d17-a6ed-fee61aed41e6",
+      "id": "01M20FNTZTAC8C0PZRMXV7ZZH9",
+      "revision": 2,
+      "sha256": "146e365d7b350d1706edfee61aed41e62651ee573d4a45c6daae6104cd8998ff"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 40,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D3. 日常行動エンジン (LLM 不使用)",
+      "sourceEventId": "89859fa3-374f-586a-afea-0217bc4e02bd",
+      "id": "01M20FNV0627ABVJZW7YX0MC53",
+      "revision": 2,
+      "sha256": "89859fa3374fa86a6fea0217bc4e02bd95657897f0fbb8c25d0001b954d76ec5"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 47,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D4. 事件ライフサイクル",
+      "sourceEventId": "b434c766-b04b-5563-ad74-f44cae18d9a5",
+      "id": "01M20FNV0FK9816QRP7H25NDHM",
+      "revision": 2,
+      "sha256": "b434c766b04bb5634d74f44cae18d9a57b7a1290f7670874f310854c99ce150a"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 54,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D5. 裁判・教育",
+      "sourceEventId": "11d7a07a-d8df-50fa-a7d7-8734c5af9bf0",
+      "id": "01M20FNV0SWJJSTB445HEMN42B",
+      "revision": 2,
+      "sha256": "11d7a07ad8df80fa47d78734c5af9bf067832d4dbdf4674724746188aaebf19f"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 61,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D6. 評判・世界評価",
+      "sourceEventId": "8a86b7f6-00df-598f-aabd-de1f95503fe4",
+      "id": "01M20FNV1G2ZEFB04JXCZF39XZ",
+      "revision": 2,
+      "sha256": "8a86b7f600df398f5abdde1f95503fe40560c2257c9baff525e13c94b8732b52"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 68,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D7. 住民経済",
+      "sourceEventId": "bf6b22bd-2eda-58a6-a54c-b5d6c4a0db4b",
+      "id": "01M20FNV1T9M8NZZW353TK0TES",
+      "revision": 2,
+      "sha256": "bf6b22bd2eda28a6854cb5d6c4a0db4b15750cf52bdbd8faf13f28822cbd3741"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 75,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D8. フィールドアイテム",
+      "sourceEventId": "815efb64-33fa-50ea-ab90-c1ef4638c1f8",
+      "id": "01M20FNV249VDXN52YVJEHWEM5",
+      "revision": 2,
+      "sha256": "815efb6433fa00ea0b90c1ef4638c1f8114da4ae2599098b1338c6433c6c1858"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 82,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D9. 政治",
+      "sourceEventId": "9fd5ffad-e55b-5a20-ad33-3a2a097f84e9",
+      "id": "01M20FNV2E55DQ8B745F44H20J",
+      "revision": 2,
+      "sha256": "9fd5ffade55b8a202d333a2a097f84e956500270899b07320837c79f6dd489b1"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 89,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D10. プレイヤー状態・ソーシャル",
+      "sourceEventId": "78b401e4-b211-553f-a8a0-15fbc80975da",
+      "id": "01M20FNV2RVZYDMPVCPRB45FS7",
+      "revision": 2,
+      "sha256": "78b401e4b211253f88a015fbc80975da58bc6b56569da27ede6e1b0d0026120a"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 96,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D11. カード・演出・協力 (ソーシャルパック)",
+      "sourceEventId": "a147f060-f7a4-5b28-ab48-fe3708b5a167",
+      "id": "01M20FNV33AN5J75ACFFZWSVCW",
+      "revision": 2,
+      "sha256": "a147f060f7a4fb28cb48fe3708b5a167a4b2643ff4948f7d964c297a7b7459da"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 103,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D12. 通知・多人数投票",
+      "sourceEventId": "e56f7e63-c93e-5e37-a7c1-8a1bcea04194",
+      "id": "01M20FNV3DY1QDR5Y7F1RXCV6X",
+      "revision": 2,
+      "sha256": "e56f7e63c93ede37b7c18a1bcea041948931a78e392426b1343d42f837065894"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 110,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D13. LLM 基盤",
+      "sourceEventId": "602c300c-0f76-5a53-a3e3-9045030c7b62",
+      "id": "01M20FNV3RY22KX4JYYF9GRREA",
+      "revision": 2,
+      "sha256": "602c300c0f762a5353e39045030c7b62c13c6d2dd64e1252856e95a7435f37d8"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 117,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D14. 永続化・設定",
+      "sourceEventId": "6ff41ea9-d18c-59b9-a1f5-98558f7305c7",
+      "id": "01M20FNV42SJ6APD4FMC4E2K2C",
+      "revision": 2,
+      "sha256": "6ff41ea9d18c49b911f598558f7305c75c8fe428a0534099e2c2942810157185"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 124,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 3. ドメインマップ (Anatomia 用ノード一覧) / D15. 配信プロトコル・観戦 UI",
+      "sourceEventId": "9a645882-f5b4-5a8a-a6e4-0a5c2b8e0725",
+      "id": "01M20FNV4CDH64JYA28E0ZMZRR",
+      "revision": 2,
+      "sha256": "9a645882f5b4da8a36e40a5c2b8e0725734b1b9af5aa6fc855767ce5c6a8f10f"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 131,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 4. 機能カタログ (Thaleia 用: 企画粒度)",
+      "sourceEventId": "295baaf9-10e4-5d18-af82-7807860878a0",
+      "id": "01M20FNV4PNCVE1M9EEHA3JF4B",
+      "revision": 2,
+      "sha256": "295baaf910e4cd189f827807860878a0f9526f15fdff24766e95e515e8801caf"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 173,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 4. 機能カタログ (Thaleia 用: 企画粒度) / 企画↔実装の突合メモ (Thaleia 向け)",
+      "sourceEventId": "0cb6fba5-24a7-551a-a385-c6c64f557ec4",
+      "id": "01M20FNV51K1ZDH06PFXJD41B2",
+      "revision": 2,
+      "sha256": "0cb6fba524a7051a2385c6c64f557ec44720e8c129e99ca81c4bcf6360a9851c"
+    },
+    {
+      "file": "docs/domain-and-features.md",
+      "line": 179,
+      "title": "Pagus ドメイン & 機能カタログ (Anatomia / Thaleia 向け) / 5. 用語辞典 (グラフのエッジラベル用)",
+      "sourceEventId": "bd250216-8701-5609-ae85-7e6c56c1a810",
+      "id": "01M20FNV59W7R53JTC1DH1VVZZ",
+      "revision": 2,
+      "sha256": "bd250216870156092e857e6c56c1a8105859ee230d0acd8a390e926fae6dc38e"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 1,
+      "title": "Pagus UX 資料",
+      "sourceEventId": "00c03173-97d5-5b87-aa3f-ee11114fcba4",
+      "id": "01M20FNV5M463CAWB7R3YCVG70",
+      "revision": 2,
+      "sha256": "00c0317397d50b87fa3fee11114fcba4f522b3e7f8d1cbb88155ae2863a46214"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 5,
+      "title": "Pagus UX 資料 / 1. UX コンセプト (一行)",
+      "sourceEventId": "830c9b74-af3a-5be1-ab1e-b14865edd2e3",
+      "id": "01M20FNV5ZHFXE5688ZXRC4VD2",
+      "revision": 2,
+      "sha256": "830c9b74af3a6be11b1eb14865edd2e3a5ceb0b947009303b2514d7367740a91"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 14,
+      "title": "Pagus UX 資料 / 2. ターゲットユーザー",
+      "sourceEventId": "e02dd145-e29d-53fe-a9cc-5dc5f7bd2412",
+      "id": "01M20FNV6ARPP2952D6BA09RXT",
+      "revision": 2,
+      "sha256": "e02dd145e29df3fed9cc5dc5f7bd2412ea0dc4a78cd8e03dd1183b8491129b7b"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 33,
+      "title": "Pagus UX 資料 / 2. ターゲットユーザー / ペルソナ例",
+      "sourceEventId": "cf700be6-9c0e-5163-aa45-c9d7efb5e563",
+      "id": "01M20FNV6NKHJEGAAYWD9W19TZ",
+      "revision": 2,
+      "sha256": "cf700be69c0e6163da45c9d7efb5e5630b8c832aca0e0a504ad729ee59036ea1"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 38,
+      "title": "Pagus UX 資料 / 3. プレイヤーファンタジー",
+      "sourceEventId": "4c30397f-60d2-51aa-af5b-d5b1dcd534f5",
+      "id": "01M20FNV6ZV0F0EQTW8R5NKB9Y",
+      "revision": 2,
+      "sha256": "4c30397f60d2a1aa9f5bd5b1dcd534f5efd8be4c9626eb5c4a660362368adfa2"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 48,
+      "title": "Pagus UX 資料 / 4. 体験の 5 本柱 / ① 観る — 村は放っておいても面白い",
+      "sourceEventId": "b38b902e-dc70-5872-add3-30e9bece4a3f",
+      "id": "01M20FNV78M1HDX938RVV0ZN3B",
+      "revision": 2,
+      "sha256": "b38b902edc706872cdd330e9bece4a3fe6282214d14fef153df757fa29c9edce"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 54,
+      "title": "Pagus UX 資料 / 4. 体験の 5 本柱 / ② いじる — 荒らしは正規の遊び方",
+      "sourceEventId": "3efd80cb-4b3d-5774-a6c9-12c57a8e32f2",
+      "id": "01M20FNV7JED53YVMB2S06XWWS",
+      "revision": 2,
+      "sha256": "3efd80cb4b3dc77496c912c57a8e32f21cea5f66a9c71ca893101f37cb225706"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 61,
+      "title": "Pagus UX 資料 / 4. 体験の 5 本柱 / ③ 推す — 愛着と喪失",
+      "sourceEventId": "4a7b45e4-e1e3-510e-a1db-d816806f4a55",
+      "id": "01M20FNV7WNAPKTMXAG8B0GXJ5",
+      "revision": 2,
+      "sha256": "4a7b45e4e1e3610e11dbd816806f4a556d597eff5a592fd6cfe01b1fee910cf1"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 67,
+      "title": "Pagus UX 資料 / 4. 体験の 5 本柱 / ④ 裁く — 裁判は闘技場",
+      "sourceEventId": "191c90d8-3d42-57f5-a531-dec0618fbbdc",
+      "id": "01M20FNV851HJS24YPFZX5JTGN",
+      "revision": 2,
+      "sha256": "191c90d83d42a7f5a531dec0618fbbdc9d7f880cbd824d3bd3d22fbc3458ff07"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 74,
+      "title": "Pagus UX 資料 / 4. 体験の 5 本柱 / ⑤ 競う / 組む — 群衆を構造化する",
+      "sourceEventId": "2e168129-6f20-5a08-a9fe-7448e47193ad",
+      "id": "01M20FNV8DQM2BQT5YSDDYPK69",
+      "revision": 2,
+      "sha256": "2e1681296f202a08e9fe7448e47193ad8bf359b9757c50cef152df7e3aa25b71"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 81,
+      "title": "Pagus UX 資料 / 5. セッション設計 (時間の UX)",
+      "sourceEventId": "dfe68b39-515e-58c9-ae74-d79028426f6a",
+      "id": "01M20FNV8QQG82AAFBNW2C2513",
+      "revision": 2,
+      "sha256": "dfe68b39515eb8c96e74d79028426f6ace02031e7eb2bde923c50ee7df65cc8f"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 94,
+      "title": "Pagus UX 資料 / 6. コアループ (感情曲線)",
+      "sourceEventId": "0adb1c38-9763-5762-a81c-b714134da7bd",
+      "id": "01M20FNV90AQAW67RMZ33ZT5MK",
+      "revision": 2,
+      "sha256": "0adb1c389763d762081cb714134da7bd8f175366b3e27cd36cbff7c2f6e7e226"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 112,
+      "title": "Pagus UX 資料 / 7. 画面と操作 (現行実装)",
+      "sourceEventId": "1a880c27-15cb-5512-a6cf-21ac94fe9bdd",
+      "id": "01M20FNV98DC5T0W1RQ9MB885X",
+      "revision": 2,
+      "sha256": "1a880c2715cb651236cf21ac94fe9bddb4e7b4fa4dc4ad41f133e3ea473c712a"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 119,
+      "title": "Pagus UX 資料 / 8. トーン & マナー",
+      "sourceEventId": "b4b38b6e-c24c-5300-a554-622e5f233001",
+      "id": "01M20FNV9JBMD9YDX9FHTE4Z1A",
+      "revision": 2,
+      "sha256": "b4b38b6ec24ce3004554622e5f233001530e3fa0c12b53280f67fdeedd3033de"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 125,
+      "title": "Pagus UX 資料 / 9. UX 上の設計判断 (なぜこうなっているか)",
+      "sourceEventId": "6753e950-0a53-595c-ae06-d15335369d7b",
+      "id": "01M20FNV9T67EKCD3260E1R9H6",
+      "revision": 2,
+      "sha256": "6753e9500a53f95cae06d15335369d7b6410222be6bf2a25f5ba2dd5ca98b12a"
+    },
+    {
+      "file": "docs/ux.md",
+      "line": 137,
+      "title": "Pagus UX 資料 / 10. 未検証の UX 仮説 (観戦して調整)",
+      "sourceEventId": "caecbbf7-15fd-5e97-ad2f-75814c7b22f5",
+      "id": "01M20FNVA4E2NRNPHRFVPBWP4Z",
+      "revision": 2,
+      "sha256": "caecbbf715fd0e97fd2f75814c7b22f52a66eb6717ad1a67af59d0a96f7abaef"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 1,
+      "title": "Pagus 機能仕様書 (v0.0)",
+      "sourceEventId": "2adde9d1-1d54-5a08-a074-9368c4ca69d9",
+      "id": "01M20FNVAQWXPTX8WC8NQY1XWR",
+      "revision": 2,
+      "sha256": "2adde9d11d54fa0850749368c4ca69d9bce57d076c6e232c263effd95c8c78ac"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 6,
+      "title": "Pagus 機能仕様書 (v0.0) / 0. 実装状況 (2026-06-26 時点)",
+      "sourceEventId": "71635f26-e753-5a34-a7c6-409cfa8dd56f",
+      "id": "01M20FNVB2SCRSM90601TVRTTC",
+      "revision": 2,
+      "sha256": "71635f26e7535a3417c6409cfa8dd56f9bbdeef2deed8b03d8a8d91aa511ab44"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 22,
+      "title": "Pagus 機能仕様書 (v0.0) / 1. コンセプト",
+      "sourceEventId": "3e2f3901-efd5-5239-a1a1-87ba7ac7470f",
+      "id": "01M20FNVBBVSKAMJ6RPDV9D4PH",
+      "revision": 2,
+      "sha256": "3e2f3901efd5f23931a187ba7ac7470f3080357ee0a46c64ef74a29b1c0a9c26"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 30,
+      "title": "Pagus 機能仕様書 (v0.0) / 2. 全体アーキテクチャ",
+      "sourceEventId": "a14a9314-f671-5895-ae75-107155239bb2",
+      "id": "01M20FNVBK8CY00ET8YHH0XW8R",
+      "revision": 2,
+      "sha256": "a14a9314f671b8953e75107155239bb2f8014fdd2be0e82a99a5daa4ddf9ab98"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 49,
+      "title": "Pagus 機能仕様書 (v0.0) / 3. ドメインモデル — 村人 (ペルソナエンジン)",
+      "sourceEventId": "caf21a5c-d99f-565f-af2c-7002c093ca10",
+      "id": "01M20FNVBW87DF6ECPWDDMA45B",
+      "revision": 2,
+      "sha256": "caf21a5cd99f565f6f2c7002c093ca10954c79e3f27e2ec64d616b08d91a73ea"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 55,
+      "title": "Pagus 機能仕様書 (v0.0) / 3. ドメインモデル — 村人 (ペルソナエンジン) / 3.1 三分の責務",
+      "sourceEventId": "e40bf4ac-634f-5f53-aa17-e5a96b5062f8",
+      "id": "01M20FNVC506JP93QWAV5HJN4D",
+      "revision": 2,
+      "sha256": "e40bf4ac634f2f539a17e5a96b5062f862f2cd934f98caf6a4cb9df398cf92ba"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 63,
+      "title": "Pagus 機能仕様書 (v0.0) / 3. ドメインモデル — 村人 (ペルソナエンジン) / 3.2 Villager データ (確定スキーマは `spec/interface/sim-types.md`)",
+      "sourceEventId": "669df784-8abe-5bc8-abae-6547bf636244",
+      "id": "01M20FNVCD7SEZMV1NXYEH1Y0S",
+      "revision": 2,
+      "sha256": "669df7848abe4bc8bbae6547bf6362449285afa6351d17e287dd2b015dfc6840"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 87,
+      "title": "Pagus 機能仕様書 (v0.0) / 3. ドメインモデル — 村人 (ペルソナエンジン) / 3.3 改変 (Reform)",
+      "sourceEventId": "ca41cf69-95d6-52ed-a526-9337283783c8",
+      "id": "01M20FNVCN32JD09JE6NMG65BP",
+      "revision": 2,
+      "sha256": "ca41cf6995d652ed25269337283783c8431c0b806e2b43fd2c27b9910a6dffb1"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 92,
+      "title": "Pagus 機能仕様書 (v0.0) / 3. ドメインモデル — 村人 (ペルソナエンジン) / 3.4 どうぶつと睡眠",
+      "sourceEventId": "573cc08c-ccc8-5a7e-a685-a123f7a3d8ac",
+      "id": "01M20FNVCYXPWZHW25DMC0J6C6",
+      "revision": 2,
+      "sha256": "573cc08cccc85a7e8685a123f7a3d8ac40219a54ba174cb7bff339f1c0578035"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 107,
+      "title": "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ",
+      "sourceEventId": "65d8df93-1171-56f8-a690-00108c9c02bc",
+      "id": "01M20FNVDA06AG48G544APRE8B",
+      "revision": 2,
+      "sha256": "65d8df93117136f8269000108c9c02bc39bba6bd942bfd8471afbcfb1604b890"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 123,
+      "title": "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.1 起承転結ステートマシン (1 ターム = 1 日)",
+      "sourceEventId": "73c8be02-0b58-5a13-a6a4-682e06077756",
+      "id": "01M20FNVDJSVN9CFA7BPJAR47K",
+      "revision": 2,
+      "sha256": "73c8be020b581a13d6a4682e06077756deb934fcd37bf8912af2125b7ef84f30"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 140,
+      "title": "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.2 起 (KISHO) — セグメント駆動",
+      "sourceEventId": "7505f2a3-54d3-55cb-add6-2de850f80bf0",
+      "id": "01M20FNVDTP1NKGXC9HK22Y1Y5",
+      "revision": 2,
+      "sha256": "7505f2a354d3e5cbfdd62de850f80bf04cd63301c3b357eac57ca669dd80aef2"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 146,
+      "title": "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.3 承 (SHO) — 事件 (イベント)",
+      "sourceEventId": "58bc4044-6eff-5f2f-a04b-0b1421def84b",
+      "id": "01M20FNVE3NEBJBA1WXVGRM14F",
+      "revision": 2,
+      "sha256": "58bc40446effbf2f704b0b1421def84b95c2ffca57f89d16e484ec189ddf2654"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 153,
+      "title": "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.4 転 (TEN) — 審議 (裁判)",
+      "sourceEventId": "aa4201f9-8de9-56c7-a19a-b5ae083df5d3",
+      "id": "01M20FNVEBVMHQD1EH1RXFCB3R",
+      "revision": 2,
+      "sha256": "aa4201f98de9e6c7119ab5ae083df5d337a4d4cc79df567b6330c5ffb4864207"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 162,
+      "title": "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.5 結 (KETSU) — 教育",
+      "sourceEventId": "b514ec1d-0359-5ec9-a843-f5cdeaee541a",
+      "id": "01M20FNVEMXEFABMFZ9KP6WCD1",
+      "revision": 2,
+      "sha256": "b514ec1d0359dec90843f5cdeaee541a151dfd8859631c2a66ad14a4a28e97b4"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 168,
+      "title": "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.6 住民改変 / 日・月の進行",
+      "sourceEventId": "d1938226-7523-55d7-aeea-732ff5d2ee96",
+      "id": "01M20FNVEW33B7FNM14H3J47QF",
+      "revision": 2,
+      "sha256": "d1938226752375d74eea732ff5d2ee9630f63a9c442dfdb79f518b624c7ca239"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 174,
+      "title": "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.7 カレンダー / 季節 / 祝日",
+      "sourceEventId": "5ec25be5-5a3b-50f3-a9f9-37680a07db8c",
+      "id": "01M20FNVF3FNP0J9JBKMYVAH47",
+      "revision": 2,
+      "sha256": "5ec25be55a3bb0f3b9f937680a07db8c39ab48be519894b76baf59dcd97b5a2e"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 181,
+      "title": "Pagus 機能仕様書 (v0.0) / 4. 時間モデル & ゲームループ / 4.8 ユーザ確認イベント / 通知投票 (実装済 v0.6)",
+      "sourceEventId": "2e5e6066-a5ed-5bad-a6d6-388fadc4f57d",
+      "id": "01M20FNVFCV05HV286A6VN5AEZ",
+      "revision": 2,
+      "sha256": "2e5e6066a5ed7badf6d6388fadc4f57d4ec939fb16e4d07f5565000c206d6ece"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 190,
+      "title": "Pagus 機能仕様書 (v0.0) / 5. AI (Brain) インターフェース",
+      "sourceEventId": "e5bd2109-7a5a-5a97-a5b7-b9be134f26a9",
+      "id": "01M20FNVFM21C9C386WZ6ZQMAA",
+      "revision": 2,
+      "sha256": "e5bd21097a5a2a9705b7b9be134f26a93389548ed7b55a3308a2aa8e8dea96f7"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 209,
+      "title": "Pagus 機能仕様書 (v0.0) / 5. AI (Brain) インターフェース / 5.1 LLM tier (コスト方針)",
+      "sourceEventId": "cbd204c9-8ac2-5b0a-ac39-069d29356581",
+      "id": "01M20FNVFV8Y01G41MX3NMXMX1",
+      "revision": 2,
+      "sha256": "cbd204c98ac27b0a8c39069d29356581fb03e6f4e8756596a6cb624c156cf7a4"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 224,
+      "title": "Pagus 機能仕様書 (v0.0) / 5. AI (Brain) インターフェース / 5.2 マルチ LLM 分散 (Discutere 方式) + GPT-5.6 family",
+      "sourceEventId": "da82256d-f265-5c4c-ace3-5c37b02c88bf",
+      "id": "01M20FNVG5CABR45GKAE4SPV3J",
+      "revision": 2,
+      "sha256": "da82256df2652c4cace35c37b02c88bf3c0db9f1c7272cef8c90bf04735ab476"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 241,
+      "title": "Pagus 機能仕様書 (v0.0) / 5. AI (Brain) インターフェース / 5.3 裁判の糾弾セリフ (Haiku 生成 + レパートリー)",
+      "sourceEventId": "e2df295e-f26b-5874-ace5-5542b1c52683",
+      "id": "01M20FNVGC7V4WQKQ3X891PY75",
+      "revision": 2,
+      "sha256": "e2df295ef26ba874fce55542b1c52683b1594ab20392a1f1aaf0a208846c4c28"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 248,
+      "title": "Pagus 機能仕様書 (v0.0) / 6. クライアント UI (実装済 / PixiJS)",
+      "sourceEventId": "92bcba8e-029b-5bb7-a9e0-e5599078f784",
+      "id": "01M20FNVGMGVRJC6GX08E5ZJQM",
+      "revision": 2,
+      "sha256": "92bcba8e029babb799e0e5599078f784be5e80c828919439994828d0182e0220"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 264,
+      "title": "Pagus 機能仕様書 (v0.0) / 7. プロトコル (WS)",
+      "sourceEventId": "fcf361d0-8e33-5b5c-a99a-3a5007409bc2",
+      "id": "01M20FNVGXZNT6MYP70TE4BMMS",
+      "revision": 2,
+      "sha256": "fcf361d08e334b5c199a3a5007409bc273c6923a85239b0f53d7285db20b9e36"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 271,
+      "title": "Pagus 機能仕様書 (v0.0) / 8. データ配置 (アンカー)",
+      "sourceEventId": "96b38037-fa74-5155-a8f1-a26144d4d8aa",
+      "id": "01M20FNVH5DDHHE5AGQSBJNYS2",
+      "revision": 2,
+      "sha256": "96b38037fa74d15558f1a26144d4d8aad7c5bde8aa053cab11ef006e38f84f7f"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 286,
+      "title": "Pagus 機能仕様書 (v0.0) / 8A. 評価系・イベント・投票・グループ (メカニクス追補 / v0.3〜)",
+      "sourceEventId": "3d437d5d-22bf-5a1e-ab17-c6ba2fbaefe2",
+      "id": "01M20FNVHDGAK3SDNDE8YPW3TB",
+      "revision": 2,
+      "sha256": "3d437d5d22bfda1efb17c6ba2fbaefe22c04ef2b635dcc2745841d833c5fac8e"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 290,
+      "title": "Pagus 機能仕様書 (v0.0) / 8A. 評価系・イベント・投票・グループ (メカニクス追補 / v0.3〜) / 8A.1 二層の 6 軸ベクトル (性格 / 評判)",
+      "sourceEventId": "85e98b5d-b788-5552-a8ef-f1b589d1aa78",
+      "id": "01M20FNVHMPCYYEDGDB76QYB4V",
+      "revision": 2,
+      "sha256": "85e98b5db788655268eff1b589d1aa788d4742d2b65364c49259f55a9fbd0463"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 303,
+      "title": "Pagus 機能仕様書 (v0.0) / 8A. 評価系・イベント・投票・グループ (メカニクス追補 / v0.3〜) / 8A.2 イベント種別 (起の行動)",
+      "sourceEventId": "a5c96b67-5c02-5530-a25e-f7f36291ac53",
+      "id": "01M20FNVHVE31JWD50N5XM694J",
+      "revision": 2,
+      "sha256": "a5c96b675c020530a25ef7f36291ac53adfb2e1d35ca96a10e7aee4e8c5173d8"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 310,
+      "title": "Pagus 機能仕様書 (v0.0) / 8A. 評価系・イベント・投票・グループ (メカニクス追補 / v0.3〜) / 8A.3 グループ",
+      "sourceEventId": "aecae44b-c4a6-5b4b-a020-983468923256",
+      "id": "01M20FNVJ499PQN8TQBH5MTFBM",
+      "revision": 2,
+      "sha256": "aecae44bc4a65b4b50209834689232566865a7df33e2710ffbb9b36a2cfaf2f3"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 316,
+      "title": "Pagus 機能仕様書 (v0.0) / 8A. 評価系・イベント・投票・グループ (メカニクス追補 / v0.3〜) / 8A.4 投票 → 改変 (転・結)",
+      "sourceEventId": "687395cd-b9f1-5ac4-a8e0-dd28f11e492c",
+      "id": "01M20FNVJCB2SFW6QYZ24CDCM9",
+      "revision": 2,
+      "sha256": "687395cdb9f1fac468e0dd28f11e492cbf4b2ad898652826fe66e82481969f7f"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 324,
+      "title": "Pagus 機能仕様書 (v0.0) / 8A. 評価系・イベント・投票・グループ (メカニクス追補 / v0.3〜) / 8A.5 日末評価 → ベクトル更新 → 人口",
+      "sourceEventId": "c3d6ea1d-a18c-5a8d-a5b3-af379c07ed10",
+      "id": "01M20FNVJPF8GY1JP46CPM5EV3",
+      "revision": 2,
+      "sha256": "c3d6ea1da18c3a8dd5b3af379c07ed104f3bb4ae4e32b35b351b1ecfe4905953"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 330,
+      "title": "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26)",
+      "sourceEventId": "9d9ffb10-5be0-539d-a3d4-ecf13271f98f",
+      "id": "01M20FNVJYFKP6XDMEQGGG33XB",
+      "revision": 2,
+      "sha256": "9d9ffb105be0939d03d4ecf13271f98f29416cf5b677d0723c5ef15292545e8a"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 334,
+      "title": "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.1 狂人 (madman)",
+      "sourceEventId": "bb30dc48-3388-5ebf-a176-3efb2e4c8a81",
+      "id": "01M20FNVK67NK04FX0REJWEV54",
+      "revision": 2,
+      "sha256": "bb30dc4833887ebfd1763efb2e4c8a8140a0486ede08f780e1932bde342614f5"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 341,
+      "title": "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.2 和解 (reconcile)",
+      "sourceEventId": "fd2f813f-3f54-5306-a842-69bd93bd8bc6",
+      "id": "01M20FNVKFG0K569H5WX5KQMJ9",
+      "revision": 2,
+      "sha256": "fd2f813f3f541306584269bd93bd8bc6c4846f375daf92e6091562b68224a288"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 347,
+      "title": "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.3 二次被害 (secondary)",
+      "sourceEventId": "66ff5218-1c69-5110-a83c-50e54f16ab77",
+      "id": "01M20FNVKPVVZMPETCDZJ65PH4",
+      "revision": 2,
+      "sha256": "66ff52181c697110183c50e54f16ab77d13bc4817f9342dd4c2fc25addef1098"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 351,
+      "title": "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.4 プレイヤーの裁判介入 (投票一本化)",
+      "sourceEventId": "a549657d-0b57-52a8-acf7-85cdc89356f9",
+      "id": "01M20FNVKY15MB3F03AF67MR2N",
+      "revision": 2,
+      "sha256": "a549657d0b57b2a83cf785cdc89356f9c5d8a4978d415f8f4d2542732e9ca01d"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 358,
+      "title": "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.5 ストレス耐性",
+      "sourceEventId": "bcd5444a-6148-5305-a596-4c6f4737276f",
+      "id": "01M20FNVM7G6NMZ76CQWNHNKXB",
+      "revision": 2,
+      "sha256": "bcd5444a6148630525964c6f4737276ffdfc7a7a3395fd45085ea47b6bbb45e9"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 364,
+      "title": "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.6 結婚・出産",
+      "sourceEventId": "84a0374e-b9b3-5dfc-aee8-1611d54c6811",
+      "id": "01M20FNVMEBW9XMPB8NDK93T0A",
+      "revision": 2,
+      "sha256": "84a0374eb9b3bdfcdee81611d54c6811c5cca7a6ca44d53055e3656d865acf97"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 371,
+      "title": "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.7 改変のいじられ方ログ",
+      "sourceEventId": "0c668494-22a9-5b01-a6b9-19566e7eddac",
+      "id": "01M20FNVMNQGNKD7SSCBN4AJ8Y",
+      "revision": 2,
+      "sha256": "0c66849422a98b0196b919566e7eddacdcfc45d508e7c8366b5d08819000816e"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 376,
+      "title": "Pagus 機能仕様書 (v0.0) / 8B. 創発メカニクス追補 (実装済 / 2026-06-26) / 8B.8 村の歴史 (Chronicle)",
+      "sourceEventId": "0b782858-38f2-5c36-af80-bde1b3ec1a20",
+      "id": "01M20FNVMWPQM47P99FMYAYC9T",
+      "revision": 2,
+      "sha256": "0b78285838f22c368f80bde1b3ec1a207786d2b3b7f4589ff94184b5bb71fd1b"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 381,
+      "title": "Pagus 機能仕様書 (v0.0) / 9. 非機能 / 規約",
+      "sourceEventId": "e7d4ebb4-537b-5ca1-a171-d74f9306cd1d",
+      "id": "01M20FNVN4QV1ATAGT30FGKV0Q",
+      "revision": 2,
+      "sha256": "e7d4ebb4537beca1c171d74f9306cd1d54c01a85ccad31092897803ee4a3de49"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 388,
+      "title": "Pagus 機能仕様書 (v0.0) / 10. ロードマップ",
+      "sourceEventId": "d3245d25-7134-5445-a6ad-6a56e6f239a1",
+      "id": "01M20FNVPNCCCFG4FZ61SB85E6",
+      "revision": 2,
+      "sha256": "d3245d257134d44566ad6a56e6f239a135feb28d4330681f30f9939c032ef4d7"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 408,
+      "title": "Pagus 機能仕様書 (v0.0) / 13. 多人数ソーシャル機能 (v1.2) — 実装済",
+      "sourceEventId": "ff076f1a-b5bf-520c-a775-6766428cd8d4",
+      "id": "01M20FNVPXN7TD92Q8S0V05NCV",
+      "revision": 2,
+      "sha256": "ff076f1ab5bf620c07756766428cd8d4ab4cb4a29f63fe01fd93d2d227ea8c48"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 418,
+      "title": "Pagus 機能仕様書 (v0.0) / 14. ソーシャル機能パック (v1.3) — 実装済 (#25–#30)",
+      "sourceEventId": "4375f605-47b9-53ca-ae82-0d44bbe0cbb2",
+      "id": "01M20FNVQ800YSVKF71E9P8800",
+      "revision": 2,
+      "sha256": "4375f60547b973ca6e820d44bbe0cbb26aed846fbf85d4e25efaaf77c564f822"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 429,
+      "title": "Pagus 機能仕様書 (v0.0) / 15. 住民経済 (貧富と非行) — 実装済",
+      "sourceEventId": "2a64deac-a7a2-58ed-a306-9a47fbd6b284",
+      "id": "01M20FNVQHZVBZ1WA8RMHY0Q78",
+      "revision": 2,
+      "sha256": "2a64deaca7a248ed73069a47fbd6b284d33b7bd12ab4f8b3446b603c52be3b8f"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 441,
+      "title": "Pagus 機能仕様書 (v0.0) / 16. フィールドアイテム (人手のランダム配布) — 実装済",
+      "sourceEventId": "bbd0a228-5197-53e6-a9b9-03b5d84c16c0",
+      "id": "01M20FNVQS66EMMW6SQ5YH2SKP",
+      "revision": 2,
+      "sha256": "bbd0a228519763e659b903b5d84c16c0e715b1458f9a8697f74aea15c1accfb0"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 453,
+      "title": "Pagus 機能仕様書 (v0.0) / 17. 村長 (村人の選挙) — 実装済",
+      "sourceEventId": "d0da9f2b-52e5-508f-a75e-8bb64142c228",
+      "id": "01M20FNVR1074RM7DRC4MSW2FB",
+      "revision": 2,
+      "sha256": "d0da9f2b52e5508f875e8bb64142c228dbfc375e08034ce938152879e2c1b89c"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 464,
+      "title": "Pagus 機能仕様書 (v0.0) / 11. 開いている設計判断",
+      "sourceEventId": "d5e1c75a-8ec1-5914-a70f-11c0ce4166a0",
+      "id": "01M20FNVR9HKP4H7HV42DFPY5T",
+      "revision": 2,
+      "sha256": "d5e1c75a8ec10914470f11c0ce4166a070eadfd8d80769b685e7fbed62e00844"
+    },
+    {
+      "file": "spec/SPEC.md",
+      "line": 471,
+      "title": "Pagus 機能仕様書 (v0.0) / 12. コスト削減リデザイン (v1.0) — 実装済 (PR #16–#19)",
+      "sourceEventId": "939f85fc-1c9f-53a3-a4c0-e8c268c0f593",
+      "id": "01M20FNVRJG619JY47ZPAYWJWM",
+      "revision": 2,
+      "sha256": "939f85fc1c9f13a354c0e8c268c0f593ad66aca5b0f165503871a0974bcbc96e"
+    },
+    {
+      "file": "spec/data-schema.md",
+      "line": 1,
+      "title": "Pagus データスキーマ",
+      "sourceEventId": "47d97884-7948-5cc3-adfe-7814acefd987",
+      "id": "01M20FNVRS7VDWHWMXW9TQ02AV",
+      "revision": 2,
+      "sha256": "47d9788479486cc3edfe7814acefd9872ae81e35eaf194236726e65bcf924f6c"
+    },
+    {
+      "file": "spec/feature/area-resident-playback.md",
+      "line": 3,
+      "title": "エリア購読による住民再生 / 責務",
+      "sourceEventId": "6233bb5e-208c-5617-a21a-83e5182e2bd9",
+      "id": "01M20FNVSJAG98WZW7MVXM0D6D",
+      "revision": 2,
+      "sha256": "6233bb5e208c9617421a83e5182e2bd9118d88a68df52803b2e64fa1604feb23"
+    },
+    {
+      "file": "spec/feature/area-resident-playback.md",
+      "line": 12,
+      "title": "エリア購読による住民再生 / 配信契約",
+      "sourceEventId": "1115384b-db77-5451-a680-a03c424db428",
+      "id": "01M20FNVSSPC0PDM0HG9VQZH8H",
+      "revision": 2,
+      "sha256": "1115384bdb777451e680a03c424db428c30179c0208aec6a0e596dfd88a18ca1"
+    },
+    {
+      "file": "spec/feature/area-resident-playback.md",
+      "line": 20,
+      "title": "エリア購読による住民再生 / 街全体の情報",
+      "sourceEventId": "dc6bc38b-f8d2-512a-a187-fd214f1cc437",
+      "id": "01M20FNVT1EQDRVZ44MS4W62V8",
+      "revision": 2,
+      "sha256": "dc6bc38bf8d2a12a3187fd214f1cc4378b7073106abf89500139abb562a3f860"
+    },
+    {
+      "file": "spec/feature/area-resident-playback.md",
+      "line": 26,
+      "title": "エリア購読による住民再生 / 確認",
+      "sourceEventId": "c9445a59-7332-530d-a9a1-51d746e38557",
+      "id": "01M20FNVT8TK5ACKCD7TH8X0PB",
+      "revision": 2,
+      "sha256": "c9445a597332530de9a151d746e38557e9fe28a9ea6d27c0b1a935551062f8f0"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 1,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する",
+      "sourceEventId": "37ccf2dd-d7b8-51f0-aca4-49ec0a7dac96",
+      "id": "01M20FNVTGK6KPNGAGEE0DM6YF",
+      "revision": 2,
+      "sha256": "37ccf2ddd7b861f09ca449ec0a7dac9652ef3ca83ebf8d773eb2a82d2b29df80"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 9,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 0. 狙い — なぜ変えるか",
+      "sourceEventId": "aaae7582-bf0e-543b-a975-a884f2006bd7",
+      "id": "01M20FNVTQK7NGT1E0MKBCE7PK",
+      "revision": 2,
+      "sha256": "aaae7582bf0e343bc975a884f2006bd78cfe48352c0c4645a4064bd8dff5cc34"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 17,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 1. LLM 呼び出し予算 (どこで呼ぶか / 呼ばないか)",
+      "sourceEventId": "bf793a44-9038-5514-ab1d-c5f0d0047bda",
+      "id": "01M20FNVV0XRBGG9MPRC0ZNEXS",
+      "revision": 2,
+      "sha256": "bf793a449038e5142b1dc5f0d0047bda4ff274987c208af755197eac5a081363"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 35,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 2. 日常 = BT / ブラックボックスエンジン (LLM 不使用)",
+      "sourceEventId": "693c7e02-9499-580b-a347-3a0ab6fade82",
+      "id": "01M20FNVV7WAB69C8BA6H880ET",
+      "revision": 2,
+      "sha256": "693c7e029499380b13473a0ab6fade820fc521da147e38d9a6077c2d95553594"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 46,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 2. 日常 = BT / ブラックボックスエンジン (LLM 不使用) / 2.1 ブラックボックスエンジン = ふるまいの法則 (BehaviorRule) — Haiku がアトランダムに増やす (v1.1)",
+      "sourceEventId": "4e76059c-ffe1-5918-a932-3fc1f1f235f1",
+      "id": "01M20FNVVFJR34YHMZ2GCBWEYT",
+      "revision": 2,
+      "sha256": "4e76059cffe1191869323fc1f1f235f1d558c3bd8f393aae2d2c45e9eeaa72dd"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 64,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 3. 事件 (Incident) のライフサイクル / 3.1 月初: 発生日時のスケジューリング (LLM 1 回)",
+      "sourceEventId": "e57d9f6e-e0ab-5c54-adef-56b0110c4602",
+      "id": "01M20FNVVQDJ3J74RT9X849C9G",
+      "revision": 2,
+      "sha256": "e57d9f6ee0abcc544def56b0110c4602dab9795891d285409655e696ca255516"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 70,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 3. 事件 (Incident) のライフサイクル / 3.2 事件前日: 詳細デザイン + 事件用キャラ生成 (LLM 1 回)",
+      "sourceEventId": "9eb91a7d-935a-54d9-a575-ac41f24ce220",
+      "id": "01M20FNVVZX9745Q1ASCGBMPD9",
+      "revision": 2,
+      "sha256": "9eb91a7d935aa4d98575ac41f24ce22042de1d84bbced3844805c3f36e2df35c"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 76,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 3. 事件 (Incident) のライフサイクル / 3.3 事件用キャラ (Incident Character)",
+      "sourceEventId": "7fda031c-9c6e-5b67-afb7-df22a0eff8a0",
+      "id": "01M20FNVWFHRV59K1C66GG6NTH",
+      "revision": 2,
+      "sha256": "7fda031c9c6e2b67dfb7df22a0eff8a0b7965da17e5ed722018c143f9f753d2b"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 83,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 3. 事件 (Incident) のライフサイクル / 3.4 事件中 (承): 当事者の LLM 応答 (Di 方式)",
+      "sourceEventId": "772d66c6-f5af-5eaa-a55d-ae7da1db89fa",
+      "id": "01M20FNVWPVQEMY6P023XPDC96",
+      "revision": 2,
+      "sha256": "772d66c6f5af5eaa455dae7da1db89fa130ffddc009710e5005f85bb36ec4a0b"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 91,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 4. プレイヤー操作の刷新 — 沈静化廃止 / 制裁新設 / 扇動改修 / 4.1 沈静化 (calm) を廃止",
+      "sourceEventId": "c6a9450f-bc27-5e76-aa9e-f1e629ef1030",
+      "id": "01M20FNVWY2Z2E1Y8R1RDKAJZ9",
+      "revision": 2,
+      "sha256": "c6a9450fbc272e761a9ef1e629ef10304a70e5d37200539010770200e79df28e"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 96,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 4. プレイヤー操作の刷新 — 沈静化廃止 / 制裁新設 / 扇動改修 / 4.2 扇動 (incite) を改修 — 対象指定 + カルマ消費",
+      "sourceEventId": "bd507370-92fd-56d7-a3c9-96817d98a57e",
+      "id": "01M20FNVX6K2R4VM32CZATPCA4",
+      "revision": 2,
+      "sha256": "bd50737092fda6d763c996817d98a57efbbb4cc81a8c0205ce061c84622a1c71"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 103,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 4. プレイヤー操作の刷新 — 沈静化廃止 / 制裁新設 / 扇動改修 / 4.3 制裁 (sanction) を新設 — 特定人物のつるし上げ",
+      "sourceEventId": "d2d48232-be2b-5554-abd9-ee636eb3a469",
+      "id": "01M20FNVXDEB3D87VGFQ6S4J94",
+      "revision": 2,
+      "sha256": "d2d48232be2b6554ebd9ee636eb3a469f89886b3ae2de1b67d5e9c7ae9606e88"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 112,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 4. プレイヤー操作の刷新 — 沈静化廃止 / 制裁新設 / 扇動改修 / 4.4 カルマ & プレイヤー善性",
+      "sourceEventId": "c37d963f-418e-533b-a993-7166f124c797",
+      "id": "01M20FNVXPDBT155BA43MX8D3M",
+      "revision": 2,
+      "sha256": "c37d963f418ea33b09937166f124c797a36c4a1744f91c8e0d0428957d5a727a"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 119,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 4. プレイヤー操作の刷新 — 沈静化廃止 / 制裁新設 / 扇動改修 / 4.5 応援 (cheer) — 住民の後押し",
+      "sourceEventId": "84b96d2f-0084-54fd-a587-207203377ca8",
+      "id": "01M20FNVXY7GV7KQZ2MXKT7X7T",
+      "revision": 2,
+      "sha256": "84b96d2f0084f4fd7587207203377ca82894df59bca9b5ba13fb7f6c553bb5e1"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 125,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 5. 裁判の簡素化 — 死刑 / 教育の2択",
+      "sourceEventId": "0b58cbe3-604a-52c5-adcb-50ed4ab272c9",
+      "id": "01M20FNVY57ZSRNA9587JMRQK3",
+      "revision": 2,
+      "sha256": "0b58cbe3604a42c52dcb50ed4ab272c9b3893adb416d561cc1d1768848e53465"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 132,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 6. イベント由来パラメータ + アルゴリズムイベント (point 7)",
+      "sourceEventId": "d34d7f7c-8de7-58a9-a656-a469cae7277d",
+      "id": "01M20FNVYDH81FDW3NAPCNGRR5",
+      "revision": 2,
+      "sha256": "d34d7f7c8de778a95656a469cae7277d556653ae1efd2052f12caee3b35d8998"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 140,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 7. 状態パネル (point 8)",
+      "sourceEventId": "a84893d3-9d0e-597b-aa94-42fa85ce0088",
+      "id": "01M20FNVYNBQVF02BZG9WENPRQ",
+      "revision": 2,
+      "sha256": "a84893d39d0e097b5a9442fa85ce008809f105c14f36af387eebdb4dadefaa04"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 148,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 8. 村の歴史ページの詳細化 (point 9)",
+      "sourceEventId": "6e596aba-53e8-56f7-a3f9-3d5720a00a56",
+      "id": "01M20FNVYYJ4CXW6XZCVJCADJ3",
+      "revision": 2,
+      "sha256": "6e596aba53e846f7a3f93d5720a00a56776b6ac88b96a1015ebda2e840ee6aca"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 161,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 8. 村の歴史ページの詳細化 (point 9) / 8.1 村のルール (Village Rules) — 事件の火種",
+      "sourceEventId": "dcf1d908-f81c-5203-a6e9-d9166c0c63ab",
+      "id": "01M20FNVZ47D41QK3KDPPZY2RB",
+      "revision": 2,
+      "sha256": "dcf1d908f81cd203d6e9d9166c0c63abb53f889b235743fecdcacea3edfa9049"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 168,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 9. 既存実装への影響 (破壊的変更の一覧)",
+      "sourceEventId": "392ddedb-4012-5429-ac7d-b50edd9f9adc",
+      "id": "01M20FNVZC0Z849Y7VDB44TFZX",
+      "revision": 2,
+      "sha256": "392ddedb401274294c7db50edd9f9adc7e70206562a6d419e36241aea82672d3"
+    },
+    {
+      "file": "spec/feature/cost-reduction-redesign.md",
+      "line": 182,
+      "title": "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 10. 開いている判断 (要確認 / 観戦調整)",
+      "sourceEventId": "62bc79de-b7ec-557a-ae37-ab5422bd4936",
+      "id": "01M20FNVZNC16MHS6ZMFPCGRKF",
+      "revision": 2,
+      "sha256": "62bc79deb7ec557a6e37ab5422bd493668b649f2b2f691baa948496a19248fe7"
+    },
+    {
+      "file": "spec/feature/emergent-and-life.md",
+      "line": 1,
+      "title": "創発・生活メカニクス / 観戦UI — 実装リファレンス",
+      "sourceEventId": "d1c00c0b-d68e-5001-a7db-2c60a831b084",
+      "id": "01M20FNVZWG5MVP9X69K59J94V",
+      "revision": 2,
+      "sha256": "d1c00c0bd68e800197db2c60a831b0849e48105e3d4b8d82b4c4bf96ba73f684"
+    },
+    {
+      "file": "spec/feature/emergent-and-life.md",
+      "line": 6,
+      "title": "創発・生活メカニクス / 観戦UI — 実装リファレンス / メカニクス (sim / server)",
+      "sourceEventId": "705036ab-a543-5acd-acc7-a4feab529290",
+      "id": "01M20FNW04MF1SYD1QRK19EE0V",
+      "revision": 2,
+      "sha256": "705036aba543eacdfcc7a4feab529290aefe79a0faf71308f618367568d3472c"
+    },
+    {
+      "file": "spec/feature/emergent-and-life.md",
+      "line": 22,
+      "title": "創発・生活メカニクス / 観戦UI — 実装リファレンス / 観戦UI (client / PixiJS)",
+      "sourceEventId": "d77ec178-7589-569d-a867-5fcfbe0e3f98",
+      "id": "01M20FNW0DBWHHR9VW9WDWHQ7M",
+      "revision": 2,
+      "sha256": "d77ec1787589169df8675fcfbe0e3f98c7978e68586b3bbafee49b62bbf4d73a"
+    },
+    {
+      "file": "spec/feature/emergent-and-life.md",
+      "line": 35,
+      "title": "創発・生活メカニクス / 観戦UI — 実装リファレンス / env (調整つまみ)",
+      "sourceEventId": "16c7c5b7-23d3-5efd-a560-21059ba01ff3",
+      "id": "01M20FNW0M2Y4Z7SF76DH5J9HM",
+      "revision": 2,
+      "sha256": "16c7c5b723d38efd456021059ba01ff30a2b2ecd1a5ee08c117b14172ad3d5f0"
+    },
+    {
+      "file": "spec/feature/emergent-and-life.md",
+      "line": 56,
+      "title": "創発・生活メカニクス / 観戦UI — 実装リファレンス / runtime 永続化 (gitignore)",
+      "sourceEventId": "1ccacab2-4465-5d85-a956-078137005669",
+      "id": "01M20FNW0X7G9AHDX34B7NBQK8",
+      "revision": 2,
+      "sha256": "1ccacab244657d855956078137005669eb4ddff00a93e96ee7501edb6e14bfab"
+    },
+    {
+      "file": "spec/feature/evolving-town-buildings.md",
+      "line": 3,
+      "title": "施設・教育住宅・大工の建設 / 外観",
+      "sourceEventId": "ff0716a7-f7bc-5018-abb2-11c65f900c62",
+      "id": "01M20FNW16XWJCNH28XM1VJEQ8",
+      "revision": 2,
+      "sha256": "ff0716a7f7bcc018fbb211c65f900c62857ac0a22af78746fb1159833952235f"
+    },
+    {
+      "file": "spec/feature/evolving-town-buildings.md",
+      "line": 10,
+      "title": "施設・教育住宅・大工の建設 / 表示上限",
+      "sourceEventId": "830c1ee9-f1cd-5fa8-a30e-f962286cf377",
+      "id": "01M20FNW1DRC9YNYMEBB0PB4J9",
+      "revision": 2,
+      "sha256": "830c1ee9f1cddfa8830ef962286cf377f09272f29e89094b4028071913295330"
+    },
+    {
+      "file": "spec/feature/evolving-town-buildings.md",
+      "line": 16,
+      "title": "施設・教育住宅・大工の建設 / 建設",
+      "sourceEventId": "b38b85ec-59c7-5a5b-a9a2-f7ec1038aa2b",
+      "id": "01M20FNW1P90Y592WPB849X7VE",
+      "revision": 2,
+      "sha256": "b38b85ec59c7ba5bf9a2f7ec1038aa2b8bb196ad66017a9cf60d56950ca67600"
+    },
+    {
+      "file": "spec/feature/evolving-town-buildings.md",
+      "line": 24,
+      "title": "施設・教育住宅・大工の建設 / 検証",
+      "sourceEventId": "c4e16d43-74ec-5a0e-ab67-259f41e8a50a",
+      "id": "01M20FNW1ZJF29121822N2KMBY",
+      "revision": 2,
+      "sha256": "c4e16d4374ec2a0efb67259f41e8a50aa5ef0e0759719c89be4e10c030a0454c"
+    },
+    {
+      "file": "spec/feature/faction-trial.md",
+      "line": 3,
+      "title": "噴水広場の勢力裁判 / 確定要件",
+      "sourceEventId": "0ea3f404-305f-5775-aab7-4981dc921045",
+      "id": "01M20FNW27N5FVH5HRYXHFW44K",
+      "revision": 2,
+      "sha256": "0ea3f404305f1775eab74981dc9210457c48d2bf505316f39a3d0f348c027bc9"
+    },
+    {
+      "file": "spec/feature/faction-trial.md",
+      "line": 7,
+      "title": "噴水広場の勢力裁判 / 勢力と議論",
+      "sourceEventId": "0bb7b82a-f121-5b1e-a1a4-dfc8e2e68574",
+      "id": "01M20FNW2JG8FSSQA81C5MM1XJ",
+      "revision": 2,
+      "sha256": "0bb7b82af1217b1eb1a4dfc8e2e68574ecbfd4a3b8fb05b7805567870a85493e"
+    },
+    {
+      "file": "spec/feature/faction-trial.md",
+      "line": 14,
+      "title": "噴水広場の勢力裁判 / 量刑・制裁",
+      "sourceEventId": "65fea62c-aa8a-5a21-aead-fb33330fbd0f",
+      "id": "01M20FNW2TTDPJBCC18444HJYY",
+      "revision": 2,
+      "sha256": "65fea62caa8aba214eadfb33330fbd0f124b251dd4d0bcebd048202cd76fc09a"
+    },
+    {
+      "file": "spec/feature/faction-trial.md",
+      "line": 21,
+      "title": "噴水広場の勢力裁判 / 描画",
+      "sourceEventId": "41e28a8a-e679-5807-a016-2668649778d3",
+      "id": "01M20FNW35PP5T5HY20GGEMH65",
+      "revision": 2,
+      "sha256": "41e28a8ae6795807f0162668649778d3e22357c84ad9e36ce5f80061edcb55e8"
+    },
+    {
+      "file": "spec/feature/faction-trial.md",
+      "line": 28,
+      "title": "噴水広場の勢力裁判 / 検証",
+      "sourceEventId": "588649a7-7287-5715-a42a-4885e1fc8401",
+      "id": "01M20FNW3EKBXAQQSW120QT5NT",
+      "revision": 2,
+      "sha256": "588649a772873715942a4885e1fc84018863c3e5d44612a78667289426333828"
+    },
+    {
+      "file": "spec/feature/field-items.md",
+      "line": 1,
+      "title": "フィールドアイテム (§16) — 人手のランダム配布物",
+      "sourceEventId": "f82154e7-c400-583e-a9f8-936356b19c62",
+      "id": "01M20FNW3R5HDYBK8TWGQ9ENNN",
+      "revision": 2,
+      "sha256": "f82154e7c400983e59f8936356b19c62b1be8b19dbad6002c5dcd68dd88e0e32"
+    },
+    {
+      "file": "spec/feature/field-items.md",
+      "line": 6,
+      "title": "フィールドアイテム (§16) — 人手のランダム配布物 / モデル",
+      "sourceEventId": "7c363091-4e18-5e17-aaea-fd48da252b25",
+      "id": "01M20FNW41JKTT4SHCCNX7MCA1",
+      "revision": 2,
+      "sha256": "7c3630914e189e172aeafd48da252b25583af4fca9bab848f3c25c2568c2caa8"
+    },
+    {
+      "file": "spec/feature/field-items.md",
+      "line": 12,
+      "title": "フィールドアイテム (§16) — 人手のランダム配布物 / フロー",
+      "sourceEventId": "24f00f5d-e47c-5054-a67e-a5ef9f5729b7",
+      "id": "01M20FNW48VK61NAW2FJWCMM77",
+      "revision": 2,
+      "sha256": "24f00f5de47c5054f67ea5ef9f5729b76be8aec0e938ad6da42d51cd722401e8"
+    },
+    {
+      "file": "spec/feature/field-items.md",
+      "line": 22,
+      "title": "フィールドアイテム (§16) — 人手のランダム配布物 / 非行連動 (behavior-rules)",
+      "sourceEventId": "5944ef6c-79a7-5a69-ac6b-d372110daba1",
+      "id": "01M20FNW4H7P9AESJ27TGZGXJC",
+      "revision": 2,
+      "sha256": "5944ef6c79a70a69dc6bd372110daba1269e6a084f8e595ddbdc4880c1969487"
+    },
+    {
+      "file": "spec/feature/field-items.md",
+      "line": 27,
+      "title": "フィールドアイテム (§16) — 人手のランダム配布物 / client",
+      "sourceEventId": "eee85658-d22f-5dd7-a1c2-58531ce1be30",
+      "id": "01M20FNW4SV8DCTPGW32QBE6HS",
+      "revision": 2,
+      "sha256": "eee85658d22f7dd7a1c258531ce1be304956787c4e5e9cb5eac278153d1f5077"
+    },
+    {
+      "file": "spec/feature/field-items.md",
+      "line": 32,
+      "title": "フィールドアイテム (§16) — 人手のランダム配布物 / 開いた判断 / 今後",
+      "sourceEventId": "8c9d36e7-e586-587b-a74a-f039e8e6dbcd",
+      "id": "01M20FNW52NWZCN362M855D3XK",
+      "revision": 2,
+      "sha256": "8c9d36e7e586787bf74af039e8e6dbcdde96dd26d24f7241d7c6e6d906825911"
+    },
+    {
+      "file": "spec/feature/game-spec.md",
+      "line": 1,
+      "title": "Pagus ゲーム仕様ベースライン (Omnipotens Stage 1)",
+      "sourceEventId": "9a672156-fe61-5cb8-a263-503f5db37b34",
+      "id": "01M20FNW591DMMW2YVTTAKTMAT",
+      "revision": 2,
+      "sha256": "9a672156fe617cb8a263503f5db37b34b924fc6853de89da4f78ee53d6a5cd9e"
+    },
+    {
+      "file": "spec/feature/game-spec.md",
+      "line": 6,
+      "title": "Pagus ゲーム仕様ベースライン (Omnipotens Stage 1) / 1. 世界と時間 [source §4]",
+      "sourceEventId": "61db5fdd-d35a-503c-a573-c410b1e39056",
+      "id": "01M20FNW5H0V3DSCNK0BD1DGQC",
+      "revision": 2,
+      "sha256": "61db5fddd35ad03c7573c410b1e39056d671bdde8e395bf9433d447fa2658304"
+    },
+    {
+      "file": "spec/feature/game-spec.md",
+      "line": 12,
+      "title": "Pagus ゲーム仕様ベースライン (Omnipotens Stage 1) / 2. 村人 (どうぶつペルソナ) [source §3, §8A.1, §8B]",
+      "sourceEventId": "653349ce-b3b3-5e36-a3cc-b2c04194afe9",
+      "id": "01M20FNW5S3JPBZD5AKD7YPDCV",
+      "revision": 2,
+      "sha256": "653349ceb3b39e3653ccb2c04194afe9a25b80a02bbb4eae4187ba56fd291a0f"
+    },
+    {
+      "file": "spec/feature/game-spec.md",
+      "line": 20,
+      "title": "Pagus ゲーム仕様ベースライン (Omnipotens Stage 1) / 3. ゲームループ (起承転結) [source §4.1–4.6, §12]",
+      "sourceEventId": "feb90154-03ed-587d-a543-63a486f0f182",
+      "id": "01M20FNW60TFT901Z60BEHH72C",
+      "revision": 2,
+      "sha256": "feb9015403ed987d954363a486f0f18287eba8c3aa4b5659b8777e373ad4f8c8"
+    },
+    {
+      "file": "spec/feature/game-spec.md",
+      "line": 30,
+      "title": "Pagus ゲーム仕様ベースライン (Omnipotens Stage 1) / 4. 評価系 [source §8A]",
+      "sourceEventId": "3178144b-2b70-543a-a1c9-406f217bc940",
+      "id": "01M20FNW6A6RJ4KNWTKYFZEATQ",
+      "revision": 2,
+      "sha256": "3178144b2b70f43a81c9406f217bc940a369caaa74841603bfcd7627dee380b4"
+    },
+    {
+      "file": "spec/feature/game-spec.md",
+      "line": 35,
+      "title": "Pagus ゲーム仕様ベースライン (Omnipotens Stage 1) / 5. プレイヤーシステム [source §12.4, §13, §14]",
+      "sourceEventId": "32425fbb-7430-5b79-a456-61a71fc100f8",
+      "id": "01M20FNW6JD1WYRFJT9Y3B7KND",
+      "revision": 2,
+      "sha256": "32425fbb7430fb79145661a71fc100f8addd9600b644c1f8dd48bc62d6eec731"
+    },
+    {
+      "file": "spec/feature/game-spec.md",
+      "line": 43,
+      "title": "Pagus ゲーム仕様ベースライン (Omnipotens Stage 1) / 6. AI アーキテクチャ [source §5, §12, brain-backends]",
+      "sourceEventId": "9bceacb5-c373-5e17-a1af-ba52d580b130",
+      "id": "01M20FNW6SZQ89QYXNMVJ1TV0S",
+      "revision": 2,
+      "sha256": "9bceacb5c3739e1701afba52d580b130c1c93fb299641125958aa0f62051535b"
+    },
+    {
+      "file": "spec/feature/game-spec.md",
+      "line": 50,
+      "title": "Pagus ゲーム仕様ベースライン (Omnipotens Stage 1) / 7. テーマ・演出 [source thinking-flow v1.4-D, §6]",
+      "sourceEventId": "85cf9535-eb7e-5ff8-ac32-357f5b38dcdc",
+      "id": "01M20FNW723J6EH0K422Y04JJZ",
+      "revision": 2,
+      "sha256": "85cf9535eb7e8ff85c32357f5b38dcdcf71e42a308f2032614d999ca99b4506e"
+    },
+    {
+      "file": "spec/feature/game-spec.md",
+      "line": 55,
+      "title": "Pagus ゲーム仕様ベースライン (Omnipotens Stage 1) / 8. 技術・運用 [source §2, §8, data-schema, operations]",
+      "sourceEventId": "3aedaab6-edd6-5847-ad2d-6cc9bc7c8f3d",
+      "id": "01M20FNW798D7V48ZZ7PCJY26X",
+      "revision": 2,
+      "sha256": "3aedaab6edd678477d2d6cc9bc7c8f3d955b914cc8827ee616ef6e1c8ad15b57"
+    },
+    {
+      "file": "spec/feature/game-spec.md",
+      "line": 61,
+      "title": "Pagus ゲーム仕様ベースライン (Omnipotens Stage 1) / 9. 未確定事項 [unresolved]",
+      "sourceEventId": "73216e35-8f49-56b1-a7af-8c17fcb5f7e8",
+      "id": "01M20FNW7JDGEDNRFSY59G4TA8",
+      "revision": 2,
+      "sha256": "73216e358f4906b1b7af8c17fcb5f7e8b3fa9b5f30b96a1c228e11373af24ffd"
+    },
+    {
+      "file": "spec/feature/loading-screen.md",
+      "line": 3,
+      "title": "初期読み込み画面 / 表示と準備完了",
+      "sourceEventId": "3d63d525-02d4-574a-aa3e-7d811ebdce0f",
+      "id": "01M20FNW7RYKNSVBJPB2PXKBBS",
+      "revision": 2,
+      "sha256": "3d63d52502d4a74aca3e7d811ebdce0f6729de035491aa49e4d90df88ac530e0"
+    },
+    {
+      "file": "spec/feature/loading-screen.md",
+      "line": 10,
+      "title": "初期読み込み画面 / 待機・失敗",
+      "sourceEventId": "dcf634f5-f1b8-5990-ab9f-e73ec589e1ee",
+      "id": "01M20FNW80D1HPMMAJVQB7QPXW",
+      "revision": 2,
+      "sha256": "dcf634f5f1b80990bb9fe73ec589e1ee89fa9d19ad9594f375bf348503cf0b43"
+    },
+    {
+      "file": "spec/feature/loading-screen.md",
+      "line": 17,
+      "title": "初期読み込み画面 / 寿命・確認",
+      "sourceEventId": "7acdb79e-512f-591a-aba5-4f95f7d142cf",
+      "id": "01M20FNW88SFTZVSRRK0DKCK1E",
+      "revision": 2,
+      "sha256": "7acdb79e512f391a5ba54f95f7d142cfb0b0c7d647e1e09da18a261ccc7d91ce"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 1,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営",
+      "sourceEventId": "ae69e031-194a-531e-a2b7-9ebfe760b9ee",
+      "id": "01M20FNW8FEVT9MN7V68QT5PJH",
+      "revision": 2,
+      "sha256": "ae69e031194af31e12b79ebfe760b9eebbc53604412c6bb8843913811b8375b7"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 7,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営 / 0. 方針",
+      "sourceEventId": "35e64e22-9956-5fc8-a632-33fffd8c6cf2",
+      "id": "01M20FNW8PBJQKXBD99VGF0CR7",
+      "revision": 2,
+      "sha256": "35e64e2299562fc8663233fffd8c6cf29d4381b673860a3df8c7160bf37fd81b"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 16,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営 / 1. 推し指名 (champion) + 弔い (legacy) / 1.1 推し指名",
+      "sourceEventId": "936541c6-4ef3-520a-a67f-610ec7db1a81",
+      "id": "01M20FNW8XBEPANM9ST0PN3S20",
+      "revision": 2,
+      "sha256": "936541c64ef3620a067f610ec7db1a813fdd78afb37c8592a087b0c7eecea5a2"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 23,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営 / 1. 推し指名 (champion) + 弔い (legacy) / 1.2 弔い (legacy)",
+      "sourceEventId": "d75070b9-fb0d-5a4f-aa2a-36285077f6ed",
+      "id": "01M20FNW95QSDE6P5KFHSWNEY6",
+      "revision": 2,
+      "sha256": "d75070b9fb0d6a4f2a2a36285077f6ede5c1b116fb662de581e91f9b227fb602"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 29,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営 / 1. 推し指名 (champion) + 弔い (legacy) / 1.3 推し経由の間接洗脳",
+      "sourceEventId": "241f8b0f-b1e1-535e-aff4-f81760dec7c8",
+      "id": "01M20FNW9DXYH5WDX6ZT7CRYH5",
+      "revision": 2,
+      "sha256": "241f8b0fb1e1335e7ff4f81760dec7c852eead9ccebe2ac12de248c07537f1da"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 36,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営 / 2. しきたり改定",
+      "sourceEventId": "6018d791-f0d3-5e81-abdf-a83ee2ad30d8",
+      "id": "01M20FNW9M27RXDR96G5MB7Q69",
+      "revision": 2,
+      "sha256": "6018d791f0d3ce81fbdfa83ee2ad30d8f3b84936c0ef979b412f9de862c89bab"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 42,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営 / 3. 裁判参加 (ベット廃止)",
+      "sourceEventId": "12236143-dff2-542b-a53d-d5bead1d2732",
+      "id": "01M20FNW9WE0G9VYHKH6MJ8S1X",
+      "revision": 2,
+      "sha256": "12236143dff2442b253dd5bead1d2732358ab7bc83923a01f658f2858a21963b"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 54,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営 / 4. 称号 / 実績 + 二大陣営 / 4.1 実績カウンタ",
+      "sourceEventId": "b3af6c25-35ff-5b45-aff3-2884d075acb1",
+      "id": "01M20FNWA3WTVD7WCKS4W5KBSX",
+      "revision": 2,
+      "sha256": "b3af6c2535ffcb450ff32884d075acb1310ff6ad3d3cd25f15c473182d278391"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 58,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営 / 4. 称号 / 実績 + 二大陣営 / 4.2 称号 (titles)",
+      "sourceEventId": "39223a75-9fc1-516b-a306-3936c8b9a0bd",
+      "id": "01M20FNWABJ0V427XGWR81991B",
+      "revision": 2,
+      "sha256": "39223a759fc1316be3063936c8b9a0bdf2fda738c67dcec8aa56ba2cdbf69ffe"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 68,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営 / 4. 称号 / 実績 + 二大陣営 / 4.3 二大陣営 (善導 vs 扇動)",
+      "sourceEventId": "f983fa71-7fcd-5f9d-a099-ab0298bbf118",
+      "id": "01M20FNWAJ72ZG7KQ9CS660420",
+      "revision": 2,
+      "sha256": "f983fa717fcd3f9d1099ab0298bbf118ab889924d8a5868ebdd4bb2b3347132b"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 74,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営 / 5. 実装フェーズ",
+      "sourceEventId": "484e1509-2e75-543c-a848-7fdfb0588005",
+      "id": "01M20FNWAVSP37K4EVMAA0YD7Z",
+      "revision": 2,
+      "sha256": "484e15092e75b43c98487fdfb058800549ced3186e39c2c44348dc9cfc550319"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 80,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営 / 6. env 既定 (観戦調整)",
+      "sourceEventId": "0280b745-3f91-5801-a915-ec15c84750f4",
+      "id": "01M20FNWB3BASXQYBGFJ6S4396",
+      "revision": 2,
+      "sha256": "0280b7453f916801b915ec15c84750f41bdb658d716a42ea96346ebe73c935df"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 84,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営 / 7. 開いた判断",
+      "sourceEventId": "111cb16e-e311-59f5-a88d-58f4155d2ff2",
+      "id": "01M20FNWBCQ9Z468BHWK5RDM6X",
+      "revision": 2,
+      "sha256": "111cb16ee311c9f5588d58f4155d2ff226eb41fb4963c34ddce46b2574a5dc97"
+    },
+    {
+      "file": "spec/feature/multiplayer-social.md",
+      "line": 91,
+      "title": "多人数ソーシャル機能 (v1.2) — 応援 / 村いじり / 裁判参加 / 称号・陣営 / 8. 追加ソーシャル案バックログ (v1.3+ 候補)",
+      "sourceEventId": "a6b0099d-60c9-5433-ae0f-490f0ede628b",
+      "id": "01M20FNWBMH6E3JE0RXMAHDMGQ",
+      "revision": 2,
+      "sha256": "a6b0099d60c994335e0f490f0ede628bd19cf42dd8a6446e0a28e9393dbdb709"
+    },
+    {
+      "file": "spec/feature/product-brief.md",
+      "line": 1,
+      "title": "Pagus プロダクトブリーフ (Omnipotens Stage 1)",
+      "sourceEventId": "2c9fb1f3-072d-5cf4-a960-ece827114bfd",
+      "id": "01M20FNWBWPWSWMCVZ3YFD04G5",
+      "revision": 2,
+      "sha256": "2c9fb1f3072d7cf4c960ece827114bfd979cd5a8c9c3001adaf32e26073e86b1"
+    },
+    {
+      "file": "spec/feature/product-brief.md",
+      "line": 6,
+      "title": "Pagus プロダクトブリーフ (Omnipotens Stage 1) / 1. 一行定義 [source]",
+      "sourceEventId": "fe3f653d-03fb-5fa4-a93e-923006d2968a",
+      "id": "01M20FNWC43F80E7DXEZXAKPR0",
+      "revision": 2,
+      "sha256": "fe3f653d03fbdfa4293e923006d2968a28fd571361a5907df4077316e8371ad7"
+    },
+    {
+      "file": "spec/feature/product-brief.md",
+      "line": 10,
+      "title": "Pagus プロダクトブリーフ (Omnipotens Stage 1) / 2. 目的とポジション",
+      "sourceEventId": "434977a8-6b29-50e8-a0d8-6b74b136fc31",
+      "id": "01M20FNWCB25PZDHN6ZQ6Q8MC9",
+      "revision": 2,
+      "sha256": "434977a86b2980e840d86b74b136fc31724b0ed41b7f55af609d2214d428c70c"
+    },
+    {
+      "file": "spec/feature/product-brief.md",
+      "line": 17,
+      "title": "Pagus プロダクトブリーフ (Omnipotens Stage 1) / 3. コア体験 5 本柱 [source] (docs/ux.md §4)",
+      "sourceEventId": "4b792046-9894-5c83-a601-592a96249de0",
+      "id": "01M20FNWCK1Z0VQX2VRH4Z7VS3",
+      "revision": 2,
+      "sha256": "4b7920469894cc839601592a96249de094120a09c4b0a31b4ec2f2eae876886b"
+    },
+    {
+      "file": "spec/feature/product-brief.md",
+      "line": 25,
+      "title": "Pagus プロダクトブリーフ (Omnipotens Stage 1) / 4. 差別化要素",
+      "sourceEventId": "1d9b1640-5fe1-5f68-a720-b0bfbb16a35c",
+      "id": "01M20FNWCV5SZ47PQHSV76R3WF",
+      "revision": 2,
+      "sha256": "1d9b16405fe18f689720b0bfbb16a35c114c497e75ea9db292e53f4bee228e59"
+    },
+    {
+      "file": "spec/feature/product-brief.md",
+      "line": 32,
+      "title": "Pagus プロダクトブリーフ (Omnipotens Stage 1) / 5. 制約・前提 [source]",
+      "sourceEventId": "2c0345e4-050c-5e6f-a05f-e445658703c3",
+      "id": "01M20FNWD3F0HCGRKHJHVMNTFB",
+      "revision": 2,
+      "sha256": "2c0345e4050c1e6fe05fe445658703c33a75e211709d55447bc10f175f9955fb"
+    },
+    {
+      "file": "spec/feature/product-brief.md",
+      "line": 39,
+      "title": "Pagus プロダクトブリーフ (Omnipotens Stage 1) / 6. 現状の完成度 [source + code]",
+      "sourceEventId": "35d785d9-ced6-584e-a28b-ab1dcffd08e4",
+      "id": "01M20FNWDBPZB0TXXA9NSDKXGD",
+      "revision": 2,
+      "sha256": "35d785d9ced6484e028bab1dcffd08e46be49fdf53bc73781aeebfe5e1e4a753"
+    },
+    {
+      "file": "spec/feature/resident-3d-narrative.md",
+      "line": 3,
+      "title": "教育で混ざる3D住民と物語の進行 / 目的と設計",
+      "sourceEventId": "054ff23d-459e-5eb5-afa3-e5d4fbb40541",
+      "id": "01M20FNWDMTMQX4MSAG30X23WW",
+      "revision": 2,
+      "sha256": "054ff23d459e2eb5ffa3e5d4fbb4054159b38ed30f8bef9e75d0eec9b6eb9761"
+    },
+    {
+      "file": "spec/feature/resident-3d-narrative.md",
+      "line": 9,
+      "title": "教育で混ざる3D住民と物語の進行 / 教育",
+      "sourceEventId": "c5dce82a-b106-5e4b-aedd-f3da013c917b",
+      "id": "01M20FNWEFS96H5D57J6GAYFCP",
+      "revision": 2,
+      "sha256": "c5dce82ab106be4b1eddf3da013c917b2feee66a34f4705d6645c08442831a5c"
+    },
+    {
+      "file": "spec/feature/resident-3d-narrative.md",
+      "line": 22,
+      "title": "教育で混ざる3D住民と物語の進行 / 行動と蒸留",
+      "sourceEventId": "3208563a-27f4-5a17-af66-1fd5217cdc80",
+      "id": "01M20FNWG8JBWAVMNHRRR6T2TN",
+      "revision": 2,
+      "sha256": "3208563a27f44a171f661fd5217cdc803c74d166a93c9044825eeae9ae94ed6d"
+    },
+    {
+      "file": "spec/feature/resident-3d-narrative.md",
+      "line": 30,
+      "title": "教育で混ざる3D住民と物語の進行 / 物語",
+      "sourceEventId": "b9dfd1cd-c76c-5856-a473-bf1293ed5aef",
+      "id": "01M20FNWJS4XQ01BG3W5B73VEF",
+      "revision": 2,
+      "sha256": "b9dfd1cdc76c58564473bf1293ed5aef45669cd386392af78f7003f616680083"
+    },
+    {
+      "file": "spec/feature/resident-3d-narrative.md",
+      "line": 36,
+      "title": "教育で混ざる3D住民と物語の進行 / 確認状態",
+      "sourceEventId": "b7ea1386-0ae0-5e50-a438-34a17d018b7e",
+      "id": "01M20FNWKANZ5FGBW44YNQ6R8G",
+      "revision": 2,
+      "sha256": "b7ea13860ae0fe50243834a17d018b7ef4b1e6ec1dbcec2fb5322a062dab320d"
+    },
+    {
+      "file": "spec/feature/resident-bt-autonomy.md",
+      "line": 3,
+      "title": "住民の自律BT版とLLM介入 / 目的と版",
+      "sourceEventId": "c8dad82b-c3d7-53db-ac48-35cda1f7e80c",
+      "id": "01M20FNWKMF96TAD2PVJVD287S",
+      "revision": 2,
+      "sha256": "c8dad82bc3d793dbac4835cda1f7e80c480c3d0135f7a0a1f04f297704fa15cf"
+    },
+    {
+      "file": "spec/feature/resident-bt-autonomy.md",
+      "line": 9,
+      "title": "住民の自律BT版とLLM介入 / 行動の決定境界",
+      "sourceEventId": "5ed58d9d-7401-5a16-a454-c87ae82605fd",
+      "id": "01M20FNWM62YY3506G3HP3V52G",
+      "revision": 2,
+      "sha256": "5ed58d9d7401ca160454c87ae82605fd9e1f5ac65f6ffd474dc1d260ed03b8ef"
+    },
+    {
+      "file": "spec/feature/resident-bt-autonomy.md",
+      "line": 25,
+      "title": "住民の自律BT版とLLM介入 / LLMは介入入力",
+      "sourceEventId": "c478d7b6-2875-5f06-a759-2799096431f1",
+      "id": "01M20FNWMFVN8SBB7S76GR1NTY",
+      "revision": 2,
+      "sha256": "c478d7b62875bf0637592799096431f1947a2d970f9ede3348b5cb6eac481461"
+    },
+    {
+      "file": "spec/feature/resident-bt-autonomy.md",
+      "line": 33,
+      "title": "住民の自律BT版とLLM介入 / 自動LLM呼び出しの除去",
+      "sourceEventId": "942d7440-99a5-5063-afb3-1e572e99fcec",
+      "id": "01M20FNWMP12A3H294GHRB6YVB",
+      "revision": 2,
+      "sha256": "942d744099a5d0632fb31e572e99fcec47187aae312023a3047bdf7992fe422e"
+    },
+    {
+      "file": "spec/feature/resident-bt-autonomy.md",
+      "line": 39,
+      "title": "住民の自律BT版とLLM介入 / 可視化・保存",
+      "sourceEventId": "18dbe8a7-704f-51a9-a270-1fbcd2efe294",
+      "id": "01M20FNWMXMB1P4K99S47N3F87",
+      "revision": 2,
+      "sha256": "18dbe8a7704f81a9d2701fbcd2efe294a5975c88593ff6108f351608a32bd9ac"
+    },
+    {
+      "file": "spec/feature/resident-bt-autonomy.md",
+      "line": 43,
+      "title": "住民の自律BT版とLLM介入 / 確認",
+      "sourceEventId": "328959bb-8e3b-55fe-af6b-faa06065f961",
+      "id": "01M20FNWN5HQEK8442T34XCS8D",
+      "revision": 2,
+      "sha256": "328959bb8e3bd5fe5f6bfaa06065f9613b008cc3681c611975a40304b631889b"
+    },
+    {
+      "file": "spec/feature/resident-list-model-preview.md",
+      "line": 3,
+      "title": "住民一覧の教育回数・モデル表示 / 表示",
+      "sourceEventId": "fdbc45f0-97d5-50ab-a875-a079517c74e8",
+      "id": "01M20FNWNEH1CYXR9SXT8J158G",
+      "revision": 2,
+      "sha256": "fdbc45f097d550aba875a079517c74e893f5c37346f2429e7c9c20319118f970"
+    },
+    {
+      "file": "spec/feature/resident-list-model-preview.md",
+      "line": 10,
+      "title": "住民一覧の教育回数・モデル表示 / 負荷・寿命",
+      "sourceEventId": "d8a53506-71cd-5c06-a25c-4b5f77576fa9",
+      "id": "01M20FNWNP23CS2CV2TYBA5EQW",
+      "revision": 2,
+      "sha256": "d8a5350671cd1c06125c4b5f77576fa9fbdbb5834f4b515866e1c97924c2fc9d"
+    },
+    {
+      "file": "spec/feature/resident-list-model-preview.md",
+      "line": 16,
+      "title": "住民一覧の教育回数・モデル表示 / 確認",
+      "sourceEventId": "431ac7da-ed07-5e35-a425-7b48b25b8c2f",
+      "id": "01M20FNWNYVBZDZVM1VS500BVV",
+      "revision": 2,
+      "sha256": "431ac7daed07be3584257b48b25b8c2f508c4e671c1a90a574e3acc962f283f7"
+    },
+    {
+      "file": "spec/feature/social-packs-v1.3.md",
+      "line": 1,
+      "title": "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力",
+      "sourceEventId": "222986dd-b17b-57d7-ae1c-cce0d0dd048a",
+      "id": "01M20FNWP6AXXTKEH7AC3NDS1Y",
+      "revision": 2,
+      "sha256": "222986ddb17bc7d76e1ccce0d0dd048adf6fcdfa7fcb1452d849e5cd568e2f38"
+    },
+    {
+      "file": "spec/feature/social-packs-v1.3.md",
+      "line": 7,
+      "title": "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力 / 共通基盤 (先に入れる小物)",
+      "sourceEventId": "06fb5d28-cb92-567d-af8f-e53df11f1a5b",
+      "id": "01M20FNWPEGSVC5AC4G41AT5JP",
+      "revision": 2,
+      "sha256": "06fb5d28cb92f67ddf8fe53df11f1a5b451bfa13897910ab757a3be90ae7bca9"
+    },
+    {
+      "file": "spec/feature/social-packs-v1.3.md",
+      "line": 16,
+      "title": "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力 / A. カードパック (v1.3-A) — カルマで切る一発介入",
+      "sourceEventId": "7844515d-52b2-53bc-a340-3b478063ffde",
+      "id": "01M20FNWPP13SJPZPZSXPYV9RN",
+      "revision": 2,
+      "sha256": "7844515d52b2e3bc03403b478063ffdec6f49dcc8ac02117e6cbe0e2065c15a3"
+    },
+    {
+      "file": "spec/feature/social-packs-v1.3.md",
+      "line": 28,
+      "title": "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力 / B. 経済パック (v1.3-B) — カルマ経済",
+      "sourceEventId": "760e1342-aea9-5df2-a2e9-fc3ab91b801d",
+      "id": "01M20FNWPY0JJC4ZQ89G2DPQRY",
+      "revision": 2,
+      "sha256": "760e1342aea93df2b2e9fc3ab91b801d66ee081f7b710d6c548522260c17037c"
+    },
+    {
+      "file": "spec/feature/social-packs-v1.3.md",
+      "line": 40,
+      "title": "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力 / C. 政治パック (v1.3-C) — 統治",
+      "sourceEventId": "2e4da880-d9bd-513f-a7e0-4fb92c5cd230",
+      "id": "01M20FNWQ6VJMYEA1BVQHZ3CWY",
+      "revision": 2,
+      "sha256": "2e4da880d9bd213f87e04fb92c5cd2307b1e0be9278acfb59075ae2b5a68e12b"
+    },
+    {
+      "file": "spec/feature/social-packs-v1.3.md",
+      "line": 52,
+      "title": "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力 / D. 演出・協力パック (v1.3-D)",
+      "sourceEventId": "bc55a124-77c0-5d03-ad22-21052d9e75ae",
+      "id": "01M20FNWQEEKT7P0RTNVZBTSW1",
+      "revision": 2,
+      "sha256": "bc55a12477c01d034d2221052d9e75aef3b42eaf26eed7ba2fa19e27113cd3fd"
+    },
+    {
+      "file": "spec/feature/social-packs-v1.3.md",
+      "line": 63,
+      "title": "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力 / E. 操作オーバーレイ整備 (v1.3-E、最後に実施)",
+      "sourceEventId": "5a40cabd-a08c-5ab1-a7a8-3d71085cc61b",
+      "id": "01M20FNWQPF2WZP09D48K661SQ",
+      "revision": 2,
+      "sha256": "5a40cabda08cbab137a83d71085cc61bd11b36e33632098e7fb7b69a05517ee8"
+    },
+    {
+      "file": "spec/feature/social-packs-v1.3.md",
+      "line": 82,
+      "title": "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力 / env 既定一覧 (抜粋)",
+      "sourceEventId": "db41e0bc-efbc-5766-a83c-1b8ba5137c95",
+      "id": "01M20FNWQY7MCPH3S17HSQZPS4",
+      "revision": 2,
+      "sha256": "db41e0bcefbcf766783c1b8ba5137c954c2c9feb530abd81cecadd600bda913c"
+    },
+    {
+      "file": "spec/feature/social-packs-v1.3.md",
+      "line": 89,
+      "title": "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力 / 開いた判断",
+      "sourceEventId": "9067b46d-5b08-5920-ab0d-53b30013c0a1",
+      "id": "01M20FNWR69RFTPKNZY73WB5VB",
+      "revision": 2,
+      "sha256": "9067b46d5b08e9207b0d53b30013c0a164d10c2979ffa72712d60ac063bf2f8a"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 1,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ",
+      "sourceEventId": "12ba903d-e3e1-57e5-afc3-663968e4fe98",
+      "id": "01M20FNWRET47136G42Z4G4FEE",
+      "revision": 2,
+      "sha256": "12ba903de3e1e7e59fc3663968e4fe9893a66bc99b286cbc82cd11ba5618f01d"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 7,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 0. レビューサマリ",
+      "sourceEventId": "6ac3b110-7f38-5548-acf2-eea5a26aec58",
+      "id": "01M20FNWRP8G95X4QTGX8KK5N1",
+      "revision": 2,
+      "sha256": "6ac3b1107f381548acf2eea5a26aec581cbfdeef42da33e4c534e8fea71b6d47"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 18,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 1. 論点① 住民の思考 — LLM 教師 → ブラックボックス生徒の「蒸留ループ」",
+      "sourceEventId": "982b424f-aac6-51ef-a8a0-411055910da1",
+      "id": "01M20FNWRY0VDCM5E4W6V7KMQ2",
+      "revision": 2,
+      "sha256": "982b424faac671ef48a0411055910da1f2fff3932a3d9acb468e4356debd2d73"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 30,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 1. 論点① 住民の思考 — LLM 教師 → ブラックボックス生徒の「蒸留ループ」 / 1.1 現状評価",
+      "sourceEventId": "4a0bb3c9-639f-5924-a85c-84dd3375db71",
+      "id": "01M20FNWS50875SFCGXW5X7JEJ",
+      "revision": 2,
+      "sha256": "4a0bb3c9639f7924985c84dd3375db71d70c486f27fe8cc7ff0223b3d4ab8e02"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 38,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 1. 論点① 住民の思考 — LLM 教師 → ブラックボックス生徒の「蒸留ループ」 / 1.2 提案 — 蒸留ループ (Teacher–Student distillation)",
+      "sourceEventId": "7c176e5a-2500-5469-a132-a96b09c327df",
+      "id": "01M20FNWSER230BX7H6XFN9SJG",
+      "revision": 2,
+      "sha256": "7c176e5a250044694132a96b09c327dfac2ed8ec3d08e4fae7848e28eb3e7002"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 64,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 1. 論点① 住民の思考 — LLM 教師 → ブラックボックス生徒の「蒸留ループ」 / 1.3 実装設計 / (a) DSL 拡張 — BehaviorRule v2 (`packages/sim/src/behavior-rules.ts`)",
+      "sourceEventId": "d10c80a1-920b-565e-a066-bf8e7c915fd1",
+      "id": "01M20FNWSN9HQBXMKAVS1EACSA",
+      "revision": 2,
+      "sha256": "d10c80a1920b165ee066bf8e7c915fd1ada127ebed60e256f98fc09e77925a4b"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 72,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 1. 論点① 住民の思考 — LLM 教師 → ブラックボックス生徒の「蒸留ループ」 / 1.3 実装設計 / (b) Shadow サンプラ (`packages/server/src/distill/shadow-sampler.ts` 新設)",
+      "sourceEventId": "1dd90ded-802c-540a-a2cd-dbaaeab6d4c8",
+      "id": "01M20FNWSX7EAPC0ES0H97JRJQ",
+      "revision": 2,
+      "sha256": "1dd90ded802cf40a62cddbaaeab6d4c8b0e0f6d977e04a51f0f48bd343fdf9ed"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 78,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 1. 論点① 住民の思考 — LLM 教師 → ブラックボックス生徒の「蒸留ループ」 / 1.3 実装設計 / (c) RuleSmith 蒸留モード (`packages/server/src/llm/llm-world-brain.ts` 拡張)",
+      "sourceEventId": "21ae7680-c8db-5fed-abb8-e20e86295762",
+      "id": "01M20FNWT539SNWAGM2A1JPE56",
+      "revision": 2,
+      "sha256": "21ae7680c8dbffed9bb8e20e86295762e8099fa5280f33369bd9be6bd7102f16"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 84,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 1. 論点① 住民の思考 — LLM 教師 → ブラックボックス生徒の「蒸留ループ」 / 1.3 実装設計 / (d) 事件当事者の思考は LLM のまま維持",
+      "sourceEventId": "ed5cf1b5-7cf7-5e80-a630-a39e748d84e4",
+      "id": "01M20FNWTDK23PT3N8AG9WSQFA",
+      "revision": 2,
+      "sha256": "ed5cf1b57cf7be808630a39e748d84e4d8602a741ce1977dac444997c1414b45"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 88,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 1. 論点① 住民の思考 — LLM 教師 → ブラックボックス生徒の「蒸留ループ」 / 1.4 代替案の 4 軸評価",
+      "sourceEventId": "10132ba1-9c9c-56f0-afd7-66221e1a9361",
+      "id": "01M20FNWTNJ0R5RX8V2WN87GNE",
+      "revision": 2,
+      "sha256": "10132ba19c9c26f0cfd766221e1a9361b7e46128de47ad6f03f67bcb68905b51"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 98,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 2. 論点② ゲーム進行 — 事件アーク (派生グラフ) と小騒動",
+      "sourceEventId": "c6cf0cef-046e-54dd-a83a-1c7255d53438",
+      "id": "01M20FNWTXX38FGNEZSSNZF070",
+      "revision": 2,
+      "sha256": "c6cf0cef046e34ddd83a1c7255d534387248c317c7b8c313caad8f2c6dd7e460"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 109,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 2. 論点② ゲーム進行 — 事件アーク (派生グラフ) と小騒動 / 2.1 現状評価 — 単調さの根因",
+      "sourceEventId": "c6104f74-3aad-5b69-a47b-f710a160aa08",
+      "id": "01M20FNWV509GGRT08A9Q9YWJM",
+      "revision": 2,
+      "sha256": "c6104f743aad6b69847bf710a160aa08db8592932b515c6b01fdcf115e511a99"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 115,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 2. 論点② ゲーム進行 — 事件アーク (派生グラフ) と小騒動 / 2.2 提案 — PlotThread + IncidentArc + 小騒動",
+      "sourceEventId": "24bf44f7-efc3-5cc8-a997-57f49195f238",
+      "id": "01M20FNWVENHECC35341P4TQE0",
+      "revision": 2,
+      "sha256": "24bf44f7efc3ecc8099757f49195f2388d54b2b6afaadd8870f8335392609260"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 119,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 2. 論点② ゲーム進行 — 事件アーク (派生グラフ) と小騒動 / 2.2 提案 — PlotThread + IncidentArc + 小騒動 / PlotThread (火種) — 事件の結末が残す持ち越し状態",
+      "sourceEventId": "59ecf779-3912-5d09-afd5-5abec2ffe5c2",
+      "id": "01M20FNWVPVMCGV66G07694R9T",
+      "revision": 2,
+      "sha256": "59ecf77939125d096fd55abec2ffe5c255da0d5ca46faca9d8cc2df65a89adfd"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 139,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 2. 論点② ゲーム進行 — 事件アーク (派生グラフ) と小騒動 / 2.2 提案 — PlotThread + IncidentArc + 小騒動 / IncidentArc 派生表 (`data/incident-arcs.json`, データ駆動)",
+      "sourceEventId": "69033f5f-4304-55d4-a381-d4890166c345",
+      "id": "01M20FNWVYQX7S3MHCKDY02F34",
+      "revision": 2,
+      "sha256": "69033f5f430435d45381d4890166c34594397302f8ddf34e2d9c0d4a18325414"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 149,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 2. 論点② ゲーム進行 — 事件アーク (派生グラフ) と小騒動 / 2.2 提案 — PlotThread + IncidentArc + 小騒動 / 小騒動 (minor incident) — 大事件の谷を埋める LLM 0 円の山",
+      "sourceEventId": "1f025e71-1607-5fa9-ac4e-2d16483caa97",
+      "id": "01M20FNWW6XRCB8YAENWNCEV1K",
+      "revision": 2,
+      "sha256": "1f025e711607dfa9ec4e2d16483caa97bdb8b56f81e3550ee4dc28f059cd31c6"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 154,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 2. 論点② ゲーム進行 — 事件アーク (派生グラフ) と小騒動 / 2.2 提案 — PlotThread + IncidentArc + 小騒動 / 裁判バリエーション (TrialStage のデータ駆動化)",
+      "sourceEventId": "03412105-8f8f-5b2d-a0ee-e8ddfa79ead3",
+      "id": "01M20FNWWDE8YQQ78SN304C236",
+      "revision": 2,
+      "sha256": "034121058f8f2b2d60eee8ddfa79ead3ca587e9648a023bef1202d00d386c786"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 159,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 2. 論点② ゲーム進行 — 事件アーク (派生グラフ) と小騒動 / 2.3 4 軸評価",
+      "sourceEventId": "28e29cc1-be32-56c5-a855-d0bfbb881cb5",
+      "id": "01M20FNWWNNQWDFGEF297PBCWZ",
+      "revision": 2,
+      "sha256": "28e29cc1be32c6c5d855d0bfbb881cb565e1ff0e764b4dd06c3fa23d15e5bda2"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 169,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 3. 論点③ ユーザ介入 — 「即時に見える × 環境に爪痕」を埋める",
+      "sourceEventId": "b1b29f38-bd2a-5a9b-a684-e5a4234d02fa",
+      "id": "01M20FNWWXC5MDM1A23YJKPS5E",
+      "revision": 2,
+      "sha256": "b1b29f38bd2aaa9b0684e5a4234d02fa06d7d21ffa8a1630727e2b64b37a3050"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 181,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 3. 論点③ ユーザ介入 — 「即時に見える × 環境に爪痕」を埋める / 3.1 現状マトリクス (棚卸し)",
+      "sourceEventId": "911d3ad0-d8de-5292-a531-5667d7bbd34b",
+      "id": "01M20FNWX59RMVK47KBM68E5HV",
+      "revision": 2,
+      "sha256": "911d3ad0d8dec292a5315667d7bbd34b06a5fb4dd41b4e74de232f069eefc437"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 190,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 3. 論点③ ユーザ介入 — 「即時に見える × 環境に爪痕」を埋める / 3.2 設計原則 — 介入 2 点セットの必須化",
+      "sourceEventId": "7238dd21-15df-5b0e-a517-f2510bfa2190",
+      "id": "01M20FNWXDJ54X9KEC4PED4VD4",
+      "revision": 2,
+      "sha256": "7238dd2115dffb0e3517f2510bfa219045aaf8c98472618964c52318475bbf38"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 197,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 3. 論点③ ユーザ介入 — 「即時に見える × 環境に爪痕」を埋める / 3.3 新介入 5 種 (すべて LLM 追加ゼロ〜cheap 1 回)",
+      "sourceEventId": "64d8919b-a42d-5d09-a453-1d4ad68dc809",
+      "id": "01M20FNWXNSV4Z43SN8K0HEETF",
+      "revision": 2,
+      "sha256": "64d8919ba42dbd0944531d4ad68dc8090c1055002ca2b6a935ca9b178246d9b4"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 210,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 3. 論点③ ユーザ介入 — 「即時に見える × 環境に爪痕」を埋める / 3.4 優先順位 (4 軸)",
+      "sourceEventId": "06a74912-1423-572a-af7a-281775253eee",
+      "id": "01M20FNWXWM1BR78NQBZHPMT6C",
+      "revision": 2,
+      "sha256": "06a749121423572aff7a281775253eee51450fd4a95173108015eaaabd9cb737"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 216,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 4. 論点④ カルトオブラム層ターゲット × 善良ゲーム — テーマパックとモラルダイヤル",
+      "sourceEventId": "bda9ad2d-f617-5434-aa52-8fa426631ef3",
+      "id": "01M20FNWY3A6KXPV6P4JC17AWA",
+      "revision": 2,
+      "sha256": "bda9ad2df6173434da528fa426631ef3566d64d614541886e3b4a497ca3454b4"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 226,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 4. 論点④ カルトオブラム層ターゲット × 善良ゲーム — テーマパックとモラルダイヤル / 4.1 分析 — CotL の魅力の分解と Pagus の対応物",
+      "sourceEventId": "22e35723-bbec-5272-a903-87c7d2ad1212",
+      "id": "01M20FNWYAR5XY0KTA285X97XA",
+      "revision": 2,
+      "sha256": "22e35723bbec7272e90387c7d2ad1212e89c8a5ee5b4e84aa907d9f121b54f8d"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 237,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 4. 論点④ カルトオブラム層ターゲット × 善良ゲーム — テーマパックとモラルダイヤル / 4.2 改修パターン",
+      "sourceEventId": "eb5cac12-a657-548f-a289-4df182a57e1a",
+      "id": "01M20FNWYHVA7GXJ6A5GGYE7DC",
+      "revision": 2,
+      "sha256": "eb5cac12a657048f32894df182a57e1af587c6eaba26c767402ed8377ba0c36a"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 244,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 4. 論点④ カルトオブラム層ターゲット × 善良ゲーム — テーマパックとモラルダイヤル / 4.3 モチーフ候補の 4 軸比較",
+      "sourceEventId": "cd774fbf-eb5c-5650-a973-eb81dda18ed7",
+      "id": "01M20FNWYRH8GNZGEAMQHE1FT2",
+      "revision": 2,
+      "sha256": "cd774fbfeb5c16504973eb81dda18ed7ae98c39ac40e94dc25fbd9f396140e25"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 255,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 4. 論点④ カルトオブラム層ターゲット × 善良ゲーム — テーマパックとモラルダイヤル / 4.4 実装設計",
+      "sourceEventId": "c85fb61b-ac4b-5860-a573-545f9d50972c",
+      "id": "01M20FNWYZKKASSYTWQHDZ7VWQ",
+      "revision": 2,
+      "sha256": "c85fb61bac4bd8601573545f9d50972cddd835150c8de2a1d93a0b00cb81d6bf"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 264,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 5. 実装フェーズ / PR 分割",
+      "sourceEventId": "59dc6193-382b-5387-a70c-2ff4a12acefc",
+      "id": "01M20FNWZ85V63P0H1HJGQT37E",
+      "revision": 2,
+      "sha256": "59dc6193382b1387170c2ff4a12acefc2d992698ebf7cf5f22963726dad8ebda"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 277,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 6. config 追加 (暗号化 config dotkey、すべて平文)",
+      "sourceEventId": "b4ec4201-fd0e-5d8e-a59f-9c96ed61ea42",
+      "id": "01M20FNWZE7H19BMPBDV5E6PE1",
+      "revision": 2,
+      "sha256": "b4ec4201fd0e4d8e059f9c96ed61ea42119a34bf1e23e55f8f104a71022aeb9a"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 287,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 7. テスト方針",
+      "sourceEventId": "e0b64edd-3f07-552e-a5a7-1c80a2443427",
+      "id": "01M20FNWZNMDDVRH0F75BT4XHQ",
+      "revision": 2,
+      "sha256": "e0b64edd3f07452ed5a71c80a24434270d4c13f90e1f7604bd21eb9bf64ce2eb"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 293,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 8. 進行中作業との整合 (2026-07-02 時点の未コミット変更)",
+      "sourceEventId": "bd07361e-b83b-5590-abf1-d7d4126e131c",
+      "id": "01M20FNWZWM71BWD1GK3W5KM02",
+      "revision": 2,
+      "sha256": "bd07361eb83b65904bf1d7d4126e131c6ef37f658aa73a38addf35694e8ab178"
+    },
+    {
+      "file": "spec/feature/thinking-flow-redesign-v1.4.md",
+      "line": 301,
+      "title": "住民思考・ゲームフロー レビュー & v1.4 実装設計 — 蒸留ループ / 事件アーク / 即効介入 / 善良テーマ / 9. 開いた判断",
+      "sourceEventId": "0059b19c-ee28-51c5-af02-f4aeba0358d7",
+      "id": "01M20FNX03PPNMQQJGP48B7XZ4",
+      "revision": 2,
+      "sha256": "0059b19cee2831c54f02f4aeba0358d746104dd6bd77da7ae2e3cb60f2c03c81"
+    },
+    {
+      "file": "spec/feature/town-life.md",
+      "line": 3,
+      "title": "一つの街と住民の生活 / 街の構成",
+      "sourceEventId": "cb4489f9-03cf-589f-a012-20041bbf4b81",
+      "id": "01M20FNX0ASNN9PA70M69WZDBC",
+      "revision": 2,
+      "sha256": "cb4489f903cff89fb01220041bbf4b812c6ba51055dcb6867402cb7382de03e8"
+    },
+    {
+      "file": "spec/feature/town-life.md",
+      "line": 9,
+      "title": "一つの街と住民の生活 / 暮らしの保存",
+      "sourceEventId": "bc1fdbe6-6e34-5710-afb0-e1f4caf619a8",
+      "id": "01M20FNX0HK7W5VWVGW11DC825",
+      "revision": 2,
+      "sha256": "bc1fdbe66e34d710cfb0e1f4caf619a846ea6d1259a08b1456c627fdc33de236"
+    },
+    {
+      "file": "spec/feature/town-life.md",
+      "line": 17,
+      "title": "一つの街と住民の生活 / 目的と一日",
+      "sourceEventId": "4cbaee32-f416-55e9-a48c-599af392ed4a",
+      "id": "01M20FNX0RTT3AA1KAY2XB6X7J",
+      "revision": 2,
+      "sha256": "4cbaee32f416f5e9548c599af392ed4a926efe2317187cb766d330968aaa61d9"
+    },
+    {
+      "file": "spec/feature/town-life.md",
+      "line": 25,
+      "title": "一つの街と住民の生活 / 描画と操作",
+      "sourceEventId": "e2c440ae-f916-55a0-a950-cec080c5995e",
+      "id": "01M20FNX0YBBDC2ATRDCAG9XTH",
+      "revision": 2,
+      "sha256": "e2c440aef91675a00950cec080c5995e2d4b2231182b81da1a6491fcf5f92f84"
+    },
+    {
+      "file": "spec/feature/town-life.md",
+      "line": 33,
+      "title": "一つの街と住民の生活 / 確認と境界",
+      "sourceEventId": "8f9a706c-cc4d-5e87-aca1-937642c2ccb3",
+      "id": "01M20FNX1640KAHXXR19AQNZD7",
+      "revision": 2,
+      "sha256": "8f9a706ccc4d2e875ca1937642c2ccb3b43ef6b08fd0dbe802be44fac296e8d7"
+    },
+    {
+      "file": "spec/feature/trial-precedent.md",
+      "line": 1,
+      "title": "裁判判例 (trial precedent) — 成長型ブラックボックス採用",
+      "sourceEventId": "9accbfdd-9585-50db-aeba-52209bbbe915",
+      "id": "01M20FNX1DYTFMJC16BPMRP9DP",
+      "revision": 2,
+      "sha256": "9accbfdd958580dbceba52209bbbe915d7ac101539be1049ef1fa6b72a4b27f2"
+    },
+    {
+      "file": "spec/feature/trial-precedent.md",
+      "line": 7,
+      "title": "裁判判例 (trial precedent) — 成長型ブラックボックス採用 / 仕組み",
+      "sourceEventId": "b95e2869-ba24-5174-ab46-8a2f517563c4",
+      "id": "01M20FNX2NCWEQV6PBQA3PVVEJ",
+      "revision": 2,
+      "sha256": "b95e2869ba243174bb468a2f517563c44d2ea89b37fd3b1cde8f6c2fb9d0f10a"
+    },
+    {
+      "file": "spec/feature/trial-precedent.md",
+      "line": 22,
+      "title": "裁判判例 (trial precedent) — 成長型ブラックボックス採用 / 置き場所 / API",
+      "sourceEventId": "1f0e5a9e-bb7e-509b-ab43-2da43096df3a",
+      "id": "01M20FNX30YTJDCYTW63SM13EB",
+      "revision": 2,
+      "sha256": "1f0e5a9ebb7ef09b1b432da43096df3a8f5a62d59405da6c577eda9973e9efa5"
+    },
+    {
+      "file": "spec/feature/trial-precedent.md",
+      "line": 32,
+      "title": "裁判判例 (trial precedent) — 成長型ブラックボックス採用 / 非ゴール / 将来",
+      "sourceEventId": "4233d734-e9a0-5a64-a416-c6ea0302c7f6",
+      "id": "01M20FNX385CD41S7WPHZEA80Z",
+      "revision": 2,
+      "sha256": "4233d734e9a0da644416c6ea0302c7f67ddb68c7044adbed2c7bc6cf1b92163d"
+    },
+    {
+      "file": "spec/feature/villager-economy.md",
+      "line": 1,
+      "title": "住民経済 (§15) — 貧富・趣味消費・非行・クズ化",
+      "sourceEventId": "e9c6ba80-40a7-5e83-aaae-a435e287ec04",
+      "id": "01M20FNX3G15YZTC2CP9QB8T2T",
+      "revision": 2,
+      "sha256": "e9c6ba8040a7ee834aaea435e287ec046a47268b65cc938977be3ca4a57f8bef"
+    },
+    {
+      "file": "spec/feature/villager-economy.md",
+      "line": 7,
+      "title": "住民経済 (§15) — 貧富・趣味消費・非行・クズ化 / 目的",
+      "sourceEventId": "904e74ec-ec94-5913-a6ee-08439d6d8431",
+      "id": "01M20FNX3QPYZDV2CMZ6DCE57A",
+      "revision": 2,
+      "sha256": "904e74ecec94c91336ee08439d6d84314e7e3ddad98f972801f31082c8fd5ec9"
+    },
+    {
+      "file": "spec/feature/villager-economy.md",
+      "line": 13,
+      "title": "住民経済 (§15) — 貧富・趣味消費・非行・クズ化 / データモデル (`Villager` 追加フィールド)",
+      "sourceEventId": "a44fbbbb-73ae-5249-ab7e-922300da743f",
+      "id": "01M20FNX3ZP3YK0T3DN9JBCFXC",
+      "revision": 2,
+      "sha256": "a44fbbbb73aeb2497b7e922300da743fc2d6c05198272f1a72370d3f5f5d1949"
+    },
+    {
+      "file": "spec/feature/villager-economy.md",
+      "line": 27,
+      "title": "住民経済 (§15) — 貧富・趣味消費・非行・クズ化 / アルゴリズム (`packages/sim/src/economy.ts`)",
+      "sourceEventId": "ed3d4258-c38a-56cd-a50f-8e934cea967f",
+      "id": "01M20FNX47TG38K0YAM8KN1Y7A",
+      "revision": 2,
+      "sha256": "ed3d4258c38ad6cd150f8e934cea967fcd4c3411d069e5b5c6319844dd9cb5b8"
+    },
+    {
+      "file": "spec/feature/villager-economy.md",
+      "line": 42,
+      "title": "住民経済 (§15) — 貧富・趣味消費・非行・クズ化 / 非行・クズ化の事件化連動 (behavior-rules)",
+      "sourceEventId": "05b712cd-2745-5e9c-a8e0-59fc01b86372",
+      "id": "01M20FNX4FKT6N0E5DAT2RKSSP",
+      "revision": 2,
+      "sha256": "05b712cd27458e9ce8e059fc01b86372e94de6e35551afd32d467e7fca3d2b6f"
+    },
+    {
+      "file": "spec/feature/villager-economy.md",
+      "line": 54,
+      "title": "住民経済 (§15) — 貧富・趣味消費・非行・クズ化 / 観測 (client)",
+      "sourceEventId": "a04debbb-9adb-57fe-a088-bb5da2bbc318",
+      "id": "01M20FNX4PH3ECSE2PHA33GZR2",
+      "revision": 2,
+      "sha256": "a04debbb9adb87fe0088bb5da2bbc31835b74e2d01a4e7811fbda53e4505ece7"
+    },
+    {
+      "file": "spec/feature/villager-economy.md",
+      "line": 59,
+      "title": "住民経済 (§15) — 貧富・趣味消費・非行・クズ化 / 開いた判断 / 今後",
+      "sourceEventId": "cb068382-8f51-5cf5-a67b-4bb36f39cdc6",
+      "id": "01M20FNX4XB6M3Q1GKJAKVNKRP",
+      "revision": 2,
+      "sha256": "cb0683828f51acf5967b4bb36f39cdc647d481ee3104f9c8601c392506eaf6aa"
+    },
+    {
+      "file": "spec/feature/villager-mayor.md",
+      "line": 1,
+      "title": "村長 (村人の選挙) §17",
+      "sourceEventId": "08002d1a-ca3d-59fd-a8d1-2f26d956a0a8",
+      "id": "01M20FNX54B16B0MAHG8Y0E4RC",
+      "revision": 2,
+      "sha256": "08002d1aca3dd9fd88d12f26d956a0a86234e2bbc7559e6349f7e81f341f9807"
+    },
+    {
+      "file": "spec/feature/villager-mayor.md",
+      "line": 6,
+      "title": "村長 (村人の選挙) §17 / モデル",
+      "sourceEventId": "09f29776-8337-52ff-a8bf-473909b90850",
+      "id": "01M20FNX5B01NYTVFE8KZ9S77R",
+      "revision": 2,
+      "sha256": "09f297768337e2ff28bf473909b908500e43d9bbef7f03325df5255588617d15"
+    },
+    {
+      "file": "spec/feature/villager-mayor.md",
+      "line": 13,
+      "title": "村長 (村人の選挙) §17 / アルゴリズム (`packages/sim/src/mayor.ts`)",
+      "sourceEventId": "66dfdb33-8e96-52ee-aafb-63c14008c480",
+      "id": "01M20FNX5KK1T226PB6X22SGEJ",
+      "revision": 2,
+      "sha256": "66dfdb338e96b2ee1afb63c14008c480f92e93e8baee5d2b29cf18a19c70d858"
+    },
+    {
+      "file": "spec/feature/villager-mayor.md",
+      "line": 30,
+      "title": "村長 (村人の選挙) §17 / アルゴリズム (`packages/sim/src/mayor.ts`) / 既定値 (`DEFAULT_MAYOR`, ターム基準 = ゲーム内1日)",
+      "sourceEventId": "232609f0-652c-5e75-a36c-69c260c1c0f9",
+      "id": "01M20FNX5VQNYKZK22MGVJNJ83",
+      "revision": 2,
+      "sha256": "232609f0652cee75c36c69c260c1c0f9308f25780d8eaf564eae09e83a92e5a8"
+    },
+    {
+      "file": "spec/feature/villager-mayor.md",
+      "line": 36,
+      "title": "村長 (村人の選挙) §17 / 配線",
+      "sourceEventId": "99110771-0ed6-536e-a582-f7d8cd6e5ec8",
+      "id": "01M20FNX646XHG0J9KDFP4V0C9",
+      "revision": 2,
+      "sha256": "991107710ed6b36ee582f7d8cd6e5ec8aaa00eebfbb2c90ab7973e29a9163aba"
+    },
+    {
+      "file": "spec/feature/villager-mayor.md",
+      "line": 45,
+      "title": "村長 (村人の選挙) §17 / 開いた判断 / 今後",
+      "sourceEventId": "e2215ac5-7cf7-5672-ae4a-2eca87aa4dff",
+      "id": "01M20FNX6FVHNC6FQPF4Z77FR1",
+      "revision": 2,
+      "sha256": "e2215ac57cf7f6727e4a2eca87aa4dff5fbde1aecba18b914e8047dad1c8c428"
+    },
+    {
+      "file": "spec/interface/brain-backends.md",
+      "line": 1,
+      "title": "Brain backends — マルチモデル分散 (v0.2)",
+      "sourceEventId": "89543393-4be9-5357-ad73-68abbf255eb4",
+      "id": "01M20FNX6QRVVZX0N909H0TJ3D",
+      "revision": 2,
+      "sha256": "895433934be993570d7368abbf255eb491a1bb192d08cb816509c8c4864df0b7"
+    },
+    {
+      "file": "spec/interface/brain-backends.md",
+      "line": 7,
+      "title": "Brain backends — マルチモデル分散 (v0.2) / レイヤ構成",
+      "sourceEventId": "47366a26-ecf0-5135-af16-ca4e67570d74",
+      "id": "01M20FNX6ZV46FMA0W0R10QCWZ",
+      "revision": 2,
+      "sha256": "47366a26ecf0b1354f16ca4e67570d743a8d827eb2d4f6cd3f9e9db9ef0be196"
+    },
+    {
+      "file": "spec/interface/brain-backends.md",
+      "line": 19,
+      "title": "Brain backends — マルチモデル分散 (v0.2) / backend 抽象",
+      "sourceEventId": "1dd7488f-68ef-5ee3-ae88-16f16315e6cf",
+      "id": "01M20FNX76VMRTT4CH1CJEAVPR",
+      "revision": 2,
+      "sha256": "1dd7488f68ef8ee31e8816f16315e6cfc341bdf13528ca053a3ebeae8348de40"
+    },
+    {
+      "file": "spec/interface/brain-backends.md",
+      "line": 37,
+      "title": "Brain backends — マルチモデル分散 (v0.2) / デフォルトキャスト",
+      "sourceEventId": "b77e7021-1c9d-5c0b-aa05-32fb66d1e11e",
+      "id": "01M20FNX7D04NWH3C6GQ5PEG6C",
+      "revision": 2,
+      "sha256": "b77e70211c9d9c0b1a0532fb66d1e11e32702e8e2dc07b630d7c9b6d6fbf9032"
+    },
+    {
+      "file": "spec/interface/brain-backends.md",
+      "line": 49,
+      "title": "Brain backends — マルチモデル分散 (v0.2) / per-villager 割当",
+      "sourceEventId": "d77dc605-7e80-5c2f-acd7-b750df06d5d3",
+      "id": "01M20FNX7MQZX93WG69MGF7RK7",
+      "revision": 2,
+      "sha256": "d77dc6057e80fc2fdcd7b750df06d5d379f370a3560ff2942bc2c89e3e42fcf3"
+    },
+    {
+      "file": "spec/interface/brain-backends.md",
+      "line": 58,
+      "title": "Brain backends — マルチモデル分散 (v0.2) / tier ルーティング (strong override)",
+      "sourceEventId": "a565afc2-c9d7-5b6a-ae70-b6fef2800171",
+      "id": "01M20FNX7Y48841X8XZQBEYK71",
+      "revision": 2,
+      "sha256": "a565afc2c9d75b6a9e70b6fef2800171aa17fcf8536a6f6b24cee8691c13c48e"
+    },
+    {
+      "file": "spec/interface/brain-backends.md",
+      "line": 71,
+      "title": "Brain backends — マルチモデル分散 (v0.2) / プロンプト / 出力契約",
+      "sourceEventId": "21132876-9267-5d46-a5b7-7a357ea93caa",
+      "id": "01M20FNX89FMKY3KFA957SXARS",
+      "revision": 2,
+      "sha256": "211328769267bd46e5b77a357ea93caa0ae9a05ecbd34c45f3f846a36bee0fc3"
+    },
+    {
+      "file": "spec/interface/brain-backends.md",
+      "line": 83,
+      "title": "Brain backends — マルチモデル分散 (v0.2) / 起動切替",
+      "sourceEventId": "97e4de00-e784-5623-a4bb-36c8b28c7ee0",
+      "id": "01M20FNX8M2EFGBJ6Y82YVNSQA",
+      "revision": 2,
+      "sha256": "97e4de00e784862324bb36c8b28c7ee09acc2a66aa20a5cdc0d08d8512fc2a18"
+    },
+    {
+      "file": "spec/interface/notification-voting.md",
+      "line": 1,
+      "title": "通知投票 (WebPush) — インターフェース仕様",
+      "sourceEventId": "74d8aa9a-16b4-53f2-a703-babec64c329b",
+      "id": "01M20FNX8XHNVB5W5V1NP62VFP",
+      "revision": 2,
+      "sha256": "74d8aa9a16b463f2a703babec64c329bc45016da91970563e3d696956f1bc4ac"
+    },
+    {
+      "file": "spec/interface/notification-voting.md",
+      "line": 6,
+      "title": "通知投票 (WebPush) — インターフェース仕様 / 目的",
+      "sourceEventId": "f97be63b-278b-5711-aeea-0d9e7c4848e1",
+      "id": "01M20FNX95VBSPY2S4YHQ7EY5G",
+      "revision": 2,
+      "sha256": "f97be63b278bc711deea0d9e7c4848e128ed0957c3712cee52e3055559cac5b8"
+    },
+    {
+      "file": "spec/interface/notification-voting.md",
+      "line": 11,
+      "title": "通知投票 (WebPush) — インターフェース仕様 / userId (投票の単位)",
+      "sourceEventId": "7af75ac0-46f8-5244-a118-b553db940e75",
+      "id": "01M20FNX9GF75RB9YFD2HB2MW8",
+      "revision": 2,
+      "sha256": "7af75ac046f852441118b553db940e751068608739b6c354cef974ad26af3ded"
+    },
+    {
+      "file": "spec/interface/notification-voting.md",
+      "line": 20,
+      "title": "通知投票 (WebPush) — インターフェース仕様 / HTTP API (game server, WS と同一ポート 4310)",
+      "sourceEventId": "a8d2208e-b3e9-5cae-a4e4-d7e4c241476b",
+      "id": "01M20FNX9QMQXA4VZYSJFCENQJ",
+      "revision": 2,
+      "sha256": "a8d2208eb3e9fcae54e4d7e4c241476bbe4193d1fbbaad80fcc491734465ed87"
+    },
+    {
+      "file": "spec/interface/notification-voting.md",
+      "line": 31,
+      "title": "通知投票 (WebPush) — インターフェース仕様 / WebPush フロー",
+      "sourceEventId": "00576827-c3cd-5241-ab50-e3659807a8d4",
+      "id": "01M20FNX9YQ50K5KM6FM7JYJQQ",
+      "revision": 2,
+      "sha256": "00576827c3cde2414b50e3659807a8d483b4fd09ca512f39c06da208bc7ed734"
+    },
+    {
+      "file": "spec/interface/notification-voting.md",
+      "line": 41,
+      "title": "通知投票 (WebPush) — インターフェース仕様 / 永続化 / 設定 (env)",
+      "sourceEventId": "0e91c33c-7158-5e32-a18a-eba0b2d90347",
+      "id": "01M20FNXA32FGPW45X4DPG3J95",
+      "revision": 2,
+      "sha256": "0e91c33c7158ae32a18aeba0b2d903471d78eaf8469fb6909a9dd2071f828279"
+    },
+    {
+      "file": "spec/interface/notification-voting.md",
+      "line": 48,
+      "title": "通知投票 (WebPush) — インターフェース仕様 / 実装ファイル",
+      "sourceEventId": "2ce22436-3cde-591f-adca-387ea8ea5bf9",
+      "id": "01M20FNXAA3SNZAM8ST1M5ZVGM",
+      "revision": 2,
+      "sha256": "2ce224363cdee91fbdca387ea8ea5bf9cafd22e993a5463552d1f61e1fa07622"
+    },
+    {
+      "file": "spec/operations.md",
+      "line": 1,
+      "title": "Pagus 運用方針",
+      "sourceEventId": "e4719433-dc22-572d-aac5-b12772d7ad22",
+      "id": "01M20FNXAHP0TQ33M574X5QQK3",
+      "revision": 2,
+      "sha256": "e4719433dc22d72dfac5b12772d7ad228da9b4f1d55faa97edb9dbebfcd73851"
+    },
+    {
+      "file": "spec/test-plan.md",
+      "line": 1,
+      "title": "Pagus テスト計画",
+      "sourceEventId": "43e42485-7a07-5dfb-a534-cc67e3f2df63",
+      "id": "01M20FNXASAVFVGKNWTX48BHDV",
+      "revision": 2,
+      "sha256": "43e424857a078dfbf534cc67e3f2df63512e2df77bbcbc3b95c49d3cc375dd99"
+    },
+    {
+      "file": "spec/feature/village-presence.md",
+      "line": 1,
+      "title": "村の存在感と観戦者への呼びかけ",
+      "sourceEventId": "37ffe40b-afd9-5005-a21a-847be2235919",
+      "id": "01M20FNXB136C692ZNZ1PHFQ6J",
+      "revision": 2,
+      "sha256": "37ffe40bafd9a005521a847be2235919c4e544acc1077a12a3c40e9e520ccbc2"
+    },
+    {
+      "file": "spec/feature/village-presence.md",
+      "line": 6,
+      "title": "村の存在感と観戦者への呼びかけ / PA-PRESENCE-01 住民の動き",
+      "sourceEventId": "a6ec01c8-0859-508b-aeca-6bea916380d6",
+      "id": "01M20FNXB801H3BXXKKXV9VS61",
+      "revision": 2,
+      "sha256": "a6ec01c80859908b5eca6bea916380d65ff0c6a25d62c9d5667507df7724da63"
+    },
+    {
+      "file": "spec/feature/village-presence.md",
+      "line": 12,
+      "title": "村の存在感と観戦者への呼びかけ / PA-PRESENCE-02 目と詳細モデル",
+      "sourceEventId": "b23164e1-e007-5594-a5d9-bcd94a1e9544",
+      "id": "01M20FNXBES3TGGR2RPKNG56S0",
+      "revision": 2,
+      "sha256": "b23164e1e007859415d9bcd94a1e954486c5b7be746892a8dc90a36044cdbe53"
+    },
+    {
+      "file": "spec/feature/village-presence.md",
+      "line": 19,
+      "title": "村の存在感と観戦者への呼びかけ / PA-PRESENCE-03 噴水を中心とする村",
+      "sourceEventId": "2602c3b1-e345-5c4b-aea8-acb413815287",
+      "id": "01M20FNXBNB63NX5XTTW7XWSHA",
+      "revision": 2,
+      "sha256": "2602c3b1e3456c4beea8acb41381528799c3db85327cafa2f566650aa6c2e32f"
+    },
+    {
+      "file": "spec/feature/village-presence.md",
+      "line": 27,
+      "title": "村の存在感と観戦者への呼びかけ / PA-PRESENCE-04 非公開の呼びかけ",
+      "sourceEventId": "24892a16-aaa5-592c-a532-63f0d49de70a",
+      "id": "01M20FNXBW8AA5M587ZYKCZX0E",
+      "revision": 2,
+      "sha256": "24892a16aaa5b92c953263f0d49de70a8fc216b9390482a4ea3a802e1e209469"
+    },
+    {
+      "file": "spec/feature/village-presence.md",
+      "line": 37,
+      "title": "村の存在感と観戦者への呼びかけ / 構成と確認",
+      "sourceEventId": "7a13d970-4b9a-5c6e-aa2e-ab445dabd991",
+      "id": "01M20FNXC4W2H91Z9PN3RZ2TJB",
+      "revision": 2,
+      "sha256": "7a13d9704b9afc6e8a2eab445dabd991ce8347f1473d4b14ede7e4b5c7647b24"
+    },
+    {
+      "file": "spec/ux/product.md",
+      "line": 3,
+      "title": "UX-PA-PRODUCT / 体験",
+      "sourceEventId": "a697dc8b-d165-53c5-a753-3882eee68358",
+      "id": "01M20FNXCATAE74TD7BSDAH5SJ",
+      "revision": 2,
+      "sha256": "a697dc8bd165e3c567533882eee683585652c6f3e6192dfe8014fafee88cb27c"
+    },
+    {
+      "file": "spec/ux/product.md",
+      "line": 8,
+      "title": "UX-PA-PRODUCT / コアドメイン案",
+      "sourceEventId": "f6a0dd05-ad0a-5e5f-ad87-e0626994e70b",
+      "id": "01M20FNXCJDSJ7BGEBQ9EFNEF8",
+      "revision": 2,
+      "sha256": "f6a0dd05ad0aee5f2d87e0626994e70bbd8b76bdf85c00a2cc81f96a15acfee9"
+    },
+    {
+      "file": "spec/ux/product.md",
+      "line": 17,
+      "title": "UX-PA-PRODUCT / 評価する体験",
+      "sourceEventId": "9cb2e3d9-1414-59ac-ae2d-2107403660ea",
+      "id": "01M20FNXCRBTZAZDJQ30QR4JPP",
+      "revision": 2,
+      "sha256": "9cb2e3d9141419acce2d2107403660ea5f3f7866dbc5c43a47500d2ce9bb320b"
+    },
+    {
+      "file": "spec/feature/domain-proposals.md",
+      "line": 1,
+      "title": "PA-DOMAINS コアとビジネスドメインの提案",
+      "sourceEventId": "e9375a79-5103-5c85-ac6f-b806548d9453",
+      "id": "01M20FNXCZEMMY5NG8VVD15V00",
+      "revision": 2,
+      "sha256": "e9375a7951032c85bc6fb806548d9453c6554d2a4d7ff26033977061065d7496"
+    },
+    {
+      "file": "spec/feature/domain-proposals.md",
+      "line": 7,
+      "title": "PA-DOMAINS コアとビジネスドメインの提案 / コア4件",
+      "sourceEventId": "d564ef4e-7f34-5ec7-a173-ff1c4b53fca0",
+      "id": "01M20FNXD7EPNJ3ZA3B2XYNEMX",
+      "revision": 2,
+      "sha256": "d564ef4e7f348ec7d173ff1c4b53fca01b2c28f412f63f66a51a0ceb93f78ea6"
+    },
+    {
+      "file": "spec/feature/domain-proposals.md",
+      "line": 16,
+      "title": "PA-DOMAINS コアとビジネスドメインの提案 / ビジネス候補9件（未確定）",
+      "sourceEventId": "ea7cdcde-28c7-505f-ab01-2f8e5650c64d",
+      "id": "01M20GDBFGVB09T9Y6GEGGSQMJ",
+      "revision": 2,
+      "sha256": "ea7cdcde28c7f05f7b012f8e5650c64d33a03f632a0a79f47b702c975ada01f6"
+    },
+    {
+      "file": "spec/feature/domain-proposals.md",
+      "line": 30,
+      "title": "PA-DOMAINS コアとビジネスドメインの提案 / 境界で注意する点",
+      "sourceEventId": "2c57ceba-c8b8-5369-a61a-9a4406acfcf6",
+      "id": "01M20FNXDPAGDB8962QQNS77TS",
+      "revision": 2,
+      "sha256": "2c57cebac8b88369661a9a4406acfcf697f3ad7b93c417143fc66fc1214bd37c"
+    },
+    {
+      "file": "spec/feature/domain-proposals.md",
+      "line": 37,
+      "title": "PA-DOMAINS コアとビジネスドメインの提案 / 技術基盤として分けるもの",
+      "sourceEventId": "ee8d56c4-8437-5b14-a9fa-298a049a0c09",
+      "id": "01M20FNXDWAB17682MSM2SWWD7",
+      "revision": 2,
+      "sha256": "ee8d56c484370b14e9fa298a049a0c09babbcc7b975aca5f02ef97eef0ebf8ba"
+    },
+    {
+      "file": "spec/feature/domain-proposals.md",
+      "line": 42,
+      "title": "PA-DOMAINS コアとビジネスドメインの提案 / Anatomiaで確認した未登録の意味",
+      "sourceEventId": "99dff862-da65-5fda-ac08-613874e62747",
+      "id": "01M20FNXE3HZXYD861PAPDMZBD",
+      "revision": 2,
+      "sha256": "99dff862da658fda6c08613874e62747bd399dbce2803d94094800b9746aa140"
+    },
+    {
+      "file": "spec/feature/domain-proposals.md",
+      "line": 50,
+      "title": "PA-DOMAINS コアとビジネスドメインの提案 / 現在の16解析ドメイン",
+      "sourceEventId": "7a7a1c96-5a44-5297-a23b-6d0b42e3fb32",
+      "id": "01M20FNXEASV6E83PNW3BC6SNQ",
+      "revision": 2,
+      "sha256": "7a7a1c965a44b297323b6d0b42e3fb321f6dc98f6bf5212464623deff5e3d2e5"
+    }
+  ],
+  "totalStoredFragments": 279,
+  "readbackVerified": true
+}

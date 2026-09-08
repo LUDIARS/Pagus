@@ -11,10 +11,18 @@ uniform vec3 offset;
 uniform vec2 scale;
 uniform float yaw;
 uniform vec3 focus;
+uniform vec4 pose;
 out vec3 world;
 out vec3 tint;
 void main() {
-  world = position + offset;
+  vec3 local = position;
+  float swing = sin(pose.z) * pose.w;
+  float limb = step(.22, abs(local.x)) * (1. - smoothstep(.75, 1., local.y));
+  local.z += sign(local.x) * swing * limb;
+  local.x += swing * .10 * local.y;
+  local *= pose.y;
+  world = vec3(cos(pose.x)*local.x + sin(pose.x)*local.z, local.y,
+    -sin(pose.x)*local.x + cos(pose.x)*local.z) + offset;
   vec3 relative = world - focus;
   float x = cos(yaw)*relative.x - sin(yaw)*relative.z;
   float z = sin(yaw)*relative.x + cos(yaw)*relative.z;
@@ -44,6 +52,7 @@ export class VillageRenderer {
         scale: WebGLUniformLocation;
         yaw: WebGLUniformLocation;
         focus: WebGLUniformLocation;
+        pose: WebGLUniformLocation;
     };
     yaw = -0.2;
     zoom = 1;
@@ -82,7 +91,7 @@ export class VillageRenderer {
                     throw new Error(`3D uniform missing: ${name}`);
                 return loc;
             };
-            this.uniforms = { offset: location('offset'), scale: location('scale'), yaw: location('yaw'), focus: location('focus') };
+            this.uniforms = { offset: location('offset'), scale: location('scale'), yaw: location('yaw'), focus: location('focus'), pose: location('pose') };
             this.program = program;
         }
         catch (error) {
@@ -137,7 +146,7 @@ export class VillageRenderer {
         gl.uniform1f(this.uniforms.yaw, this.yaw);
         gl.uniform3f(this.uniforms.focus, ...this.focus);
     }
-    draw(mesh: VillageMesh, offset: Vec3): void {
+    draw(mesh: VillageMesh, offset: Vec3, heading = 0, size = 1, phase = 0, stride = 0): void {
         const gl = this.gl;
         gl.bindBuffer(gl.ARRAY_BUFFER, mesh.buffer);
         gl.enableVertexAttribArray(0);
@@ -145,6 +154,7 @@ export class VillageRenderer {
         gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
         gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
         gl.uniform3f(this.uniforms.offset, ...offset);
+        gl.uniform4f(this.uniforms.pose, heading, size, phase, stride);
         gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
     }
     project([x, y, z]: Vec3): {

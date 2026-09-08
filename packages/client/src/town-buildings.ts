@@ -7,7 +7,7 @@ const ROOFS: Partial<Record<TownSite['kind'], Vec3>> = { doctor: [.65, .34, .33]
 export function townBuilding(site: TownSite, origin: Vec3, halfCell: number, damaged = false, mutations: readonly MixedPart[] = []): ShapePart[] {
   const parts: ShapePart[] = [];
   const add = (x: number, y: number, z: number, rx: number, ry: number, rz: number, color: Vec3, box = true): void => {
-    parts.push({ center: [origin[0] + x * halfCell, y, origin[2] + z * halfCell], radius: [rx * halfCell, ry, rz * halfCell], color, box });
+    parts.push({ center: [origin[0] + x * halfCell, origin[1] + y, origin[2] + z * halfCell], radius: [rx * halfCell, ry, rz * halfCell], color, box });
   };
   const wood: Vec3 = [.4, .28, .2];
   if (damaged) {

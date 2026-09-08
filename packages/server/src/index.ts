@@ -25,6 +25,7 @@ import { PushService } from './push-service.js';
 import { ChatStore } from './chat-store.js';
 import { GodChatResponder } from './god-chat.js';
 import { BtGodChatResponder } from './bt-god-chat.js';
+import { ObserverOutreach } from './llm/observer-outreach.js';
 import { ResidentBtBrain, AutonomousWorldBrain, residentSpeech } from '@pagus/sim';
 import type { BlackBox } from '@ludiars/blackbox';
 import { makeTrialFateBlackBox } from './llm/fate-blackbox.js';
@@ -839,6 +840,19 @@ function main(): void {
         console.warn(`[pagus] 神の声チャット応答に失敗: ${(err as Error).message}`);
       });
   };
+
+  const observerOutreach = process.env.PAGUS_BRAIN === 'llm' ? new ObserverOutreach({
+    client: new CliLlmClient({provider:'claude',model:'claude-haiku-4-5',retries:0}),
+    world: () => tm.world,
+    hasObservers: () => ws.connectedUserIds().length > 0,
+    costSink: e => costLog.record(e),
+    publish: speech => {
+      chatStore.add({id:nextChatId('villager'),channel:'god',speakerKind:'villager',
+        userId:`villager:${speech.villagerId}`,userName:speech.villagerName,
+        villagerId:speech.villagerId,text:speech.text,at:Date.now()});
+      broadcastChat();
+    },
+  }) : null;
 
   const finalizeDailyHighlight = (): void => {
     if (dailyHighlightPending || dailyHighlightDoneTerm === tm.world.term) return;
@@ -1817,6 +1831,7 @@ function main(): void {
 
   loop = new TermLoop(tm, pace, incidentStepMs, {
     onSnapshot: (w) => {
+      observerOutreach?.consider();
       inactiveResidents.archiveInactive(w);
       registry?.pruneAssignments(new Set([...w.villagers.values()].filter((v) => v.alive).map((v) => v.id)));
       // 日末 (term 進行) を検知して保険の期限切れ掃除 (§v1.3-B ③)。
@@ -2055,7 +2070,10 @@ function main(): void {
   const raidTimer = setInterval(() => raid.tick(Date.now()), 1000);
 
   // Ctrl-C でループを止めログを flush してから抜ける。
-  const shutdown = (): void => {
+  let shuttingDown = false;
+  const shutdown = async (): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     clearInterval(stateTimer);
     clearInterval(sysTimer);
     clearInterval(auctionTimer);
@@ -2064,7 +2082,10 @@ function main(): void {
     if (sysPending) clearTimeout(sysPending);
     if (lbPending) clearTimeout(lbPending);
     loop.stop();
+    // 先に world を書き出す。close() は最大 30s の CLI 応答を待つので、その前に落ちたり
+    // 2 度目の Ctrl-C が来たりすると保存前に終了してしまう。待つのは永続化の後。
     store.save(tm.world, tm.getBornCount(), tm.getIncidentCount(), tm.getRuleCount()); // 終了時は確実に最新を書き出す
+    await observerOutreach?.close();
     sessionLog.close();
     closeRuntimeDb();
     process.exit(0);

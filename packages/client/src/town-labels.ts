@@ -56,7 +56,7 @@ export class TownLabels {
   project(renderer: VillageRenderer, world: WireWorld): void {
     for (const site of townMap(world.config).sites) {
       const p = townPoint(world.config, site.position);
-      p[1] = site.kind === 'inn' ? 2.6 : 1.9;
+      p[1] += site.kind === 'inn' ? 2.6 : 1.9;
       const screen = renderer.project(p);
       const button = this.labels.get(site.id);
       if (button) button.style.transform = `translate(${screen.x}px,${screen.y}px) translate(-50%,-50%)`;
