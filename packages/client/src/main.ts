@@ -227,6 +227,7 @@ async function main(): Promise<void> {
   conn = connect(WS_URL, {
     onAreaFrame: (frame) => { if (areaView.accept(frame)) { stage.setArea(frame.area); stage.updateArea(frame.world); } },
     onSnapshot: (world) => {
+      areaView.update(world);
       log.setDate(`${world.calendar.month}月${world.calendar.dayOfMonth}日`);
       // 街全体の情報 (建物の在籍・住民名の表示・物語) は全体 snapshot から。
       // 3D の住民描画だけが areaFrame 由来 (spec/feature/area-resident-playback.md)。

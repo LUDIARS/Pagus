@@ -6,7 +6,6 @@ import { MAX_VISIBLE_RESIDENTS, type TownArea } from '@pagus/sim';
 import { townAreaCentre } from './town-area-centre.js';
 import { townPoint } from './town-coordinates.js';
 import { TownLabels } from './town-labels.js';
-import { townMap, townSite } from '@pagus/sim';
 import { StoryPanel } from './story-panel.js';
 import { villagerDisplayName } from './villager-display.js';
 import './village-3d.css';
@@ -22,13 +21,20 @@ interface ResidentVisual {
 /** Presentation follows authoritative BT positions; it never invents simulation movement. */
 export class StageView {
     private area: TownArea = 'plaza';
+    /** Frames the subscribed district; the world is absent until the first snapshot. */
+    resetCamera(): void {
+        if (!this.renderer) return;
+        this.renderer.focus = this.world ? townPoint(this.world.config, townAreaCentre(this.world.config, this.area)) : [0, 0, 0];
+        this.renderer.zoom = 2.5;
+        this.renderer.yaw = -.2;
+    }
     setArea(area: TownArea): void {
         if (this.area === area) return;
         this.area = area;
         this.clearResidents();
         if (this.world) {
             this.update(this.world);
-            if (this.renderer) this.renderer.focus = townPoint(this.world.config, townAreaCentre(this.world.config, area));
+            this.resetCamera();
         }
     }
     addAreaControl(control: HTMLElement): void { this.controls.append(control); }
@@ -73,7 +79,8 @@ export class StageView {
         this.host = el;
         try {
             this.renderer = new VillageRenderer();
-            this.town.onFocus = (position) => { if (this.renderer) { this.renderer.focus = position; this.renderer.zoom = Math.max(1.5, this.renderer.zoom); } };
+            this.resetCamera();
+            this.town.onFocus = (position) => { if (this.renderer) { this.renderer.focus = position; this.renderer.zoom = Math.max(3.5, this.renderer.zoom); } };
             this.itemMesh = this.renderer.upload(triangulate([{ center: [0, .15, 0], radius: [.16, .2, .16], color: [.83, .66, .94] }]));
             this.labels.className = 'village-labels';
             this.controls.className = 'village-camera';
@@ -89,18 +96,18 @@ export class StageView {
                     }],
                 ['＋', () => {
                         if (this.renderer)
-                            this.renderer.zoom = Math.min(2.5, this.renderer.zoom + .2);
+                            this.renderer.zoom = Math.min(5, this.renderer.zoom + .25);
                     }],
                 ['−', () => {
                         if (this.renderer)
                             this.renderer.zoom = Math.max(.7, this.renderer.zoom - .2);
                     }],
-                ['⌂', () => { if (this.renderer) { this.renderer.focus = [0, 0, 0]; this.renderer.zoom = 1; this.renderer.yaw = -.2; } }],
+                ['⌂', () => this.resetCamera()],
             ] as const) {
                 const b = document.createElement('button');
                 b.type = 'button';
                 b.textContent = label;
-                b.setAttribute('aria-label', label === '↶' ? '左へ回転' : label === '↷' ? '右へ回転' : label === '＋' ? '拡大' : label === '⌂' ? '街全体を表示' : '縮小');
+                b.setAttribute('aria-label', label === '↶' ? '左へ回転' : label === '↷' ? '右へ回転' : label === '＋' ? '拡大' : label === '⌂' ? '現在のエリアにカメラを戻す' : '縮小');
                 b.onclick = action;
                 this.controls.append(b);
             }
@@ -180,13 +187,8 @@ export class StageView {
             this.sceneryKey = sceneryKey;
         }
         this.town.update(world, this.area);
-        const previousTrial = previous?.phase === 'ten' || previous?.phase === 'ketsu';
-        if (this.isTrial && !previousTrial) {
-            renderer.focus = townPoint(world.config, townSite(townMap(world.config), 'fountain').entrance);
-            renderer.zoom = 2;
-        } else if (!this.isTrial && previousTrial) {
-            renderer.focus = [0, 0, 0]; renderer.zoom = 1;
-        }
+        // The camera follows the subscribed district, including during trials.
+        if (!previous) this.resetCamera();
         const key = `${world.incident?.id}:${world.trial?.stage}:${world.trial?.defendant}`;
         if (this.isTrial && this.trialKey !== key) {
             this.trialKey = key;
