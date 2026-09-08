@@ -2,6 +2,8 @@ import { HOUSING_NAMES, townMap, townSite, type WireWorld } from '@pagus/sim';
 import { townPoint } from './town-coordinates.js';
 import type { VillageRenderer } from './village-renderer.js';
 import type { Vec3 } from './mesh-primitives.js';
+import type { TownArea } from '@pagus/sim';
+import { townViewSites } from './town-view-sites.js';
 
 /** Building selection exposes occupancy and jobs. Owns its DOM and event handlers. */
 export class TownLabels {
@@ -16,13 +18,15 @@ export class TownLabels {
     this.detail.className = 'town-detail';
     this.detail.setAttribute('aria-live', 'polite');
   }
-  update(world: WireWorld): void {
+  update(world: WireWorld, area: TownArea): void {
     const map = townMap(world.config);
-    const signature = `${map.width}:${map.height}`;
+    const sites = townViewSites(world.config, area);
+    const signature = `${map.width}:${map.height}:${area}`;
+    if (!sites.some((site) => site.id === this.selected)) this.selected = sites[0]?.id ?? 'fountain';
     if (signature !== this.signature) {
       this.clear();
       this.signature = signature;
-      for (const site of map.sites) {
+      for (const site of sites) {
         const button = document.createElement('button');
         button.type = 'button';
         button.dataset['kind'] = site.kind;
@@ -30,13 +34,15 @@ export class TownLabels {
         this.root.append(button);
       }
     }
-    for (const site of map.sites) {
+    for (const site of sites) {
       const button = this.labels.get(site.id)!;
       const residents = world.villagers.filter((v) => v.alive && v.townLife?.homeId === site.id);
       const former = world.villagers.find((v) => v.townLife?.formerHomeId === site.id);
       button.textContent = site.kind === 'home' ? residents.map((v) => v.name).join('・') || (former ? `${former.name}の家（${former.townLife?.housing === 'displaced' ? '損壊' : '留守'}）` : '空き家') : site.name;
       button.title = site.name;
-      button.onclick = () => { this.selected = site.id; this.update(world); this.onFocus?.(townPoint(world.config, site.position)); };
+      const building = world.villagers.find((v) => v.alive && v.townLife?.buildHomeId === site.id);
+      if (building) button.textContent = `${building.name}の家（建設 ${building.townLife?.buildProgress ?? 0}/4）`;
+      button.onclick = () => { this.selected = site.id; this.update(world, area); this.onFocus?.(townPoint(world.config, site.position)); };
     }
     const site = townSite(map, this.selected);
     const workers = world.villagers.filter((v) => v.alive && (v.townLife?.occupation === site.id || (site.id === 'hunting' && v.townLife?.occupation === 'hunter')));

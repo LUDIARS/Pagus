@@ -4,6 +4,9 @@ import { SHOP_NAMES, townMap, type ShopKind } from './town-map.js';
 export type HousingStatus = 'housed' | 'unhoused' | 'displaced' | 'isolated';
 export const HOUSING_NAMES: Record<HousingStatus, string> = { housed: '家がある', unhoused: '家を持たない', displaced: '家を失った', isolated: '迫害により隔離されている' };
 export interface TownLife {
+  buildHomeId?: string;
+  buildProgress?: number;
+  lastConstructionTick?: string;
   housing: HousingStatus;
   homeId: string;
   formerHomeId?: string;
@@ -16,14 +19,16 @@ export function ensureTownResidents(world: World): void {
   const residents = [...world.villagers.values()].filter((v) => v.alive);
   const firstSettlement = residents.length >= 8 && residents.every((v) => !v.townLife);
   const homes = townMap(world.config).sites.filter((s) => s.kind === 'home');
-  const occupied = new Set([...world.villagers.values()].flatMap((v) => v.townLife ? [v.townLife.homeId, v.townLife.formerHomeId] : []));
+  const occupied = new Set(residents.flatMap((v) => v.townLife ? [v.townLife.homeId, v.townLife.formerHomeId, v.townLife.buildHomeId] : []));
   const jobs: TownLife['occupation'][] = [...Object.keys(SHOP_NAMES) as ShopKind[], 'hunter'];
   for (const v of world.villagers.values()) {
     if (v.townLife || !v.alive) continue;
     const counts = jobs.map((job) => [...world.villagers.values()].filter((r) => r.alive && r.townLife?.occupation === job).length);
     const occupation = jobs[counts.indexOf(Math.min(...counts))]!;
-    const home = homes.find((s) => !occupied.has(s.id));
-    v.townLife = { housing: home ? 'housed' : 'unhoused', homeId: home?.id ?? 'shelter', reason: home ? '街に定住したときに割り当てられた家' : '空き家がなく、野営地を寝床にしている', occupation };
+    // Only the opening settlement starts with built houses. Later arrivals queue
+    // for carpenter construction instead of materializing an instant home.
+    const home = firstSettlement ? homes.find((s) => !occupied.has(s.id)) : undefined;
+    v.townLife = { housing: home ? 'housed' : 'unhoused', homeId: home?.id ?? 'shelter', reason: home ? '街に定住したときに割り当てられた家' : '大工による家の建設を待ち、野営地を寝床にしている', occupation };
     if (home) occupied.add(home.id);
   }
   // Opening cast backstories are authored at first town setup, never inferred from

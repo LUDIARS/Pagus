@@ -1,9 +1,10 @@
-import type { TownSite } from '@pagus/sim';
+import type { TownSite, MixedPart } from '@pagus/sim';
+import { homeModel } from './home-model.js';
 import type { ShapePart, Vec3 } from './mesh-primitives.js';
 
 const ROOFS: Partial<Record<TownSite['kind'], Vec3>> = { doctor: [.65, .34, .33], general: [.32, .54, .53], carpenter: [.53, .37, .25], tailor: [.57, .39, .65], grocer: [.4, .59, .27], diner: [.79, .43, .24], inn: [.29, .39, .56], isolation: [.37, .4, .37] };
 /** Storefront silhouettes stay within the solid map cell; doors face south. */
-export function townBuilding(site: TownSite, origin: Vec3, halfCell: number, damaged = false): ShapePart[] {
+export function townBuilding(site: TownSite, origin: Vec3, halfCell: number, damaged = false, mutations: readonly MixedPart[] = []): ShapePart[] {
   const parts: ShapePart[] = [];
   const add = (x: number, y: number, z: number, rx: number, ry: number, rz: number, color: Vec3, box = true): void => {
     parts.push({ center: [origin[0] + x * halfCell, y, origin[2] + z * halfCell], radius: [rx * halfCell, ry, rz * halfCell], color, box });
@@ -36,7 +37,8 @@ export function townBuilding(site: TownSite, origin: Vec3, halfCell: number, dam
     add(0, 1.55, 0, .09, .42, .09, [.64, .9, .96], false);
     return parts;
   }
-  const home = site.kind === 'home' || site.kind === 'isolation';
+  if (site.kind === 'home') return homeModel(site.id, origin, halfCell, mutations);
+  const home = site.kind === 'isolation';
   const height = site.kind === 'inn' ? 2 : home ? 1.05 : 1.3;
   const roof = ROOFS[site.kind] ?? [.63, .38, .3];
   add(0, height / 2, 0, .8, height / 2, .72, home ? [.86, .76, .57] : [.94, .84, .66]);
@@ -49,16 +51,26 @@ export function townBuilding(site: TownSite, origin: Vec3, halfCell: number, dam
   add(.46, 1.54, .78, .25, .2, .05, [.96, .89, .73]);
   switch (site.kind) {
     case 'doctor':
+      add(-.5, 1.8, -.3, .26, .55, .27, [.86, .88, .82]);
       add(.46, 1.54, .85, .06, .15, .02, [.74, .2, .23]);
       add(.46, 1.54, .85, .18, .05, .02, [.74, .2, .23]); break;
     case 'grocer':
+      add(0, .95, .72, .9, .08, .25, [.36, .64, .25]);
       for (const x of [-.5, 0, .5]) { add(x, .2, .84, .2, .18, .1, wood); add(x, .42, .84, .19, .1, .1, x === 0 ? [.86, .3, .16] : [.4, .7, .3], false); } break;
-    case 'carpenter': add(-.5, .22, .83, .25, .15, .1, [.66, .45, .26], false); break;
-    case 'tailor': add(.46, 1.54, .85, .18, .14, .02, [.7, .35, .66]); break;
-    case 'diner': add(.46, 1.54, .85, .19, .12, .02, [.65, .32, .17], false); break;
+    case 'carpenter':
+      add(0, 1.35, .2, .94, .09, .6, wood);
+      for (const x of [-.6, -.2, .2]) add(x, .22, .83, .15, .15, .1, [.66, .45, .26], false); break;
+    case 'tailor':
+      add(0, 1.95, 0, .42, .32, .4, [.65, .38, .63], false);
+      add(.46, 1.54, .85, .18, .14, .02, [.7, .35, .66]); break;
+    case 'diner':
+      add(-.55, 1.7, -.4, .23, .8, .23, [.47, .36, .3]);
+      add(.46, 1.54, .85, .19, .12, .02, [.65, .32, .17], false); break;
     case 'inn':
       for (const x of [-.49, .49]) add(x, 1.56, .75, .16, .18, .03, [.95, .8, .42]); break;
-    case 'general': add(.46, 1.54, .85, .13, .13, .02, [.27, .53, .53]); break;
+    case 'general':
+      add(-.52, .55, .79, .28, .5, .13, [.36, .57, .56]);
+      add(.46, 1.54, .85, .13, .13, .02, [.27, .53, .53]); break;
   }
   return parts;
 }

@@ -1,0 +1,2 @@
+export const MAX_VISIBLE_BUILDINGS = 10;
+export const MAX_VISIBLE_RESIDENTS = 30;

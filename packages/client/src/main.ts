@@ -225,7 +225,7 @@ async function main(): Promise<void> {
 
   const areaView = new AreaView(stage, (area) => conn.send({ t: 'subscribeArea', area }));
   conn = connect(WS_URL, {
-    onAreaFrame: (frame) => { if (areaView.accept(frame)) stage.updateArea(frame.world); },
+    onAreaFrame: (frame) => { if (areaView.accept(frame)) { stage.setArea(frame.area); stage.updateArea(frame.world); } },
     onSnapshot: (world) => {
       log.setDate(`${world.calendar.month}月${world.calendar.dayOfMonth}日`);
       // 街全体の情報 (建物の在籍・住民名の表示・物語) は全体 snapshot から。

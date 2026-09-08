@@ -2,6 +2,8 @@ import { isAwake, mixedPartsFor, PART_LABELS, type WireWorld, type TrialLine, ty
 import { residentParts, triangulate, type Vec3 } from './resident-mesh.js';
 import { VillageRenderer, type VillageMesh } from './village-renderer.js';
 import { townScenery } from './town-scenery.js';
+import { MAX_VISIBLE_RESIDENTS, type TownArea } from '@pagus/sim';
+import { townAreaCentre } from './town-area-centre.js';
 import { townPoint } from './town-coordinates.js';
 import { TownLabels } from './town-labels.js';
 import { townMap, townSite } from '@pagus/sim';
@@ -19,6 +21,16 @@ interface ResidentVisual {
 }
 /** Presentation follows authoritative BT positions; it never invents simulation movement. */
 export class StageView {
+    private area: TownArea = 'plaza';
+    setArea(area: TownArea): void {
+        if (this.area === area) return;
+        this.area = area;
+        this.clearResidents();
+        if (this.world) {
+            this.update(this.world);
+            if (this.renderer) this.renderer.focus = townPoint(this.world.config, townAreaCentre(this.world.config, area));
+        }
+    }
     addAreaControl(control: HTMLElement): void { this.controls.append(control); }
     /** Drop every resident visual so a new area starts from an empty stage. */
     clearResidents(): void {
@@ -158,15 +170,16 @@ export class StageView {
         if (!renderer)
             return;
         const damagedHomes = new Set(world.villagers.flatMap((v) => v.townLife?.housing === 'displaced' && v.townLife.formerHomeId ? [v.townLife.formerHomeId] : []));
-        const sceneryKey = `${world.config.gridWidth}:${world.config.gridHeight}:${[...damagedHomes].sort().join(',')}`;
+        const homesKey = JSON.stringify(world.villagers.filter((v) => v.alive && v.townLife).map((v) => [v.townLife?.homeId, v.townLife?.formerHomeId, v.townLife?.buildHomeId, mixedPartsFor(v)]));
+        const sceneryKey = `${this.area}:${world.config.gridWidth}:${world.config.gridHeight}:${[...damagedHomes].sort().join(',')}:${homesKey}`;
         if (this.sceneryKey !== sceneryKey) {
-            const mesh = renderer.upload(triangulate(townScenery(world.config, damagedHomes)));
+            const mesh = renderer.upload(triangulate(townScenery(world, this.area, damagedHomes)));
             if (this.scenery)
                 renderer.release(this.scenery);
             this.scenery = mesh;
             this.sceneryKey = sceneryKey;
         }
-        this.town.update(world);
+        this.town.update(world, this.area);
         const previousTrial = previous?.phase === 'ten' || previous?.phase === 'ketsu';
         if (this.isTrial && !previousTrial) {
             renderer.focus = townPoint(world.config, townSite(townMap(world.config), 'fountain').entrance);
@@ -203,7 +216,10 @@ export class StageView {
         this.areaWorld = world;
         const regridded = previous !== null
             && (previous.config.gridWidth !== world.config.gridWidth || previous.config.gridHeight !== world.config.gridHeight);
-        const residents = world.villagers.filter((v) => v.alive && (v.hiddenUntilTerm ?? -1) <= world.term);
+        // The server already applied MAX_VISIBLE_RESIDENTS with story-aware ordering; this
+        // slice is only a guard against an over-sized frame, and must preserve wire order.
+        const residents = world.villagers.filter((v) => v.alive && (v.hiddenUntilTerm ?? -1) <= world.term)
+            .slice(0, MAX_VISIBLE_RESIDENTS);
         const seen = new Set<string>();
         for (const v of residents) {
             seen.add(v.id);

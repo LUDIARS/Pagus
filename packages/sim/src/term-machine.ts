@@ -6,6 +6,7 @@ import type { World, Villager, VillagerId, GridPos, Incident, TrialState, Reform
 import type { Brain, ActionDecision, EnvironmentView } from './brain.js';
 import { aliveVillagers, awakeVillagers, environmentView, clampPos, bumpEventParam } from './world.js';
 import { ensureTownResidents, changeHousing } from './town-residency.js';
+import { advanceTownConstruction } from './town-construction.js';
 import { residentDailyTree } from './resident-daily-tree.js';
 import { fateTree, manipulationTree } from './resident-trial-tree.js';
 import { residentSpeech } from './resident-speech-tree.js';
@@ -1228,6 +1229,7 @@ export class TermMachine {
     this.daily.setSurge(this.martialActive('surge') ? this.martialSurgeBonus : 0);
     const actions: KishoTickResult['actions'] = [];
     ensureTownResidents(this.world);
+    advanceTownConstruction(this.world);
     const awakeIds = new Set(awakeVillagers(this.world).map((v) => v.id));
     for (const v of aliveVillagers(this.world)) {
       if (awakeIds.has(v.id)) continue;
