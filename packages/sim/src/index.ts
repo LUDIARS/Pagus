@@ -41,6 +41,6 @@ export * from './resident-daily-tree.js';
 export * from './resident-interventions.js';
 export * from './autonomous-world-brain.js';
 export * from './resident-speech-tree.js';
-export { TOWN_AREAS, isTownArea, townAreaAt, type TownArea } from './town-areas.js';
-export { MAX_VISIBLE_BUILDINGS, MAX_VISIBLE_RESIDENTS } from './town-view-limits.js';
+export { TOWN_AREAS, isTownArea, townAreaAt, neighboringTownAreas, type TownArea } from './town-areas.js';
+export { MAX_VISIBLE_BUILDINGS, MAX_VISIBLE_RESIDENTS, MAX_STREAMED_RESIDENTS } from './town-view-limits.js';
 export { FACTION_SIDE_LIMIT, type FactionTrial, type TrialSide } from './faction-trial.js';

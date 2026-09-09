@@ -1,10 +1,11 @@
 import { isAwake, mixedPartsFor, PART_LABELS, type WireWorld, type TrialLine, type TrialVoice, type ThemeLexicon } from '@pagus/sim';
 import { residentParts, triangulate, type Vec3 } from './resident-mesh.js';
-import { VillageRenderer, type VillageMesh } from './village-renderer.js';
+import { PictorScene, type PictorMesh } from './pictor-scene.js';
+import { VillageGestures } from './village-gestures.js';
 import { townScenery } from './town-scenery.js';
 import { CourtTransition } from './court-transition.js';
 import { TrialDialogue } from './trial-dialogue.js';
-import { MAX_VISIBLE_RESIDENTS, type TownArea } from '@pagus/sim';
+import { MAX_STREAMED_RESIDENTS, TOWN_AREAS, townAreaAt, type TownArea } from '@pagus/sim';
 import { townAreaCentre } from './town-area-centre.js';
 import { townPoint } from './town-coordinates.js';
 import { terrainVertices, terrainHeight } from './town-terrain.js';
@@ -13,7 +14,7 @@ import { StoryPanel } from './story-panel.js';
 import { villagerDisplayName } from './villager-display.js';
 import './village-3d.css';
 interface ResidentVisual {
-    mesh: VillageMesh;
+    mesh: PictorMesh;
     signature: string;
     label: HTMLButtonElement;
     position: Vec3;
@@ -25,6 +26,9 @@ interface ResidentVisual {
 }
 /** Presentation follows authoritative BT positions; it never invents simulation movement. */
 export class StageView {
+    onCameraArea: ((area: TownArea, radius: 1 | 2) => void) | null = null;
+    private gestures: VillageGestures | null = null;
+    private lastLodRefresh = 0;
     onFirstScene: (() => void) | null = null;
     get canRender(): boolean { return this.renderer !== null; }
     private readonly courtTransition = new CourtTransition();
@@ -49,13 +53,12 @@ export class StageView {
         this.renderer.zoom = 4.5;
         this.renderer.yaw = -.2;
     }
-    setArea(area: TownArea): void {
-        if (this.area === area) return;
+    setArea(area: TownArea, preserveCamera = false): void {
+        if (this.area === area) { if (this.world) this.update(this.world); return; }
         this.area = area;
-        this.clearResidents();
         if (this.world) {
             this.update(this.world);
-            this.resetCamera();
+            if (!preserveCamera) this.resetCamera();
         }
     }
     addAreaControl(control: HTMLElement): void { this.controls.append(control); }
@@ -68,7 +71,7 @@ export class StageView {
         this.units.clear();
         this.areaWorld = null;
     }
-    private renderer: VillageRenderer | null = null;
+    private renderer: PictorScene | null = null;
     private host: HTMLElement | null = null;
     private readonly labels = document.createElement('div');
     private readonly controls = document.createElement('div');
@@ -76,8 +79,8 @@ export class StageView {
     private readonly town = new TownLabels();
     private readonly speech = document.createElement('div');
     private readonly units = new Map<string, ResidentVisual>();
-    private scenery: VillageMesh | null = null;
-    private itemMesh: VillageMesh | null = null;
+    private scenery: PictorMesh | null = null;
+    private itemMesh: PictorMesh | null = null;
     private sceneryKey = '';
     private observer: ResizeObserver | null = null;
     private frame = 0;
@@ -99,7 +102,8 @@ export class StageView {
             throw new Error('StageView is already mounted');
         this.host = el;
         try {
-            this.renderer = new VillageRenderer();
+            this.renderer = new PictorScene();
+            this.gestures = new VillageGestures(this.renderer, () => this.cameraChanged());
             this.resetCamera();
             this.town.onFocus = (position) => { if (this.renderer) { this.renderer.focus = position; this.renderer.zoom = Math.max(3.5, this.renderer.zoom); } };
             this.itemMesh = this.renderer.upload(triangulate([{ center: [0, .15, 0], radius: [.16, .2, .16], color: [.83, .66, .94] }]));
@@ -203,10 +207,11 @@ export class StageView {
             return;
         const damagedHomes = new Set(world.villagers.flatMap((v) => v.townLife?.housing === 'displaced' && v.townLife.formerHomeId ? [v.townLife.formerHomeId] : []));
         const homesKey = JSON.stringify(world.villagers.filter((v) => v.alive && v.townLife).map((v) => [v.townLife?.homeId, v.townLife?.formerHomeId, v.townLife?.buildHomeId, mixedPartsFor(v)]));
-        const sceneryKey = `${this.area}:${world.config.gridWidth}:${world.config.gridHeight}:${[...damagedHomes].sort().join(',')}:${homesKey}`;
+        const radius = this.cameraRadius();
+        const sceneryKey = `${this.area}:${radius}:${world.config.gridWidth}:${world.config.gridHeight}:${[...damagedHomes].sort().join(',')}:${homesKey}`;
         if (this.sceneryKey !== sceneryKey) {
             const ground = terrainVertices();
-            const objects = triangulate(townScenery(world, this.area, damagedHomes));
+            const objects = triangulate(townScenery(world, this.area, damagedHomes, radius));
             const vertices = new Float32Array(ground.length + objects.length);
             vertices.set(ground); vertices.set(objects, ground.length);
             const mesh = renderer.upload(vertices);
@@ -215,7 +220,7 @@ export class StageView {
             this.scenery = mesh;
             this.sceneryKey = sceneryKey;
         }
-        this.town.update(world, this.area);
+        this.town.update(world, this.area, radius);
         // The camera follows the subscribed district, including during trials.
         if (!previous) this.resetCamera();
         const key = `${world.incident?.id}:${world.trial?.stage}:${world.trial?.defendant}`;
@@ -248,20 +253,32 @@ export class StageView {
         this.areaWorld = world;
         const regridded = previous !== null
             && (previous.config.gridWidth !== world.config.gridWidth || previous.config.gridHeight !== world.config.gridHeight);
-        // The server already applied MAX_VISIBLE_RESIDENTS with story-aware ordering; this
-        // slice is only a guard against an over-sized frame, and must preserve wire order.
+        // The halo is bounded server-side; allocate only a viewport subset on the GPU.
         const residents = world.villagers.filter((v) => v.alive && (v.hiddenUntilTerm ?? -1) <= world.term)
-            .slice(0, MAX_VISIBLE_RESIDENTS);
+            .slice(0, MAX_STREAMED_RESIDENTS)
+            .filter(v => {
+                const p = renderer.project(townPoint(world.config, v.position));
+                return this.isTrial || (p.x > -160 && p.x < this.width+160 && p.y > -160 && p.y < this.height+160);
+            })
+            .sort((a,b) => {
+                const distance = (v: typeof a): number => { const p=townPoint(world.config,v.position); return Math.hypot(p[0]-renderer.focus[0],p[2]-renderer.focus[2]); };
+                return distance(a)-distance(b);
+            }).slice(0,90);
         const seen = new Set<string>();
-        for (const v of residents) {
+        for (const [index, v] of residents.entries()) {
             seen.add(v.id);
-            const signature = JSON.stringify([v.species, v.reformCount, mixedPartsFor(v)]);
+            const detail = index < 30;
+            const signature = JSON.stringify([v.species, v.reformCount, mixedPartsFor(v), detail]);
+            const vertices = (): Float32Array => {
+                const parts = residentParts(v);
+                return triangulate(detail ? parts : parts.filter(p=>p.preserveColor || Math.max(...p.radius)>.08).map(p=>({...p,detail:false})));
+            };
             let visual = this.units.get(v.id);
             const defendant = world.trial?.defendant === v.id;
             const target: Vec3 = townPoint(world.config, v.position);
             const movementKey = `${this.isTrial}:${v.position.x}:${v.position.y}`;
             if (!visual) {
-                const mesh = renderer.upload(triangulate(residentParts(v)));
+                const mesh = renderer.upload(vertices());
                 const label = document.createElement('button');
                 label.type = 'button';
                 label.onclick = () => this.tap?.(v.id);
@@ -270,11 +287,10 @@ export class StageView {
                 this.units.set(v.id, visual);
             }
             else if (visual.signature !== signature) {
-                const mesh = renderer.upload(triangulate(residentParts(v)));
+                const mesh = renderer.upload(vertices());
                 renderer.release(visual.mesh);
                 visual.mesh = mesh;
                 visual.signature = signature;
-                this.say(`${v.name}の教育：${v.educationHistory?.at(-1)?.rationale ?? '外見が変化した'} → ${mixedPartsFor(v).map((p) => PART_LABELS[p]).join('・')}`);
             }
             visual.target = target;
             if (visual.movementKey !== movementKey) {
@@ -313,6 +329,11 @@ export class StageView {
             return;
         const dt = Math.min(.1, Math.max(0, (now - this.lastTime) / 1000));
         this.lastTime = now;
+        if (this.areaWorld && now-this.lastLodRefresh > 200) {
+            this.lastLodRefresh = now;
+            this.cameraChanged();
+            this.updateArea(this.areaWorld);
+        }
         this.dialogue.tick(now);
         const speaker = this.dialogue.speaker ? this.units.get(this.dialogue.speaker) : undefined;
         if (this.isTrial && speaker) {
@@ -346,6 +367,7 @@ export class StageView {
             const offset: Vec3 = [visual.position[0], ground + (moving || speaking ? Math.abs(Math.sin(phase)) * (visual.swagger ? .10 : .06) : 0), visual.position[2]];
             renderer.draw(visual.mesh, offset, speaking ? Math.PI - renderer.yaw : visual.heading, speaking ? 1.5 : 1.35, phase, speaking ? .12 : moving ? (visual.swagger ? .24 : .15) : 0);
             const pos = renderer.project([offset[0], offset[1] + 2.5, offset[2]]);
+            visual.label.hidden = pos.x < 0 || pos.x > this.width || pos.y < 0 || pos.y > this.height;
             visual.label.style.transform = `translate(${pos.x}px,${pos.y}px) translate(-50%,-50%)`;
         }
         if (now > this.speechUntil) {
@@ -360,8 +382,29 @@ export class StageView {
             this.onFirstScene = null;
             ready();
         }
+        renderer.end();
         this.frame = requestAnimationFrame(this.tick);
     };
+    private cameraChanged(): void {
+        if (!this.world || !this.renderer || this.isTrial) return;
+        const [x, , z] = this.renderer.focus;
+        this.onCameraArea?.(townAreaAt(this.world.config, {
+            x: (x/36+.5)*(this.world.config.gridWidth-1), y: (z/36+.5)*(this.world.config.gridHeight-1),
+        }), this.cameraRadius());
+    }
+    private cameraRadius(): 1 | 2 {
+        if (!this.world || !this.renderer) return 1;
+        const config=this.world.config, renderer=this.renderer;
+        const indexAt=(x:number,z:number):number=>TOWN_AREAS.indexOf(townAreaAt(config, {
+            x:(x/36+.5)*(config.gridWidth-1),y:(z/36+.5)*(config.gridHeight-1),
+        }));
+        const centre=indexAt(renderer.focus[0],renderer.focus[2]);
+        for(const [x,y] of [[0,0],[this.width,0],[0,this.height],[this.width,this.height]]) {
+            const p=renderer.groundAt(x ?? 0,y ?? 0),corner=indexAt(p[0],p[2]);
+            if(Math.abs(corner%3-centre%3)>1||Math.abs(Math.floor(corner/3)-Math.floor(centre/3))>1)return 2;
+        }
+        return 1;
+    }
     private say(text: string): void { this.speech.textContent = text; this.speech.hidden = false; this.speechUntil = performance.now() + 5500; }
     private name(id: string): string { return this.world?.villagers.find((v) => v.id === id)?.name ?? id; }
     private readonly onContextLost = (event: Event): void => {
@@ -370,6 +413,10 @@ export class StageView {
         // world-snapshot handler. Panels and trial controls keep working after this.
         event.preventDefault();
         cancelAnimationFrame(this.frame);
+        this.gestures?.destroy();
+        this.gestures = null;
+        this.renderer?.canvas.removeEventListener('webglcontextlost', this.onContextLost);
+        this.renderer?.destroy();
         this.renderer = null;
         this.scenery = null;
         this.itemMesh = null;
@@ -387,6 +434,9 @@ export class StageView {
         this.onFirstScene = null;
         this.courtTransition.destroy();
         this.dialogue.destroy();
+        this.gestures?.destroy();
+        this.gestures = null;
+        this.onCameraArea = null;
         cancelAnimationFrame(this.frame);
         this.observer?.disconnect();
         this.observer = null;

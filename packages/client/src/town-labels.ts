@@ -1,6 +1,6 @@
 import { HOUSING_NAMES, townMap, townSite, type WireWorld } from '@pagus/sim';
 import { townPoint } from './town-coordinates.js';
-import type { VillageRenderer } from './village-renderer.js';
+import type { PictorScene } from './pictor-scene.js';
 import type { Vec3 } from './mesh-primitives.js';
 import type { TownArea } from '@pagus/sim';
 import { townViewSites } from './town-view-sites.js';
@@ -18,10 +18,10 @@ export class TownLabels {
     this.detail.className = 'town-detail';
     this.detail.setAttribute('aria-live', 'polite');
   }
-  update(world: WireWorld, area: TownArea): void {
+  update(world: WireWorld, area: TownArea, radius: 1 | 2 = 1): void {
     const map = townMap(world.config);
-    const sites = townViewSites(world.config, area);
-    const signature = `${map.width}:${map.height}:${area}`;
+    const sites = townViewSites(world.config, area, radius);
+    const signature = `${map.width}:${map.height}:${area}:${radius}`;
     if (!sites.some((site) => site.id === this.selected)) this.selected = sites[0]?.id ?? 'fountain';
     if (signature !== this.signature) {
       this.clear();
@@ -42,7 +42,7 @@ export class TownLabels {
       button.title = site.name;
       const building = world.villagers.find((v) => v.alive && v.townLife?.buildHomeId === site.id);
       if (building) button.textContent = `${building.name}の家（建設 ${building.townLife?.buildProgress ?? 0}/4）`;
-      button.onclick = () => { this.selected = site.id; this.update(world, area); this.onFocus?.(townPoint(world.config, site.position)); };
+      button.onclick = () => { this.selected = site.id; this.update(world, area, radius); this.onFocus?.(townPoint(world.config, site.position)); };
     }
     const site = townSite(map, this.selected);
     const workers = world.villagers.filter((v) => v.alive && (v.townLife?.occupation === site.id || (site.id === 'hunting' && v.townLife?.occupation === 'hunter')));
@@ -53,7 +53,7 @@ export class TownLabels {
     description.textContent = [workers.length ? `働く人：${workers.map((v) => v.name).join('・')}` : '', ...residents.map((v) => `${v.name}：${HOUSING_NAMES[v.townLife!.housing]}。${v.townLife!.reason}`)].filter(Boolean).join('\n') || (site.kind === 'fountain' ? '街の中心。仕事帰りに集い、事件の証言と裁判もこの広場で交わされる。' : site.kind === 'home' ? '新しく定住する住民を待つ家。' : '建物を選ぶと、そこで暮らす人・働く人を確認できます。');
     this.detail.replaceChildren(title, description);
   }
-  project(renderer: VillageRenderer, world: WireWorld): void {
+  project(renderer: PictorScene, world: WireWorld): void {
     for (const site of townMap(world.config).sites) {
       const p = townPoint(world.config, site.position);
       p[1] += site.kind === 'inn' ? 2.6 : 1.9;

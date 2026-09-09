@@ -6,7 +6,7 @@ import { townBuilding } from './town-buildings.js';
 import { terrainHeight } from './town-terrain.js';
 
 /** Street paving and geometry consume the same solid cells as navigation. */
-export function townScenery(world: WireWorld, area: TownArea, damagedHomes: ReadonlySet<string> = new Set()): ShapePart[] {
+export function townScenery(world: WireWorld, area: TownArea, damagedHomes: ReadonlySet<string> = new Set(), radius: 1 | 2 = 1): ShapePart[] {
   const config = world.config;
   const map = townMap(config);
   const halfCell = Math.min(TOWN_SPAN / Math.max(1, map.width - 1), TOWN_SPAN / Math.max(1, map.height - 1)) / 2;
@@ -21,7 +21,7 @@ export function townScenery(world: WireWorld, area: TownArea, damagedHomes: Read
         color: [.73+tint, .70+tint, .62+tint], box: true });
     }
   }
-  for (const site of townViewSites(config, area)) {
+  for (const site of townViewSites(config, area, radius)) {
     const owner = world.villagers.find((v) => v.alive && (v.townLife?.homeId === site.id || v.townLife?.formerHomeId === site.id));
     const construction = world.villagers.find((v) => v.alive && v.townLife?.buildHomeId === site.id);
     parts.push(...townBuilding(site, townPoint(config, site.position), halfCell, damagedHomes.has(site.id) || !!construction, owner ? mixedPartsFor(owner) : []));

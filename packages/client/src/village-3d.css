@@ -4,6 +4,7 @@
 .village-labels button:focus-visible,.village-camera button:focus-visible { outline:3px solid #ffcf78; }
 .village-camera { position:absolute; right:12px; top:12px; display:flex; gap:4px; }
 .village-camera button { width:32px; height:32px; border:1px solid #dacba0; border-radius:50%; color:#fff6df; background:#293c37e8; cursor:pointer; }
+@media(pointer:coarse) { .village-camera button { min-width:44px; min-height:44px; } .village-camera { max-width:calc(100% - 24px); flex-wrap:wrap; justify-content:flex-end; } }
 .village-story { position:absolute; left:12px; top:12px; width:min(410px,calc(100% - 174px)); max-height:38%; overflow:auto; background:#faf1dfef; color:#3c332c; border:1px solid #c6b38e; border-radius:12px; padding:10px 14px; font:13px/1.55 sans-serif; box-shadow:0 4px 20px #15292030; }
 .village-story summary { cursor:pointer; font-weight:700; }
 .village-story p { margin:9px 0; }

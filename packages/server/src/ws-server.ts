@@ -101,7 +101,8 @@ export class GameWsServer {
   private areaWorld: WireWorld | null = null;
   private areaSequence = 0;
   private readonly areas = new Map<WebSocket, TownArea>();
-  private readonly areaCache = new Map<TownArea, string>();
+  private readonly areaCache = new Map<string, string>();
+  private readonly areaRadii = new Map<WebSocket, 1 | 2>();
   private llmInfo: LlmInfo | null = null;
   /** テーマパック (§v1.4-D)。接続時に現値を送る。 */
   private theme: Extract<ServerMessage, { t: 'theme' }> | null = null;
@@ -192,6 +193,7 @@ export class GameWsServer {
     ws.on('close', () => {
       this.connUser.delete(ws);
       this.areas.delete(ws);
+      this.areaRadii.delete(ws);
       this.broadcastPlayers();
     });
     ws.on('message', (data) => {
@@ -237,8 +239,9 @@ export class GameWsServer {
   private handle(ws: WebSocket, msg: ClientMessage): void {
     if (!msg || typeof msg !== 'object') return;
     if (msg.t === 'subscribeArea') {
-      if (isTownArea(msg.area)) {
+      if (isTownArea(msg.area) && (msg.radius === undefined || msg.radius === 1 || msg.radius === 2)) {
         this.areas.set(ws, msg.area);
+        this.areaRadii.set(ws, msg.radius ?? 1);
         this.sendArea(ws);
       }
       return;
@@ -528,10 +531,12 @@ export class GameWsServer {
     // A slow viewer resynchronizes on the next complete frame; simulation never waits.
     if (ws.bufferedAmount > 1024 * 1024) return;
     const area = this.areas.get(ws) ?? 'plaza';
-    let frame = this.areaCache.get(area);
+    const radius = this.areaRadii.get(ws) ?? 1;
+    const cacheKey = `${area}:${radius}`;
+    let frame = this.areaCache.get(cacheKey);
     if (!frame) {
-      frame = JSON.stringify(areaFrame(this.areaWorld, area, this.areaSequence));
-      this.areaCache.set(area, frame);
+      frame = JSON.stringify(areaFrame(this.areaWorld, area, this.areaSequence, radius));
+      this.areaCache.set(cacheKey, frame);
     }
     ws.send(frame);
   }

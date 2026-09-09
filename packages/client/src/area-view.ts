@@ -11,13 +11,14 @@ function visibleResidents(world: WireWorld): WireWorld['villagers'] {
 export class AreaView {
   private area: TownArea = 'plaza';
   private sequence = -1;
+  private radius: 1 | 2 = 1;
   private chosen = false;
   private court = false;
   private previousArea: TownArea = 'plaza';
   private world: WireWorld | null = null;
   private readonly select = document.createElement('select');
   private readonly find = document.createElement('button');
-  constructor(private readonly stage: StageView, private readonly subscribe: (area: TownArea) => void) {
+  constructor(private readonly stage: StageView, private readonly subscribe: (area: TownArea, radius: 1 | 2) => void) {
     const select = this.select;
     select.setAttribute('aria-label', '閲覧エリア');
     TOWN_AREAS.forEach((area, i) => select.add(new Option(AREA_LABELS[i] ?? area, area)));
@@ -32,6 +33,12 @@ export class AreaView {
     this.find.disabled = true;
     this.find.onclick = () => { if (this.world) this.jumpTo(this.countByArea(this.world)); };
     stage.addAreaControl(this.find);
+    stage.onCameraArea = (area, radius) => {
+      if (this.court || (area === this.area && radius === this.radius)) return;
+      this.radius = radius;
+      this.chosen = true;
+      this.switchTo(area, true);
+    };
   }
   update(world: WireWorld): void {
     this.world = world;
@@ -74,17 +81,16 @@ export class AreaView {
     if (next === this.area) this.stage.resetCamera();
     else this.switchTo(next);
   }
-  private switchTo(area: TownArea): void {
+  private switchTo(area: TownArea, preserveCamera = false): void {
     this.area = area;
     this.select.value = area;
     this.sequence = -1;
-    this.stage.clearResidents();
-    this.stage.setArea(area);
-    this.subscribe(area);
+    this.stage.setArea(area, preserveCamera);
+    this.subscribe(area, this.radius);
   }
-  reconnect(): void { this.sequence = -1; this.stage.clearResidents(); this.subscribe(this.area); }
+  reconnect(): void { this.sequence = -1; this.subscribe(this.area, this.radius); }
   accept(frame: Extract<ServerMessage, { t: 'areaFrame' }>): boolean {
-    if (frame.area !== this.area || frame.sequence <= this.sequence) return false;
+    if (frame.area !== this.area || (frame.radius ?? 1) !== this.radius || frame.sequence <= this.sequence) return false;
     this.sequence = frame.sequence;
     return true;
   }

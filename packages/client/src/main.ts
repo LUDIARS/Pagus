@@ -26,9 +26,11 @@ import { ChatPanel } from './chat-panel.js';
 import { connect, type Conn } from './ws-client.js';
 import { getUserId, getUserName, setUserId, setUserName, enablePush } from './push-client.js';
 import { lockPageZoom } from './lock-page-zoom.js';
+import { mountWorldShell } from './world-shell.js';
 
 const loading = new LoadingScreen();
 lockPageZoom();
+mountWorldShell();
 
 // 既定は同一オリジンの /ws (Vite が game server 4310 へ proxy)。
 // → ローカルでもトンネル (pagus.vtn-game.com) 越しでも繋がる。VITE_WS_URL で上書き可。
@@ -72,6 +74,9 @@ async function main(): Promise<void> {
   const hud = new Hud(el('hud'), el('status'));
   const log = new LogOverlay(el('village-log'));
   const incident = new IncidentPanel(el('incident-info'));
+  window.addEventListener('pagehide', (event) => {
+    if (!event.persisted) incident.destroy();
+  });
   const vstatus = new VillageStatus(el('vstatus'));
   const ruleHandlers = {
     // しきたり改定 (§2): カルマを払って村のルールを増減。
@@ -227,9 +232,9 @@ async function main(): Promise<void> {
   // 課金以外の操作群 (介入/カード/村のしきたり) をタブ式に集約する。
   const overlay = new ActionOverlay(el('action-overlay'), el('ao-header'), el('ao-tabs'), null, el('ao-backdrop'), { embedded: true });
 
-  const areaView = new AreaView(stage, (area) => conn.send({ t: 'subscribeArea', area }));
+  const areaView = new AreaView(stage, (area, radius) => conn.send({ t: 'subscribeArea', area, radius }));
   conn = connect(WS_URL, {
-    onAreaFrame: (frame) => { if (areaView.accept(frame)) { stage.setArea(frame.area); stage.updateArea(frame.world); } },
+    onAreaFrame: (frame) => { if (areaView.accept(frame)) stage.updateArea(frame.world); },
     onSnapshot: (world) => {
       loading.snapshot();
       areaView.update(world);

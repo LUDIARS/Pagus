@@ -1,6 +1,6 @@
 {
   "name": "Client UI (PixiJS)",
-  "description": "クライアント UI: PixiJS レンダリング、観戦表示、状態パネル、村の歴史ページ、操作オーバーレイ、各種 client 観測。",
+  "description": "クライアント UI: Pictorブラウザ描画、観戦表示、状態パネル、村の歴史ページ、操作オーバーレイ。ドメイン名はPf連携の識別子互換のため維持。",
   "presetRules": [],
   "templateRules": [],
   "membership": [
@@ -26,8 +26,9 @@
       "namePattern": "[Ss]cene"
     }
   ],
-  "cardTemplate": "Summarise the \"Client UI (PixiJS)\" domain: クライアント UI: PixiJS レンダリング、観戦表示、状態パネル、村の歴史ページ、操作オーバーレイ、各種 client 観測。",
+  "cardTemplate": "Summarise the \"Client UI (PixiJS)\" domain: クライアント UI: Pictorブラウザ描画、観戦表示、状態パネル、村の歴史ページ、操作オーバーレイ。ドメイン名はPf連携の識別子互換のため維持。",
   "specRefs": [
+    "spec/feature/pictor-seamless-world.md",
     "spec/feature/village-presence.md",
     "spec/ux/product.md",
     "Pagus 機能仕様書 (v0.0) / 6. クライアント UI (実装済 / PixiJS)",
@@ -35,5 +36,5 @@
     "コスト削減リデザイン (v1.0) — LLM 呼び出しを「事件・裁判・操作」に限定する / 8. 村の歴史ページの詳細化 (point 9)",
     "ソーシャル機能パック (v1.3) — カード / 経済 / 政治 / 演出・協力 / E. 操作オーバーレイ整備 (v1.3-E、最後に実施)"
   ],
-  "rationale": "PixiJS 描画と観戦 UI は packages/client/src に局所化された表示層。メカニクスではなくプレゼンテーション境界。"
+  "rationale": "Pictorブラウザ描画と観戦 UI は packages/client/src に局所化された表示層。メカニクスではなくプレゼンテーション境界。ドメイン名はPf連携の識別子互換のため維持する。"
 }

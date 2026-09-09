@@ -3,7 +3,7 @@
 
 import { PERSONALITY_AXES, PERSONALITY_LABELS, dominantAxis } from '@pagus/sim';
 import type { WireWorld, Villager, PersonalityAxis } from '@pagus/sim';
-import { animalFor } from './assets.js';
+import { ResidentPortraits } from './resident-portrait.js';
 import { villagerDisplayName } from './villager-display.js';
 
 const AXIS_COLOR: Record<PersonalityAxis, string> = {
@@ -16,6 +16,8 @@ const AXIS_COLOR: Record<PersonalityAxis, string> = {
 };
 
 export class IncidentPanel {
+  private readonly portraits = new ResidentPortraits();
+  destroy(): void { this.portraits.destroy(); }
   constructor(private readonly root: HTMLElement) {}
 
   update(world: WireWorld): void {
@@ -24,6 +26,7 @@ export class IncidentPanel {
     const targetId = world.trial?.defendant ?? inc?.perpetrator ?? null;
     const target = targetId ? byId.get(targetId) ?? null : null;
 
+    this.portraits.reset();
     this.root.replaceChildren();
     this.root.appendChild(h('h3', '🔥 事件の当事者'));
 
@@ -55,9 +58,8 @@ export class IncidentPanel {
   private identity(world: WireWorld, v: Villager): HTMLElement {
     const box = document.createElement('div');
     box.className = 'ident';
-    const img = document.createElement('img');
+    const img = this.portraits.create(v);
     img.className = 'ident-face';
-    img.src = `/assets/animals/${animalFor(v)}.png`;
     const txt = document.createElement('div');
     txt.appendChild(h('div', villagerDisplayName(world, v), 'ident-name'));
     txt.appendChild(p('muted', `${v.species}・${activityJa(v.activity)}${v.madman ? '・狂人' : ''}`));

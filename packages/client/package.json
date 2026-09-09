@@ -10,8 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@pagus/sim": "workspace:*",
-    "pixi.js": "^8.4.0"
+    "@ludiars/pictor-browser": "file:ludiars-pictor-browser-0.1.0.tgz",
+    "@pagus/sim": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
