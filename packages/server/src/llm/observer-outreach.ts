@@ -1,10 +1,11 @@
 import { isAwake, type Villager, type World } from '@pagus/sim';
+import { resolveModel } from '@ludiars/one-shot';
 import type { LlmClient } from './llm-client.js';
 import type { CostSink } from './cost-log.js';
 import { extractJson } from './json-coerce.js';
 import { logLlm } from './llm-vg.js';
 
-const MODEL = 'claude-haiku-4-5';
+const MODEL = resolveModel('haiku', 'claude');
 const INTERVAL_MS = 90_000;
 const RESIDENT_COOLDOWN_MS = 300_000;
 const MAX_CANDIDATES = 12;

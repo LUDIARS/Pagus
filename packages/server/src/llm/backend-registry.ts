@@ -5,6 +5,7 @@
 // strong tier (opus / GPT-5.6 Sol) へ寄せる override を別途持つ。
 
 import type { CliProvider } from './cli-llm-client.js';
+import { resolveModel } from '@ludiars/one-shot';
 
 /** 1 つの LLM バックエンド。 */
 export interface Backend {
@@ -17,9 +18,9 @@ export interface Backend {
 /**
  * Codex 無効時のフォールバックキャスト = Claude 3 モデル。
  */
-export const OPUS_BACKEND: Backend = { id: 'opus', provider: 'claude', model: 'claude-opus-4-8' };
-export const SONNET_BACKEND: Backend = { id: 'sonnet', provider: 'claude', model: 'claude-sonnet-4-6' };
-export const HAIKU_BACKEND: Backend = { id: 'haiku', provider: 'claude', model: 'claude-haiku-4-5' };
+export const OPUS_BACKEND: Backend = { id: 'opus', provider: 'claude', model: resolveModel('opus', 'claude') };
+export const SONNET_BACKEND: Backend = { id: 'sonnet', provider: 'claude', model: resolveModel('sonnet', 'claude') };
+export const HAIKU_BACKEND: Backend = { id: 'haiku', provider: 'claude', model: resolveModel('haiku', 'claude') };
 
 export const DEFAULT_CAST: readonly Backend[] = [
   OPUS_BACKEND,

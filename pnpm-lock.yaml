@@ -35,6 +35,9 @@ importers:
       '@ludiars/llm-gateway':
         specifier: ^0.1.0
         version: 0.1.0
+      '@ludiars/one-shot':
+        specifier: file:../../lib/lapilli/packages/one-shot
+        version: file:lib/lapilli/packages/one-shot
       '@pagus/sim':
         specifier: workspace:*
         version: link:../sim
@@ -89,6 +92,11 @@ packages:
 
   '@ludiars/llm-gateway@0.1.0':
     resolution: {integrity: sha512-NH9FOv8r0oJZhSAtPx4apePevTBthvkUvRkQ3+2zH3oBzQW9CyZ0pIDw/njJDtgORcBcqoQ77U9I9C3sbx0D8A==, tarball: https://npm.pkg.github.com/download/@ludiars/llm-gateway/0.1.0/0f5d3bc936b2cabebbb38831468ca8dcf2d0b341}
+
+  '@ludiars/one-shot@file:lib/lapilli/packages/one-shot':
+    resolution: {directory: lib/lapilli/packages/one-shot, type: directory}
+    engines: {node: '>=22.12.0'}
+    hasBin: true
 
   '@ludiars/pictor-browser@file:packages/client/ludiars-pictor-browser-0.1.0.tgz':
     resolution: {integrity: sha512-NNMUShqXFpCGhWemUKHeZVRiueiM404QnYE4kQrY1gOz5H3rUGHC2ZTs0p8Soeo0AbkxatcmdT5pPT5jTiL4gQ==, tarball: file:packages/client/ludiars-pictor-browser-0.1.0.tgz}
@@ -598,6 +606,8 @@ snapshots:
   '@ludiars/encrypted-config@0.1.0': {}
 
   '@ludiars/llm-gateway@0.1.0': {}
+
+  '@ludiars/one-shot@file:lib/lapilli/packages/one-shot': {}
 
   '@ludiars/pictor-browser@file:packages/client/ludiars-pictor-browser-0.1.0.tgz': {}
 

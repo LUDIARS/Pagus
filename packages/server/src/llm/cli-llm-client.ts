@@ -10,7 +10,7 @@
 //
 // 失敗系 (spawn 失敗 / 非ゼロ終了 / タイムアウト / 空出力 / JSON 破損) は全て throw。
 
-import { spawn } from 'node:child_process';
+import { spawnOneShot as spawn } from '@ludiars/one-shot';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -205,7 +205,7 @@ function spawnCli(args: SpawnCliArgs): Promise<string> {
     try {
       child = spawn(bin, cliArgs, {
         env,
-        shell: process.platform === 'win32',
+        cwd: process.cwd(),
         windowsHide: true,
       });
     } catch (e) {
