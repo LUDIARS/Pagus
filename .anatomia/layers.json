@@ -1,0 +1,22 @@
+{
+  "layers": [
+    { "glob": "packages/sim/src/**", "layer": "domain-logic" },
+    { "glob": "packages/server/src/**", "layer": "application" },
+    { "glob": "packages/server/src/index.ts", "layer": "infrastructure" },
+    { "glob": "packages/server/src/http-api.ts", "layer": "presentation" },
+    { "glob": "packages/server/src/ws-server.ts", "layer": "presentation" },
+    { "glob": "packages/server/src/config/**", "layer": "infrastructure" },
+    { "glob": "packages/server/src/llm/**", "layer": "infrastructure" },
+    { "glob": "packages/server/src/runtime-db.ts", "layer": "infrastructure" },
+    { "glob": "packages/server/src/world-store.ts", "layer": "infrastructure" },
+    { "glob": "packages/server/src/chat-store.ts", "layer": "infrastructure" },
+    { "glob": "packages/server/src/inactive-resident-store.ts", "layer": "infrastructure" },
+    { "glob": "packages/server/src/session-log.ts", "layer": "infrastructure" },
+    { "glob": "packages/server/src/push-service.ts", "layer": "infrastructure" },
+    { "glob": "packages/server/src/load-data.ts", "layer": "infrastructure" },
+    { "glob": "packages/client/src/**", "layer": "presentation" },
+    { "glob": "packages/*/test/**", "layer": "shared" },
+    { "glob": "scripts/**", "layer": "infrastructure" }
+  ],
+  "mergeCouplingThreshold": 1
+}
