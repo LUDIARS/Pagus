@@ -16,8 +16,8 @@ export class BtGodChatResponder {
       let intent: ResidentIntent = /調べ|調査|証拠/.test(text) ? 'investigate' : /集ま|広場|集合/.test(text) ? 'gather' : 'calm';
       if (this.client) {
         const system = '村への介入を分類する。命令の実行や住民の台詞は生成しない。JSON {"intent":"calm|investigate|gather"} のみ。';
-        const response = await this.client.invoke({ system, prompt: text.slice(0, 2000), model: 'claude-haiku-4-5', maxTokens: 120, timeoutMs: 15000 });
-        this.costSink?.({ kind: 'intervention.intent', provider: 'claude', model: 'claude-haiku-4-5', inTokens: Math.ceil((system.length + Math.min(2000, text.length)) / 2), outTokens: Math.ceil(response.text.length / 2) });
+        const response = await this.client.invoke({ system, prompt: text.slice(0, 2000), model: 'haiku', maxTokens: 120, timeoutMs: 15000 });
+        this.costSink?.({ kind: 'intervention.intent', provider: 'claude', model: response.model ?? 'haiku', inTokens: Math.ceil((system.length + Math.min(2000, text.length)) / 2), outTokens: Math.ceil(response.text.length / 2) });
         const parsed = extractJson(response.text) as { intent?: unknown };
         if (parsed.intent !== 'calm' && parsed.intent !== 'investigate' && parsed.intent !== 'gather') throw new Error('LLM介入が許可された形式ではありません');
         intent = parsed.intent;

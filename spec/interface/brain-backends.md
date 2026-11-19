@@ -31,20 +31,25 @@ interface Backend { id: string; provider: 'claude' | 'codex'; model: string; }
     Discutere `worker-pool/spawner.ts` の `BIN_BY_PROVIDER = { claude:'claude', codex:'codex' }`
     と `--model <model>` 引数形をミラー。standing worker (対話 TUI) と違い Brain は 1-shot なので
     非対話の `exec` サブコマンドを使う。
-- **GPT-5.6 family** = `codex --model gpt-5.6-{sol,terra,luna}`。Solをflagship/strong、
-  Terraを標準、Lunaを軽量として使う。
+- `Backend.model` は役割名または明示モデル ID。CLI 呼び出し時に `@ludiars/one-shot` が
+  Concordia の役割対応表を参照する。対応表は `LUDIARS_MODEL_ROLES_FILE` で指定できる。
+  呼び出しごとの指定をクライアントの既定より優先し、明示モデル ID をそのまま渡す。
+  費用ログは CLI に渡したモデルを記録する。
 
 ## デフォルトキャスト
 
 | id | provider | model | 役割 |
 |---|---|---|---|
-| `gpt-sol` | codex | `gpt-5.6-sol` | 2枠 / strong |
-| `gpt-terra` | codex | `gpt-5.6-terra` | 4枠 / 標準 |
-| `gpt-luna` | codex | `gpt-5.6-luna` | 2枠 / 軽量 |
-| `sonnet` | claude | `claude-sonnet-4-6` | 2枠 / 標準 |
+| `gpt-sol` | codex | `sol` | 2枠 / strong |
+| `gpt-terra` | codex | `luna` | 4枠 / 旧 Terra 枠 |
+| `gpt-luna` | codex | `luna` | 2枠 / 軽量 |
+| `sonnet` | claude | `sonnet` | 2枠 / 標準 |
 
-10枠の配備ウェイトは **Sol 2 / Terra 4 / Luna 2 / Sonnet 2**。
+旧 Terra 枠の ID は既存の割当との互換性のため保持する。モデル役割ごとの配備ウェイトは
+**Sol 2 / Luna 6 / Sonnet 2**。
 `PAGUS_DISABLE_CODEX=1` のときだけ従来のClaude 3モデルへ戻す。
+
+Actio: `actio:f645bc9e-f9e2-496f-89b5-fd0ae884291e`
 
 ## per-villager 割当
 
@@ -61,7 +66,7 @@ interface Backend { id: string; provider: 'claude' | 'codex'; model: string; }
 (`prompt-build.routeTier`)。
 
 - **cheap (per-villager 割当)**: 起の行動決定 (`decideAction`) / 感情更新 (`updateEmotion`)。
-- **strong (GPT-5.6 Sol)**: 承GANs (`advanceIncident`) / 裁判 (`groupVoteFoolish` /
+- **strong (Sol)**: 承GANs (`advanceIncident`) / 裁判 (`groupVoteFoolish` /
   `groupVoteFate`) / 教育 (`decideEducation`) / 世界評価 (`evaluateDay`)。
   通常構成の `BackendRegistry.strong(key)` はSolだけを返す。
 - **Sol固定役割**: 事件のデザイナ (`designIncident`) / 事件の首謀者 (`advanceIncident`) /
@@ -77,7 +82,7 @@ interface Backend { id: string; provider: 'claude' | 'codex'; model: string; }
   なお失敗なら throw**。
 - **transport の一過性失敗** (spawn/timeout/非ゼロ終了/空出力) は `CliLlmClient` が backoff 付きで
   **リトライ** (既定 2 回 = `PAGUS_CLI_RETRIES`)。codex の Stop hook 由来 `exit 1` 等の一過性 blip を
-  吸収し、全試行失敗で throw。これにより GPT-5.6 family を既定キャストに合流できる (`PAGUS_DISABLE_CODEX=1` で外す)。
+  吸収し、全試行失敗で throw。Codex を既定キャストから外す場合は `PAGUS_DISABLE_CODEX=1` を使う。
 - **無言フォールバック禁止** (RULE_CODE §7.1): 設定不正・応答不正は黙って既定値に落とさず必ず例外。リトライは「同じ呼び出しのやり直し」であってフォールバックではない。
 
 ## 起動切替

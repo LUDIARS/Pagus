@@ -10,12 +10,14 @@
 //
 // 失敗系 (spawn 失敗 / 非ゼロ終了 / タイムアウト / 空出力 / JSON 破損) は全て throw。
 
-import { spawnOneShot as spawn } from '@ludiars/one-shot';
+import { resolveModel, spawnOneShot as spawn } from '@ludiars/one-shot';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { LlmClient, LlmInvokeArgs } from './llm-client.js';
+import type { LlmClient, LlmInvokeArgs, LlmResponse } from './llm-client.js';
+import { contract } from './contract-observer.js'; /* augur-inject:import:3f8ff19a */
+import augurContract_8f0b4cb6 from './contracts/invocation-model.contract.js'; /* augur-inject:contract-predicate:566a2aed */
 
 /** CLI バックエンドの種別。 */
 export type CliProvider = 'claude' | 'codex';
@@ -40,7 +42,7 @@ const DEFAULT_RETRY_BACKOFF_MS = 500;
 
 export interface CliLlmClientOptions {
   provider: CliProvider;
-  /** 既定モデル ID (per-invoke の args.model が優先)。 */
+  /** 既定の役割名またはモデル ID (per-invoke の args.model が優先)。 */
   model: string;
   /** タイムアウト ms (default 120_000)。 */
   timeoutMs?: number;
@@ -55,6 +57,10 @@ export interface CliLlmClientOptions {
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+export const resolveInvocationModel = contract((requested: string | undefined, fallback: string, provider: CliProvider): string => {
+  return resolveModel(requested ?? fallback, provider);
+}, { ...augurContract_8f0b4cb6, contractId: 'C-1', mode: 'observe', sample: 1, where: 'packages/server/src/llm/cli-llm-client.ts:59', rule: 'contract-wrap', id: '8f0b4cb6' }) /* augur-inject:contract-wrap:8f0b4cb6 */;
 
 /**
  * provider/model を固定した CLI クライアント。
@@ -82,11 +88,12 @@ export class CliLlmClient implements LlmClient {
    * 空出力/spawn 失敗) は retries 回まで backoff 付きでやり直す。brain 側の parse
    * リトライは別レイヤ (JSON 不正用)。全試行失敗で throw (無言フォールバック禁止)。
    */
-  async invoke(args: LlmInvokeArgs): Promise<{ text: string }> {
+  async invoke(args: LlmInvokeArgs): Promise<LlmResponse> {
+    const model = resolveInvocationModel(args.model, this.model, this.provider);
     let lastErr: unknown;
     for (let attempt = 0; attempt <= this.retries; attempt++) {
       try {
-        return await this.invokeOnce(args);
+        return { text: await this.invokeOnce(args, model), model };
       } catch (e) {
         lastErr = e;
         if (attempt < this.retries) {
@@ -99,8 +106,7 @@ export class CliLlmClient implements LlmClient {
     );
   }
 
-  private async invokeOnce(args: LlmInvokeArgs): Promise<{ text: string }> {
-    const model = args.model ?? this.model;
+  private async invokeOnce(args: LlmInvokeArgs, model: string): Promise<string> {
     const timeoutMs = args.timeoutMs ?? this.timeoutMs;
     const prompt = composePrompt(args.system, args.prompt);
 
@@ -121,7 +127,7 @@ export class CliLlmClient implements LlmClient {
         });
         const text = readFileSync(outFile, 'utf8').trim();
         if (text.length === 0) throw new Error('codex cli の最終メッセージが空です');
-        return { text };
+        return text;
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -134,7 +140,7 @@ export class CliLlmClient implements LlmClient {
       timeoutMs,
       gitBashPath: this.gitBashPath,
     });
-    return { text: parseClaudeCliResult(raw) };
+    return parseClaudeCliResult(raw);
   }
 }
 

@@ -9,7 +9,7 @@ import { extractJson } from './llm/json-coerce.js';
 import { Repertoire, type RepertoireOptions } from './repertoire.js';
 import { residentSpeech } from '@pagus/sim';
 
-const HAIKU_MODEL = 'claude-haiku-4-5';
+const HAIKU_MODEL = 'haiku';
 
 export interface TrialNarratorOptions {
   residentBt?: boolean;

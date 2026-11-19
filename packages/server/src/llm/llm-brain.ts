@@ -245,7 +245,7 @@ export class LlmBrain implements Brain {
     const client = this.clientFor(backend);
     let lastErr: unknown;
     for (let attempt = 0; attempt < 2; attempt++) {
-      const { text } = await client.invoke({
+      const { text, model = backend.model } = await client.invoke({
         system: parts.system,
         prompt: parts.prompt,
         model: backend.model,
@@ -256,14 +256,14 @@ export class LlmBrain implements Brain {
       this.costSink?.({
         kind: parts.kind,
         provider: backend.provider,
-        model: backend.model,
+        model,
         inTokens,
         outTokens,
       });
       // LLM 使用ログ (channel='llm')。プロンプト + 推定トークンを横断ログへ。
       logLlm({
         backend: backend.provider,
-        model: backend.model,
+        model,
         kind: parts.kind,
         system: parts.system,
         prompt: parts.prompt,

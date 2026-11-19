@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "contractsDir": "packages/server/src/llm/contracts",
+  "importFrom": "./contract-observer.js",
+  "runtimeFile": "packages/server/src/llm/contract-runtime.ts",
+  "contracts": [
+    {
+      "id": "C-1",
+      "criterion": "C-1 resolveInvocationModel(requested, fallback, provider): 呼び出しごとの指定を既定より優先し、役割は Lapilli で解決し、明示 ID は保持する",
+      "symbol": "resolveInvocationModel",
+      "file": "packages/server/src/llm/cli-llm-client.ts",
+      "module": "packages/server/src/llm/contracts/invocation-model.contract.ts",
+      "mode": "observe",
+      "sample": 1
+    }
+  ]
+}

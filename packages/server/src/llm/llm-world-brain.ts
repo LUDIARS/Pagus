@@ -22,7 +22,7 @@ import { estimateTokens } from '@ludiars/llm-gateway';
 
 import type { LlmClient } from './llm-client.js';
 import { CliLlmClient, type CliLlmClientOptions } from './cli-llm-client.js';
-import { BackendRegistry, GPT_SOL_MODEL } from './backend-registry.js';
+import { BackendRegistry, GPT_SOL_BACKEND } from './backend-registry.js';
 import type { Backend } from './backend-registry.js';
 import type { CostSink } from './cost-log.js';
 import { buildWorldPrompt, buildHolidayPrompt, buildSchedulePrompt, buildDesignPrompt, buildRulePrompt, buildDistillPrompt, type PromptParts } from './prompt-build.js';
@@ -39,7 +39,7 @@ import {
  * 事件デザインとイベント進行は GPT-5.6 Sol に固定する。
  * Codex CLI の read-only exec で JSON だけを返させる。
  */
-const CODEX_SOL_WORLD_BACKEND: Backend = { id: 'codex-sol-world', provider: 'codex', model: GPT_SOL_MODEL };
+const CODEX_SOL_WORLD_BACKEND: Backend = { id: 'codex-sol-world', provider: 'codex', model: GPT_SOL_BACKEND.model };
 
 export interface LlmWorldBrainOptions {
   createClient?: (backend: Backend) => LlmClient;
@@ -94,12 +94,12 @@ export class LlmWorldBrain implements WorldBrain {
         const client = this.clientFor(backend);
         let lastErr: unknown;
         for (let attempt = 0; attempt < 2; attempt++) {
-          const { text } = await client.invoke({
+          const { text, model = backend.model } = await client.invoke({
             system: parts.system,
             prompt: parts.prompt,
             model: backend.model,
           });
-          this.reportCost(parts, backend, text);
+          this.reportCost(parts, backend, model, text);
           try {
             return coerceDayEvaluation(extractJson(text));
           } catch (e) {
@@ -123,12 +123,12 @@ export class LlmWorldBrain implements WorldBrain {
         const client = this.clientFor(backend);
         let lastErr: unknown;
         for (let attempt = 0; attempt < 2; attempt++) {
-          const { text } = await client.invoke({
+          const { text, model = backend.model } = await client.invoke({
             system: parts.system,
             prompt: parts.prompt,
             model: backend.model,
           });
-          this.reportCost(parts, backend, text);
+          this.reportCost(parts, backend, model, text);
           try {
             return coerceHolidayEvent(extractJson(text));
           } catch (e) {
@@ -152,12 +152,12 @@ export class LlmWorldBrain implements WorldBrain {
         const client = this.clientFor(backend);
         let lastErr: unknown;
         for (let attempt = 0; attempt < 2; attempt++) {
-          const { text } = await client.invoke({
+          const { text, model = backend.model } = await client.invoke({
             system: parts.system,
             prompt: parts.prompt,
             model: backend.model,
           });
-          this.reportCost(parts, backend, text);
+          this.reportCost(parts, backend, model, text);
           try {
             return coerceMonthlySchedule(extractJson(text));
           } catch (e) {
@@ -181,12 +181,12 @@ export class LlmWorldBrain implements WorldBrain {
         const client = this.clientFor(backend);
         let lastErr: unknown;
         for (let attempt = 0; attempt < 2; attempt++) {
-          const { text } = await client.invoke({
+          const { text, model = backend.model } = await client.invoke({
             system: parts.system,
             prompt: parts.prompt,
             model: backend.model,
           });
-          this.reportCost(parts, backend, text);
+          this.reportCost(parts, backend, model, text);
           try {
             return coerceIncidentDesign(extractJson(text));
           } catch (e) {
@@ -210,12 +210,12 @@ export class LlmWorldBrain implements WorldBrain {
         const client = this.clientFor(backend);
         let lastErr: unknown;
         for (let attempt = 0; attempt < 2; attempt++) {
-          const { text } = await client.invoke({
+          const { text, model = backend.model } = await client.invoke({
             system: parts.system,
             prompt: parts.prompt,
             model: backend.model,
           });
-          this.reportCost(parts, backend, text);
+          this.reportCost(parts, backend, model, text);
           try {
             return coerceBehaviorRule(extractJson(text));
           } catch (e) {
@@ -261,12 +261,12 @@ export class LlmWorldBrain implements WorldBrain {
     const client = this.clientFor(backend);
     let lastErr: unknown;
     for (let attempt = 0; attempt < 2; attempt++) {
-      const { text } = await client.invoke({
+      const { text, model = backend.model } = await client.invoke({
         system: parts.system,
         prompt: parts.prompt,
         model: backend.model,
       });
-      this.reportCost(parts, backend, text);
+      this.reportCost(parts, backend, model, text);
       try {
         return coerceBehaviorRule(extractJson(text));
       } catch (e) {
@@ -286,11 +286,11 @@ export class LlmWorldBrain implements WorldBrain {
   }
 
   /** 成功した invoke のコストを計上する (§7)。 */
-  private reportCost(parts: PromptParts, backend: Backend, text: string): void {
+  private reportCost(parts: PromptParts, backend: Backend, model: string, text: string): void {
     this.costSink?.({
       kind: parts.kind,
       provider: backend.provider,
-      model: backend.model,
+      model,
       inTokens: estimateTokens(parts.system) + estimateTokens(parts.prompt),
       outTokens: estimateTokens(text),
     });

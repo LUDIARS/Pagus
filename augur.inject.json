@@ -1,0 +1,4 @@
+{
+  "service": "pagus",
+  "include": ["packages/server/src/**/*.ts"]
+}

@@ -15,7 +15,7 @@ import { PlayerState } from './player-state.js';
 import { AuctionManager } from './auction.js';
 import { Governance } from './governance.js';
 import { SpectacleManager, RaidManager, SeasonStore } from './spectacle.js';
-import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, CostLog, DEFAULT_CAST, DEFAULT_STRONG, GPT56_CAST, GPT56_STRONG, GPT56_ASSIGNMENT_WEIGHTS, type CostSink } from './llm/index.js';
+import { BackendRegistry, LlmBrain, LlmWorldBrain, CliLlmClient, CostLog, DEFAULT_CAST, DEFAULT_STRONG, CODEX_CAST, CODEX_STRONG, CODEX_ASSIGNMENT_WEIGHTS, type CostSink } from './llm/index.js';
 import { createServer } from 'node:http';
 import { SessionLog } from './session-log.js';
 import { TrialNarrator } from './trial-narrator.js';
@@ -102,11 +102,11 @@ function selectBrains(costSink: CostSink, cfg: PagusConfig, fateBlackbox: BlackB
     const disableCodex = cfg.llm.disableCodex;
     // 村の進行はLLM停止時に詰まらせない。失敗後はLlmBrain側の短期オフライン扱いで再試行を抑制する。
     const retries = 0;
-    const cast = disableCodex ? DEFAULT_CAST : GPT56_CAST;
-    const strong = disableCodex ? DEFAULT_STRONG : GPT56_STRONG;
+    const cast = disableCodex ? DEFAULT_CAST : CODEX_CAST;
+    const strong = disableCodex ? DEFAULT_STRONG : CODEX_STRONG;
     const registry = disableCodex
       ? new BackendRegistry({ cast, strong })
-      : new BackendRegistry({ cast, strong, assignmentWeights: GPT56_ASSIGNMENT_WEIGHTS });
+      : new BackendRegistry({ cast, strong, assignmentWeights: CODEX_ASSIGNMENT_WEIGHTS });
     return {
       brain: new LlmBrain(registry, { costSink, retries, fateBlackbox }),
       worldBrain: new LlmWorldBrain(registry, { costSink, retries }),
@@ -312,14 +312,14 @@ function main(): void {
   // 裁判の糾弾セリフ: llm モードでは Haiku 生成 (65%) + レパートリー蓄積。
   const llmMode = !btResidents && (process.env.PAGUS_BRAIN ?? 'stub') === 'llm';
   const highlightClient = llmMode
-    ? new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: cfg.llm.cliRetries })
+    ? new CliLlmClient({ provider: 'claude', model: 'haiku', retries: cfg.llm.cliRetries })
     : null;
   // 糾弾のトーン/種/プールはテーマパックに従う (パック別ファイルでトーン混線を防ぐ, §v1.4-D)。
   const repertoireFile = cfg.theme.pack === 'classic' ? 'denunciations.json' : `denunciations.${cfg.theme.pack}.json`;
   const narrator = new TrialNarrator({
     residentBt: btResidents,
     ...(llmMode
-      ? { client: new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: cfg.llm.cliRetries }) }
+      ? { client: new CliLlmClient({ provider: 'claude', model: 'haiku', retries: cfg.llm.cliRetries }) }
       : {}),
     tone: lexicon.denounceTone,
     repertoire: { file: repertoireFile, seeds: lexicon.denounceSeeds },
@@ -434,8 +434,8 @@ function main(): void {
   const chatStore = new ChatStore(db);
   let chatSeq = 0;
   const godChat = btResidents ? new BtGodChatResponder((process.env.PAGUS_BRAIN ?? 'stub') === 'llm'
-    ? new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: 0 }) : null, e => costLog.record(e)) : new GodChatResponder({
-    client: new CliLlmClient({ provider: 'claude', model: 'claude-haiku-4-5', retries: 0 }),
+    ? new CliLlmClient({ provider: 'claude', model: 'haiku', retries: 0 }) : null, e => costLog.record(e)) : new GodChatResponder({
+    client: new CliLlmClient({ provider: 'claude', model: 'haiku', retries: 0 }),
     costSink: (e) => costLog.record(e),
   });
   let dailyHighlightDate = dateLabel(tm.world);
@@ -842,7 +842,7 @@ function main(): void {
   };
 
   const observerOutreach = process.env.PAGUS_BRAIN === 'llm' ? new ObserverOutreach({
-    client: new CliLlmClient({provider:'claude',model:'claude-haiku-4-5',retries:0}),
+    client: new CliLlmClient({provider:'claude',model:'haiku',retries:0}),
     world: () => tm.world,
     hasObservers: () => ws.connectedUserIds().length > 0,
     costSink: e => costLog.record(e),

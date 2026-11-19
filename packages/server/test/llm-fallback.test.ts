@@ -83,7 +83,7 @@ describe('LLM fallback', () => {
       victims: [victim],
     });
 
-    expect(models).toEqual(['gpt-5.6-sol']);
+    expect(models).toEqual(['sol']);
   });
 
   it('世界脳はLLM失敗時にStubWorldBrainへ落ちる', async () => {
@@ -113,7 +113,7 @@ describe('LLM fallback', () => {
     expect(schedule.dayOfMonth).toBe(15);
     expect(again.dayOfMonth).toBe(15);
     expect(calls.calls).toBe(1);
-    expect(models).toEqual(['gpt-5.6-sol']);
+    expect(models).toEqual(['sol']);
   });
 
   it('事件のデザイナはSolを使う', async () => {
@@ -137,6 +137,27 @@ describe('LLM fallback', () => {
       plotThreads: [],
     });
 
-    expect(models).toEqual(['gpt-5.6-sol']);
+    expect(models).toEqual(['sol']);
+  });
+
+  it('世界脳は費用ログに役割名ではなくクライアントが返したモデルを記録する', async () => {
+    const costSink = vi.fn();
+    const brain = new LlmWorldBrain(new BackendRegistry(), {
+      createClient: () => ({
+        async invoke() {
+          return { text: '{"dayOfMonth":12,"themeSeed":"広場"}', model: 'codex-resolved-sol-test' };
+        },
+      }),
+      costSink,
+    });
+
+    await brain.scheduleMonthlyIncident({
+      calendar: makeCalendar({ year: 2026, month: 7 }),
+      reputation: makeVirtueVector(),
+      villagers: [],
+      villageRules: [],
+    });
+
+    expect(costSink).toHaveBeenCalledWith(expect.objectContaining({ provider: 'codex', model: 'codex-resolved-sol-test' }));
   });
 });

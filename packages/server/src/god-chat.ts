@@ -36,7 +36,7 @@ interface GodChatResponderOptions {
   rng?: () => number;
 }
 
-const MODEL = 'claude-haiku-4-5';
+const MODEL = 'haiku';
 const RULE_CAP = 80;
 
 const DEFAULT_RULES: readonly LearnedRule[] = [
@@ -131,7 +131,7 @@ export class GodChatResponder {
       `発言: ${text}`;
     try {
       const res = await this.opts.client.invoke({ system, prompt, model: MODEL, maxTokens: 300, timeoutMs: 45_000 });
-      this.recordCost('chat.analysis', system + prompt, res.text);
+      this.recordCost('chat.analysis', system + prompt, res.text, res.model ?? MODEL);
       const parsed = extractJson(res.text) as Partial<Analysis>;
       const keywords = normalizeKeywords(parsed.keywords).slice(0, 6);
       return {
@@ -158,7 +158,7 @@ export class GodChatResponder {
       `候補住民:\n${roster}`;
     try {
       const res = await this.opts.client.invoke({ system, prompt, model: MODEL, maxTokens: 700, timeoutMs: 60_000 });
-      this.recordCost('chat.reply', system + prompt, res.text);
+      this.recordCost('chat.reply', system + prompt, res.text, res.model ?? MODEL);
       const obj = extractJson(res.text) as { replies?: unknown };
       if (!Array.isArray(obj.replies)) return [];
       const byId = new Map(villagers.map((v) => [v.id, v]));
@@ -179,11 +179,11 @@ export class GodChatResponder {
     }
   }
 
-  private recordCost(kind: string, input: string, output: string): void {
+  private recordCost(kind: string, input: string, output: string, model: string): void {
     this.opts.costSink?.({
       kind,
       provider: 'claude',
-      model: MODEL,
+      model,
       inTokens: estimateTokens(input),
       outTokens: estimateTokens(output),
     });

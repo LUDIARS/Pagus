@@ -8,7 +8,7 @@ export interface LlmInvokeArgs {
   prompt: string;
   /** 固定の指示 (人格・出力規約)。prefix-cache の錨になるよう不変断片を載せる。 */
   system?: string;
-  /** モデル ID。未指定なら client 既定 (= backend.model)。 */
+  /** 役割名またはモデル ID。未指定なら client 既定 (= backend.model)。 */
   model?: string;
   /** 出力トークン上限 (CLI 経路では参考値)。 */
   maxTokens?: number;
@@ -22,6 +22,12 @@ export interface LlmInvokeArgs {
  * 失敗 (spawn 失敗 / 非ゼロ終了 / タイムアウト / 空出力) は **throw** する。
  * 無言フォールバック禁止 (RULE_CODE §7.1) — 呼び出し側は成功テキストのみ受け取る。
  */
+export interface LlmResponse {
+  text: string;
+  /** CLI に渡した解決済みモデル。これを返さない client も利用できる。 */
+  model?: string;
+}
+
 export interface LlmClient {
-  invoke(args: LlmInvokeArgs): Promise<{ text: string }>;
+  invoke(args: LlmInvokeArgs): Promise<LlmResponse>;
 }

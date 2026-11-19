@@ -1,11 +1,10 @@
 import { isAwake, type Villager, type World } from '@pagus/sim';
-import { resolveModel } from '@ludiars/one-shot';
 import type { LlmClient } from './llm-client.js';
 import type { CostSink } from './cost-log.js';
 import { extractJson } from './json-coerce.js';
 import { logLlm } from './llm-vg.js';
 
-const MODEL = resolveModel('haiku', 'claude');
+const MODEL = 'haiku';
 const INTERVAL_MS = 90_000;
 const RESIDENT_COOLDOWN_MS = 300_000;
 const MAX_CANDIDATES = 12;
@@ -62,7 +61,7 @@ export class ObserverOutreach {
     const response = await this.options.client.invoke({system,prompt,model:MODEL,maxTokens:300,timeoutMs:30_000});
     if (this.#closed) return;
     // Aggregate with ordinary chat cost; do not expose a separate switch/selection telemetry channel.
-    this.options.costSink({kind:'chat.reply',provider:'claude',model:MODEL,inTokens:Math.ceil((system.length+prompt.length)/3),outTokens:Math.ceil(response.text.length/3)});
+    this.options.costSink({kind:'chat.reply',provider:'claude',model:response.model ?? MODEL,inTokens:Math.ceil((system.length+prompt.length)/3),outTokens:Math.ceil(response.text.length/3)});
     const decision: unknown = extractJson(response.text);
     if (!decision || typeof decision !== 'object') throw new Error('invalid decision');
     const d = decision as Record<string,unknown>;
